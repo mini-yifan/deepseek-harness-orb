@@ -1,0 +1,115 @@
+/**
+ * Desktop capture and input used by Computer Use tools.
+ * @module @deepseek-ai/dsh-experimental-tool-computer-use/src/backend
+ */
+
+import type { ImageMediaType } from '@deepseek-ai/dsh-attachment'
+import { createMacosDesktopBackend } from './macos.ts'
+import { createUnsupportedDesktopBackend } from './unsupported.ts'
+
+/** One display's logical bounds and backing scale. */
+export interface ScreenInfo {
+  /** Zero-based index in the backend's current display list. */
+  readonly index: number
+  /** Logical global rectangle used for 0–1000 mapping and capture. */
+  readonly bounds: {
+    readonly x: number
+    readonly y: number
+    readonly width: number
+    readonly height: number
+  }
+  /** Backing-store scale (`1` on a non-retina display). */
+  readonly scale: number
+}
+
+/** Encoded raster returned by one display capture. */
+export interface CapturedScreen {
+  readonly data: Uint8Array
+  readonly mediaType: ImageMediaType
+}
+
+/** Mouse button accepted by `click`. */
+export type ClickButton = 'left' | 'right'
+
+/** Pointer click on one screen. */
+export interface ClickInput {
+  readonly screen: ScreenInfo
+  readonly position: readonly [number, number]
+  readonly button: ClickButton
+  readonly count: 1 | 2
+}
+
+/** Focus click plus keyboard typing. */
+export interface TypeInput {
+  readonly screen: ScreenInfo
+  readonly position: readonly [number, number]
+  readonly text: string
+  readonly replace: boolean
+  readonly submit: boolean
+}
+
+/** Wheel scroll at a point. */
+export interface ScrollInput {
+  readonly screen: ScreenInfo
+  readonly position: readonly [number, number]
+  readonly direction: 'up' | 'down'
+  readonly scrollLevel: number
+}
+
+/** Posted key combination. */
+export interface HotkeyInput {
+  readonly keys: readonly string[]
+}
+
+/**
+ * Capture plus HID input for one desktop. Production macOS implements this;
+ * tests inject a fake; other platforms throw from each method.
+ */
+export interface DesktopBackend {
+  /**
+   * List currently attached displays.
+   * @param signal - cooperative cancellation.
+   * @returns screens in backend index order.
+   */
+  listScreens(signal?: AbortSignal): Promise<readonly ScreenInfo[]>
+  /**
+   * Capture one display, including the cursor when the platform supports it.
+   * @param screen - display selected from {@link listScreens}.
+   * @param signal - cooperative cancellation.
+   * @returns encoded image bytes and media type.
+   */
+  capture(screen: ScreenInfo, signal?: AbortSignal): Promise<CapturedScreen>
+  /**
+   * Click at a 0–1000 position on `input.screen`.
+   * @param input - screen, position, button, and click count.
+   * @param signal - cooperative cancellation.
+   */
+  click(input: ClickInput, signal?: AbortSignal): Promise<void>
+  /**
+   * Click to focus, optionally select-all, type `text`, and optionally press Enter.
+   * @param input - screen, position, text, and modifiers.
+   * @param signal - cooperative cancellation.
+   */
+  typeText(input: TypeInput, signal?: AbortSignal): Promise<void>
+  /**
+   * Scroll at a 0–1000 position on `input.screen`.
+   * @param input - screen, position, direction, and level.
+   * @param signal - cooperative cancellation.
+   */
+  scroll(input: ScrollInput, signal?: AbortSignal): Promise<void>
+  /**
+   * Post a key combination. Callers must already reject screenshot chords.
+   * @param input - key tokens.
+   * @param signal - cooperative cancellation.
+   */
+  hotkey(input: HotkeyInput, signal?: AbortSignal): Promise<void>
+}
+
+/**
+ * Construct the backend for a host platform.
+ * @param platform - Node `process.platform` value; tests pass an explicit id.
+ * @returns macOS capture/input on Darwin, otherwise a backend whose methods throw.
+ */
+export function createPlatformBackend(platform: NodeJS.Platform = process.platform): DesktopBackend {
+  return platform === 'darwin' ? createMacosDesktopBackend() : createUnsupportedDesktopBackend()
+}

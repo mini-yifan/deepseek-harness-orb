@@ -737,6 +737,33 @@ export interface Config {
 
 来源：[`packages/experimental/tool-agent-team/src/index.ts:17`](../packages/experimental/tool-agent-team/src/index.ts)
 
+<a id="deepseek-aidsh-experimental-tool-computer-use"></a>
+
+## `@deepseek-ai/dsh-experimental-tool-computer-use`
+
+需要：`tools` · `systemPrompt` · `attachments`
+
+```ts config-catalog
+/** Loader-accepted Computer Use configuration. */
+export interface Config {
+  /**
+   * Milliseconds to wait after a pointer, keyboard, or hotkey action before recapturing.
+   * Default: 500.
+   */
+  readonly postActionWaitMs?: number
+  /**
+   * Maximum seconds the `wait` tool may pause. Default: 5.
+   */
+  readonly maxWaitSeconds?: number
+  /**
+   * Maximum number of displays captured per observation. Default: 4.
+   */
+  readonly maxScreens?: number
+}
+```
+
+来源：[`packages/experimental/tool-computer-use/src/config.ts:9`](../packages/experimental/tool-computer-use/src/config.ts)
+
 <a id="deepseek-aidsh-file-reference-local"></a>
 
 ## `@deepseek-ai/dsh-file-reference-local`

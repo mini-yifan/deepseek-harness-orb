@@ -1,0 +1,8 @@
+# Source overlay for `pnpm dsh web`. The relative entry is anchored to this
+# file and runs through the CLI's tsx loader without a profile install or
+# `pnpm run build`. Restart the running dsh web process after adding --patch.
+# This plugin drives the real unsandboxed desktop and is not part of dsh-base.
+
+- insert:
+    - id: tool-computer-use
+      name: './src/index.ts'

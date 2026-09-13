@@ -61,6 +61,7 @@ import * as ToolSessionQuery from '@deepseek-ai/dsh-tool-session-query'
 import * as ToolTasks from '@deepseek-ai/dsh-tool-jobs'
 import type TeamService from '@deepseek-ai/dsh-experimental-agent-team'
 import * as ToolTeam from '@deepseek-ai/dsh-experimental-tool-agent-team'
+import * as ToolComputerUse from '@deepseek-ai/dsh-experimental-tool-computer-use'
 import * as ToolTodo from '@deepseek-ai/dsh-tool-todo'
 import * as ToolSubagent from '@deepseek-ai/dsh-tool-subagent'
 import { registerListSubagentModels } from '../packages/subagent/tool-subagent/src/list-models.ts'
@@ -557,6 +558,19 @@ const TOOL_PACKAGES: ToolPackage[] = [
     scope: ctx => catalogChildScopes.get(ctx) as Agent,
     note:
       'All nine tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-experimental-tool-computer-use',
+    dir: 'tool-computer-use',
+    source: 'packages/experimental/tool-computer-use/src/plugin.ts',
+    requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.attachments', 'ctx.llm + an image-capable route (execution and first-frame screenshot)'],
+    writes: ['tool/call', 'durable attachment (saveImage)', 'user/message first-frame notice', 'tool/result'],
+    async mount(ctx) {
+      await ctx.plugin(CatalogAttachmentStore)
+      await ctx.plugin(ToolComputerUse)
+    },
+    note:
+      'Experimental opt-in GUI tools. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no screenshot tool: the first user turn and every GUI result attach screens.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-todo',
