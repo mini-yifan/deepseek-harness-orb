@@ -14,13 +14,17 @@ A vision model can already consume image blocks that a tool result or user messa
 
 `applyComputerUse(ctx, backend, config)` is the shared registration helper. Production `apply` uses the host-platform backend (macOS capture and HID input; other platforms throw the fixed macOS-only error at execute). Tests and keyless snapshots inject a fake desktop that returns a fixture PNG and records actions. There is no Config `driver: fake`. macOS HID posting is owned by [Computer Use macOS HID](../bug-fix/2026-09-13-computer-use-macos-hid.md).
 
-The plugin injects `tools`, `systemPrompt`, and `attachments`. Missing attachments keep it pending. Optional `llm` gates image-capable routes: text-only routes skip first-frame images and refuse the tools. Installing or patching the plugin is the consent gate; tools do not `ask` per click. The plugin is not in `dsh-base`. Local try is `pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch.yml`.
+The plugin injects `tools`, `systemPrompt`, and `attachments`. Missing attachments keep it pending. Optional `llm` gates image-capable routes: text-only routes skip first-frame images and refuse the tools. Installing or patching the plugin is the consent gate; tools do not `ask` per click. The plugin is not in `dsh-base`. Local try is `pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch.yml`, then a new session on the Computer Use agent preset.
+
+The Web overlay inserts only `computer-use-preset-root`, which provides the extra `trust: system` agent-presets root next to this package. The overlay adds `inject: [computerUsePresetRoot]` on the `agent-presets` row so Loader interpolation of `!!js ctx.computerUsePresetRoot` waits for that service. GUI tools register in that preset's standing scope. The Host catalog and the shipped `standard` preset do not receive them.
 
 Grounding copy is a `systemPrompt.section`. Coordinates are 0–1000 per screen. System screenshot chords (Cmd/Win+Shift+3/4/5) are rejected.
 
 ## Alternatives considered
 
-**Skill-only grounding.** A Skill can carry See/Step copy, but it cannot register tools, attach durable images, or appear in the generated tool catalog. Computer Use is a Host plugin with a prompt section.
+**Skill-only grounding.** A Skill can carry See/Step copy, but it cannot register tools, attach durable images, or appear in the generated tool catalog. Computer Use is a Cordis plugin with a prompt section, composed from the Computer Use agent preset.
+
+**Host-insert the GUI tools.** Host-registered tools appear in every preset, including `standard`. The overlay adds a system extra root instead, so only sessions that name `computer-use` receive the five GUI tools.
 
 **Change `agent-loop`.** The loop already forwards tool-result images into the next request. A loop special case would make desktop control a core semantic and force every composition to know about screens.
 
@@ -34,10 +38,10 @@ Grounding copy is a `systemPrompt.section`. Coordinates are 0–1000 per screen.
 
 ## Consequences
 
-Mounting the plugin on an image-capable route adds policy tokens and five exclusive schemas on every request, plus image tokens for first-frame notices and every GUI result until compaction. Text-only routes keep coding sessions working: first-frame attachment is skipped and GUI tools fail with a route diagnostic. macOS needs Screen Recording and Accessibility; missing rights fail capture or input with a named TCC message. `input_text` overwrites the string clipboard during paste and restores it afterwards. Web/Electron chrome appears in shots. There is no per-click approval, chrome exclusion, pixel-diff settle, drag, or `dsh-base` default.
+Mounting the plugin on an image-capable route in the Computer Use preset adds policy tokens and five exclusive schemas on every request, plus image tokens for first-frame notices and every GUI result until compaction. Text-only routes keep coding sessions working: first-frame attachment is skipped and GUI tools fail with a route diagnostic. macOS needs Screen Recording and Accessibility; missing rights fail capture or input with a named TCC message. `input_text` overwrites the string clipboard during paste and restores it afterwards. Web/Electron chrome appears in shots. There is no per-click approval, chrome exclusion, pixel-diff settle, drag, or `dsh-base` default.
 
 ## Testing
 
-Package tests use a fake desktop only. They cover coordinate mapping, hotkey rejection, tool execute/render, first-frame pre-step, text-only refusal, HMR, Loader composition through a test-only `cordis.yml`, and an in-process agent-loop click that places image blocks on `user/message` and `tool/result`. Injected macOS `CommandRunner` tests assert generated JXA contains `clickAt`, `pasteText`, `chord`, and `CGEventCreateScrollWheelEvent2`.
+Package tests use a fake desktop only. They cover coordinate mapping, hotkey rejection, tool execute/render, first-frame pre-step, text-only refusal, HMR, Loader composition through a test-only `cordis.yml`, an in-process agent-loop click that places image blocks on `user/message` and `tool/result`, the overlay-only preset-root locator, overlay YAML (no Host GUI insert, `agent-presets` injects `computerUsePresetRoot`), Loader interpolation of `!!js ctx.computerUsePresetRoot` after that inject, `scanRoot` of the extra preset, and scoped GUI tools that stay absent from Host `schemas()`. Injected macOS `CommandRunner` tests assert generated JXA contains `clickAt`, `pasteText`, `chord`, and `CGEventCreateScrollWheelEvent2`.
 
 The authored headless overlay [`snapshots/session/computer-use/`](../../../../snapshots/session/computer-use/) mounts a scenario-local fake-desktop plugin plus vision model `deepseek-v4-flash-vision-exp` with `postActionWaitMs: 0`. Replay uses a fixture PNG and never drives a real desktop. The plugin is not in shipped `dsh-base`.

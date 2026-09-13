@@ -1,0 +1,5 @@
+- name: './preset-root.ts'
+- name: './root-consumer.ts'
+  inject: [computerUsePresetRoot]
+  config:
+    path: !!js ctx.computerUsePresetRoot

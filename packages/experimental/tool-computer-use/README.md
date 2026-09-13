@@ -25,21 +25,23 @@ Give a vision-capable agent live sight of the host desktop and five exclusive GU
 <a id="use-this-package"></a>
 ## Use this package
 
-Patch this private plugin onto a running Web composition when you want the model to operate the real desktop. Installing the plugin is the consent gate: the tools never ask per click.
+Patch this private overlay onto a running Web composition when you want a dedicated Computer Use agent that operates the real desktop. The overlay adds a system agent preset; GUI tools register in that preset's scope, not on the Host. Installing or patching is the consent gate: the tools never ask per click.
 
 ### When to choose it
 
-Choose it when a vision model should drive visible GUI chrome that bash and filesystem tools cannot reach. Avoid it for ordinary coding sessions, text-only routes, and any host that must not grant Screen Recording plus Accessibility. It is not a Skill, not a capability seam, and not part of `dsh-base`.
+Choose it when a vision model should drive visible GUI chrome that bash cannot reach, and you want a catalog limited to Shell, web search and fetch, the five GUI tools, and `ask_user_question`. Avoid it for ordinary coding sessions, text-only routes, and any host that must not grant Screen Recording plus Accessibility. It is not a Skill, not a capability seam, and not part of `dsh-base`.
 
 ### Minimal configuration
 
-`pnpm dsh` already runs through tsx, so patch the source overlay and restart the running `dsh web`. The relative entry is anchored to the patch file, matching the Inspector try path, so the CLI app does not depend on this experimental package:
+`pnpm dsh` already runs through tsx, so patch the source overlay and restart the running `dsh web`. The locator plugin's relative entry is anchored to the patch file, matching the Inspector try path, so the CLI app does not depend on this experimental package:
 
 ```text
 pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch.yml
 ```
 
-After `pnpm run build`, the same overlay can load the emitted `./lib/index.js` through [`cordis.patch.yml`](cordis.patch.yml).
+Create a new session and choose Computer Use in the mode picker. Existing sessions keep their preset. The deployment default remains `standard`, which does not receive the GUI tools.
+
+After `pnpm run build`, [`cordis.patch.yml`](cordis.patch.yml) loads the emitted `./lib/preset-root.js` locator the same way.
 
 A custom Loader composition that can resolve the package name may instead mount:
 
@@ -99,8 +101,10 @@ First-frame attachment uses `agent/pre-step`: the listener always awaits `next()
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Plugin entry: `name` / `inject` / `Config` / `apply` over the host-platform backend |
+| [`src/preset-root.ts`](src/preset-root.ts) | Overlay-only plugin: publishes the extra agent-presets root |
 | [`src/plugin.ts`](src/plugin.ts) | Shared `applyComputerUse`: policy, five tools, first-frame pre-step |
 | [`src/macos.ts`](src/macos.ts) | Darwin capture via `screencapture`; click, scroll, and hotkey via JXA `CGEvent`; `input_text` pastes via NSPasteboard |
+| [`presets/computer-use/`](presets/computer-use/) | Computer Use agent preset: Shell, web, GUI tools, `ask_user_question`, compaction |
 | — | No runtime invariant companion is published because this plugin introduces no new session events; observations ride existing `user/message` and `tool/result`. |
 
 </details>
@@ -113,7 +117,7 @@ First-frame attachment uses `agent/pre-step`: the listener always awaits `next()
 - [Experimental group](../README.md) — private prototypes and the public Agent Teams exceptions.
 - [Generated tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-experimental-tool-computer-use) — the five GUI schemas.
 - [Adding a tool](../../../docs/cookbook/adding-a-tool.md) — UI render intent (`generic`) and image blocks in content.
-- [Computer Use Agent Note](../../../.agents/notes/implemented/feature/2026-09-13-experimental-computer-use.md) — plugin vs Skill vs loop, observation-in-result, and the consent gate.
+- [Computer Use Agent Note](../../../.agents/notes/implemented/feature/2026-09-13-experimental-computer-use.md) — plugin vs Skill vs loop, the Computer Use agent preset, observation-in-result, and the consent gate.
 - [Headless computer-use snapshot](../../../snapshots/session/computer-use/snapshot.yml) — authored click loop over a fake desktop and a vision model.
 
 -----
@@ -138,11 +142,11 @@ Coordinates: each screen uses a 0–1000 space. Pass position as [x, y] in that 
 
 Step: take exactly one GUI action per tool call. After the call, the new screenshot is in the tool result; use that image for the next action.
 
-Do not click or type into a target you cannot see. Do not read file paths off the screen for bash or filesystem tools; use those tools with real paths.
+Do not click or type into a target you cannot see. Do not read file paths off the screen; use bash with real paths.
 
 Observation is not a tool. There is no screenshot or observe call. The first user turn already includes the current screens, and every GUI tool returns the post-action screens.
 
-This session drives the real unsandboxed desktop. Prefer bash and filesystem tools for files and terminals.
+This session drives the real unsandboxed desktop. Prefer bash for files and terminals.
 ```
 
 #### Token effect

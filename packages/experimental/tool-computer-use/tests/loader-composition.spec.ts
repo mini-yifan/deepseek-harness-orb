@@ -18,6 +18,8 @@ import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
 import { unsupportedInbox } from '@deepseek-ai/dsh-agent-loop-testkit'
 import * as ComputerUse from '../src/index.ts'
 import * as fakeComputerUse from './fixtures/fake-computer-use.ts'
+import * as PresetRoot from '../src/preset-root.ts'
+import { PRESET_ROOT } from '../src/preset-root.ts'
 
 class CatalogAdapter extends LlmAdapter {
   constructor(private readonly models: LlmModelInfo[]) {
@@ -126,5 +128,43 @@ describe('computer-use real Loader composition', () => {
     expect(ComputerUse.name).toBe('tool-computer-use')
     expect(ComputerUse.inject).toContain('attachments')
     expect('default' in ComputerUse).toBe(false)
+  })
+})
+
+describe('computer-use overlay inject interpolation', () => {
+  // A raw Context can read the provided path; Loader !!js cannot until the row injects it.
+  it('interpolates ctx.computerUsePresetRoot after agent-presets injects it', async () => {
+    root = await mkdtemp(join(tmpdir(), 'dsh-cu-preset-root-'))
+    const fixture = await readFile(new URL('./fixtures/preset-root-overlay.yml', import.meta.url), 'utf8')
+    const configPath = join(root, 'cordis.yml')
+    await writeFile(configPath, fixture)
+
+    let resolved: string | undefined
+    const RootConsumer = {
+      name: 'root-consumer',
+      apply(_ctx: Context, config: { path: string }) {
+        resolved = config.path
+      },
+    }
+
+    const ctx = new Context()
+    context = ctx
+    ctx.baseUrl = pathToFileURL(root).href + '/'
+    await ctx.plugin(Loader)
+    ctx.loader.builtins.include = Include
+    const modules = new Map<string, unknown>([
+      ['./preset-root.ts', PresetRoot],
+      ['./root-consumer.ts', RootConsumer],
+    ])
+    ctx.loader.internal = {
+      version: 'v2',
+      async import(specifier: string) {
+        if (!modules.has(specifier)) throw new Error(`unexpected Loader import: ${specifier}`)
+        return modules.get(specifier)
+      },
+    } as unknown as NonNullable<typeof ctx.loader.internal>
+    await ctx.loader.create({ name: 'cordis:include', config: { path: pathToFileURL(configPath).href } })
+    await ctx.loader.await()
+    expect(resolved).toBe(PRESET_ROOT)
   })
 })

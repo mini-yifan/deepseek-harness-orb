@@ -1,9 +1,20 @@
 # Built-artifact overlay for experimental computer-use:
 #   pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.patch.yml
-# Restart the running dsh web process after adding --patch. The relative entry
-# is anchored to this file. Run `pnpm run build` first. This plugin drives the
-# real unsandboxed desktop and is not part of dsh-base.
+# Restart the running dsh web process after adding --patch. The locator's
+# relative entry is anchored to this file. Run `pnpm run build` first. The
+# overlay adds a system Computer Use agent preset; it does not register GUI
+# tools on the Host. The agent-presets row injects computerUsePresetRoot so
+# Loader interpolation waits for the locator. This plugin drives the real
+# unsandboxed desktop and is not part of dsh-base.
 
 - insert:
-    - id: tool-computer-use
-      name: './lib/index.js'
+    - id: computer-use-preset-root
+      name: './lib/preset-root.js'
+
+- id: agent-presets
+  inject: [computerUsePresetRoot]
+  config:
+    default: standard
+    roots:
+      - path: !!js ctx.computerUsePresetRoot
+        trust: system

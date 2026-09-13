@@ -153,6 +153,7 @@ export const SERVICE_WALK_EXEMPTIONS: Record<string, string> = {
   configuredAgentIdentities: 'not a service: launcher-provided boot-context value (ConfiguredAgentIdentities | undefined) — packages/core/agent-loop/README.md owns this launcher contract',
   launcherSessionQueryPath: 'not a service: launcher-provided boot-context value (string | undefined) — packages/session-query/session-query-sqlite/README.md owns this launcher contract',
   dshHomePath: 'not a service: boot-provided root accessor function (typeof dshHomePath | undefined) for Loader !!js config expressions — packages/boot/app-boot/README.md owns the boot contract',
+  computerUsePresetRoot: 'not a service: overlay-provided extra agent-presets root path (string) for Loader !!js config expressions — packages/experimental/tool-computer-use/README.md owns this overlay contract',
   launchEnvironment: 'not a service: launcher-provided root accessor value (LaunchEnvironmentSnapshot | undefined) — packages/util/launch-environment/README.md owns this launcher contract',
   connection: 'interface-typed (HostConnectionHandle); implementing class HostConnectionService is declared in rpc-host.ts — packages/client/connection/README.md owns the API',
   fileUpload: 'client-side browser upload service — packages/client/file-upload/README.md owns the API',

@@ -25,21 +25,23 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-当你希望模型操作真实桌面时，把这个私有插件 patch 到正在运行的 Web 组合上。安装插件就是同意门槛：这些工具不会在每次点击时询问。
+当你希望有一个操作真实桌面的专用 Computer Use agent 时，把这个私有 overlay patch 到正在运行的 Web 组合上。overlay 会追加一个系统 agent preset；GUI 工具注册在该 preset 的作用域里，而不是 Host 上。安装或 patch 就是同意门槛：这些工具不会在每次点击时询问。
 
 ### 何时选择
 
-当视觉模型需要驱动 bash 与文件系统工具无法到达的可见 GUI 时，选择它。普通编码会话、纯文本路由，以及不得授予屏幕录制加辅助功能权限的宿主，都不要选择。它不是 Skill，不是能力 seam，也不属于 `dsh-base`。
+当视觉模型需要驱动 bash 无法到达的可见 GUI，并且你希望工具目录仅含 Shell、网页检索与抓取、五个 GUI 工具和 `ask_user_question` 时，选择它。普通编码会话、纯文本路由，以及不得授予屏幕录制加辅助功能权限的宿主，都不要选择。它不是 Skill，不是能力 seam，也不属于 `dsh-base`。
 
 ### 最小配置
 
-`pnpm dsh` 已经走 tsx，因此 patch 源码 overlay 并重启正在运行的 `dsh web`。相对路径入口锚定在 patch 文件上，与 Inspector 的试用路径相同，因此 CLI 应用并不依赖这个实验包：
+`pnpm dsh` 已经走 tsx，因此 patch 源码 overlay 并重启正在运行的 `dsh web`。locator 插件的相对路径入口锚定在 patch 文件上，与 Inspector 的试用路径相同，因此 CLI 应用并不依赖这个实验包：
 
 ```text
 pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch.yml
 ```
 
-`pnpm run build` 之后，同一 overlay 可以通过 [`cordis.patch.yml`](cordis.patch.yml) 加载发出的 `./lib/index.js`。
+新建会话，并在模式选择器中选择 Computer Use。已有会话保持其 preset。部署默认仍是 `standard`，该模式不会收到 GUI 工具。
+
+`pnpm run build` 之后，[`cordis.patch.yml`](cordis.patch.yml) 以同样方式加载发出的 `./lib/preset-root.js` locator。
 
 能够解析该包名的自定义 Loader 组合也可以改为挂载：
 
@@ -99,8 +101,10 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 | 文件 | 职责 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件入口：宿主平台后端上的 `name` / `inject` / `Config` / `apply` |
+| [`src/preset-root.ts`](src/preset-root.ts) | 仅 overlay 使用的插件：发布额外的 agent-presets 根目录 |
 | [`src/plugin.ts`](src/plugin.ts) | 共享的 `applyComputerUse`：策略、五个工具、首帧 pre-step |
 | [`src/macos.ts`](src/macos.ts) | Darwin 通过 `screencapture` 捕获；click、scroll 与 hotkey 走 JXA `CGEvent`；`input_text` 通过 NSPasteboard 粘贴 |
+| [`presets/computer-use/`](presets/computer-use/) | Computer Use agent preset：Shell、网页、GUI 工具、`ask_user_question`、压缩 |
 | — | 不发布运行时不变式伴生入口，因为本插件不引入新的会话事件；观察结果走现有的 `user/message` 与 `tool/result`。 |
 
 </details>
@@ -113,7 +117,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 - [实验组](../README.zh.md) — 私有原型与公开的 Agent Teams 例外。
 - [生成的工具目录](../../../docs/tool-catalog.zh.md#deepseek-aidsh-experimental-tool-computer-use) — 五个 GUI schema。
 - [添加工具](../../../docs/cookbook/adding-a-tool.zh.md) — UI 呈现意图（`generic`）与内容中的图片块。
-- [Computer Use Agent Note](../../../.agents/notes/implemented/feature/2026-09-13-experimental-computer-use.zh.md) — 插件 vs Skill vs loop、结果内观察，以及同意门槛。
+- [Computer Use Agent Note](../../../.agents/notes/implemented/feature/2026-09-13-experimental-computer-use.zh.md) — 插件 vs Skill vs loop、Computer Use agent preset、结果内观察，以及同意门槛。
 - [Headless computer-use snapshot](../../../snapshots/session/computer-use/snapshot.yml) — 在假桌面与视觉模型上人工编写的点击循环。
 
 -----
@@ -138,11 +142,11 @@ Coordinates: each screen uses a 0–1000 space. Pass position as [x, y] in that 
 
 Step: take exactly one GUI action per tool call. After the call, the new screenshot is in the tool result; use that image for the next action.
 
-Do not click or type into a target you cannot see. Do not read file paths off the screen for bash or filesystem tools; use those tools with real paths.
+Do not click or type into a target you cannot see. Do not read file paths off the screen; use bash with real paths.
 
 Observation is not a tool. There is no screenshot or observe call. The first user turn already includes the current screens, and every GUI tool returns the post-action screens.
 
-This session drives the real unsandboxed desktop. Prefer bash and filesystem tools for files and terminals.
+This session drives the real unsandboxed desktop. Prefer bash for files and terminals.
 ```
 
 #### Token 影响

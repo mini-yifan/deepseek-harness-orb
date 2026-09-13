@@ -1,0 +1,77 @@
+# The `computer-use` agent preset: Shell, web, five GUI tools, and ask_user_question.
+#
+# This file is an AGENT-PLANE composition. The roster mounts it ONCE under a
+# standing scope; every session naming it joins by scope parentage. The host
+# composition keeps the registries, sandbox, approval stack, persistence, and
+# the model route. GUI tools register into this standing mount's tool layer,
+# so other presets do not see them.
+#
+# A service row here MUST sit inside a group carrying an `isolate` realm.
+
+# ── identity ────────────────────────────────────────────────────────────────
+
+# The preset's own persona, shadowing the deployment default for this agent.
+# `{{model}}` and `{{cwd}}` resolve from the agent's own route and workspace.
+# `complete` stays unset so later prompt sections, including Computer Use
+# POLICY, still assemble.
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    suffix: Your working directory is {{cwd}}.
+    prefix: >-
+      You are a desktop GUI agent powered by the {{model}} model.
+      Drive visible windows with the GUI tools. Use bash for files and terminals.
+
+# ── shell ───────────────────────────────────────────────────────────────────
+
+# `shell-env` stays in the HOST composition. Both shell tools consume the host
+# registry from here; their executors are host-plane too.
+- id: tool-bash
+  name: '@deepseek-ai/dsh-tool-bash'
+  disabled: !!js process.platform === 'win32'
+
+- id: tool-pwsh
+  name: '@deepseek-ai/dsh-tool-pwsh'
+  disabled: !!js process.platform !== 'win32'
+
+# ── compaction ──────────────────────────────────────────────────────────────
+
+# Screenshots dominate context. `compaction-basic` reads `toolResultPrune`
+# through `ctx.get`, so the pruner must share this realm.
+- id: compaction
+  name: cordis:group
+  group: true
+  isolate:
+    compaction: true
+    toolResultPruner: true
+  config:
+    - id: compaction-basic
+      name: '@deepseek-ai/dsh-compaction-basic'
+
+    - id: command-compact
+      name: '@deepseek-ai/dsh-command-compact'
+
+    - id: tool-result-pruner
+      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+      config:
+        thresholdChars: 8192
+        headChars: 4096
+        tailChars: 1024
+
+# ── remaining model-facing rows ─────────────────────────────────────────────
+
+- id: tool-ask-user
+  name: '@deepseek-ai/dsh-tool-ask-user'
+
+# The `web` service and its search provider stay in the host composition; only
+# the model-facing tool is per-session.
+- id: tool-web
+  name: '@deepseek-ai/dsh-tool-web'
+  config:
+    fetch: true
+    searchTimeoutMs: 60000
+
+# Relative to this composition so the CLI app does not depend on the
+# experimental package. `pnpm dsh` loads the TypeScript through tsx.
+- id: tool-computer-use
+  name: '../../src/index.ts'
