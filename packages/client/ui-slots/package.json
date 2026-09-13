@@ -24,7 +24,7 @@
   "license": "MIT",
   "devDependencies": {
     "@deepseek-ai/dsh-client-store": "workspace:^",
-    "@types/react": "~18.3.1",
+    "@types/react": "~19.2.18",
     "@deepseek-ai/cordis": "workspace:^"
   },
   "files": [
