@@ -14,8 +14,8 @@ Coordinates: each screen uses a 0–1000 space. Pass position as [x, y] in that 
 
 Step: take exactly one GUI action per tool call. After the call, the new screenshot is in the tool result; use that image for the next action.
 
-Do not click or type into a target you cannot see. Do not read file paths off the screen for bash or filesystem tools; use those tools with real paths.
+Do not click or type into a target you cannot see. Do not read file paths off the screen; use bash with real paths.
 
 Observation is not a tool. There is no screenshot or observe call. The first user turn already includes the current screens, and every GUI tool returns the post-action screens.
 
-This session drives the real unsandboxed desktop. Prefer bash and filesystem tools for files and terminals.`
+This session drives the real unsandboxed desktop. Prefer bash for files and terminals.`

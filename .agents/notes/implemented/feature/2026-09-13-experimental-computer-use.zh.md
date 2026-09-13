@@ -14,13 +14,17 @@ Status: implemented
 
 `applyComputerUse(ctx, backend, config)` 是共享注册助手。生产环境的 `apply` 使用宿主平台后端（macOS 捕获与 HID 输入；其他平台在执行时抛出固定的仅 macOS 错误）。测试与无密钥 snapshot 注入返回固定 PNG 并记录动作的假桌面。没有 Config `driver: fake`。macOS HID 发送由 [Computer Use macOS HID](../bug-fix/2026-09-13-computer-use-macos-hid.zh.md) 负责。
 
-插件注入 `tools`、`systemPrompt` 与 `attachments`。缺少 attachments 时保持 pending。可选的 `llm` 负责图片路由门禁：纯文本路由跳过首帧图片并拒绝这些工具。安装或 patch 插件就是同意门槛；工具不会对每次点击 `ask`。插件不在 `dsh-base` 中。本地试用是 `pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch.yml`。
+插件注入 `tools`、`systemPrompt` 与 `attachments`。缺少 attachments 时保持 pending。可选的 `llm` 负责图片路由门禁：纯文本路由跳过首帧图片并拒绝这些工具。安装或 patch 插件就是同意门槛；工具不会对每次点击 `ask`。插件不在 `dsh-base` 中。本地试用是 `pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch.yml`，然后在新会话上选择 Computer Use agent preset。
+
+Web overlay 只插入 `computer-use-preset-root`，由它提供本包旁的额外 `trust: system` agent-presets 根目录。overlay 在 `agent-presets` 行上加上 `inject: [computerUsePresetRoot]`，因此 Loader 插值 `!!js ctx.computerUsePresetRoot` 会等到该服务就绪。GUI 工具注册在该 preset 的常驻作用域里。Host 目录与随附的 `standard` preset 都不会收到它们。
 
 接地文案是 `systemPrompt.section`。坐标是每屏 0–1000。系统截屏组合键（Cmd/Win+Shift+3/4/5）会被拒绝。
 
 ## 考虑过的替代方案
 
-**只用 Skill 做接地。** Skill 可以携带 See/Step 文案，但不能注册工具、附加持久图片，或出现在生成的工具目录中。Computer Use 是带提示词分节的 Host 插件。
+**只用 Skill 做接地。** Skill 可以携带 See/Step 文案，但不能注册工具、附加持久图片，或出现在生成的工具目录中。Computer Use 是带提示词分节的 Cordis 插件，由 Computer Use agent preset 组合。
+
+**把 GUI 工具插到 Host。** Host 注册的工具会出现在每个 preset 中，包括 `standard`。overlay 改为追加一个系统 extra root，因此只有点名 `computer-use` 的会话才会收到五个 GUI 工具。
 
 **改 `agent-loop`。** loop 已经会把工具结果中的图片送入下一次请求。loop 特例会让桌面控制变成核心语义，并迫使每个组合都了解屏幕。
 
@@ -34,10 +38,10 @@ Status: implemented
 
 ## 影响
 
-在具备图片能力的路由上挂载该插件，会在每次请求中增加策略 token 与五个互斥 schema，再加上首帧通知与每次 GUI 结果的图片 token，直到压缩。纯文本路由仍能用于编码会话：跳过首帧附件，GUI 工具以路由诊断失败。macOS 需要屏幕录制与辅助功能；缺少权限时，捕获或输入会失败，并指出对应的 TCC。`input_text` 在粘贴期间覆盖字符串剪贴板，并在之后恢复。Web/Electron chrome 会出现在截屏中。没有逐次点击批准、chrome 排除、像素差 settle、拖拽，也没有 `dsh-base` 默认项。
+在 Computer Use preset 中、具备图片能力的路由上挂载该插件，会在每次请求中增加策略 token 与五个互斥 schema，再加上首帧通知与每次 GUI 结果的图片 token，直到压缩。纯文本路由仍能用于编码会话：跳过首帧附件，GUI 工具以路由诊断失败。macOS 需要屏幕录制与辅助功能；缺少权限时，捕获或输入会失败，并指出对应的 TCC。`input_text` 在粘贴期间覆盖字符串剪贴板，并在之后恢复。Web/Electron chrome 会出现在截屏中。没有逐次点击批准、chrome 排除、像素差 settle、拖拽，也没有 `dsh-base` 默认项。
 
 ## 测试
 
-包测试只使用假桌面。它们覆盖坐标映射、热键拒绝、工具 execute/render、首帧 pre-step、纯文本拒绝、HMR、通过仅测试 `cordis.yml` 的 Loader 组合，以及一次进程内 agent-loop 点击，把图片块放到 `user/message` 与 `tool/result` 上。注入的 macOS `CommandRunner` 测试断言生成的 JXA 含有 `clickAt`、`pasteText`、`chord` 与 `CGEventCreateScrollWheelEvent2`。
+包测试只使用假桌面。它们覆盖坐标映射、热键拒绝、工具 execute/render、首帧 pre-step、纯文本拒绝、HMR、通过仅测试 `cordis.yml` 的 Loader 组合，一次进程内 agent-loop 点击把图片块放到 `user/message` 与 `tool/result` 上，仅 overlay 使用的 preset-root locator、overlay YAML（不在 Host 插入 GUI 工具，`agent-presets` 注入 `computerUsePresetRoot`）、该 inject 之后对 `!!js ctx.computerUsePresetRoot` 的 Loader 插值、额外 preset 的 `scanRoot`，以及 Host `schemas()` 中不出现的作用域 GUI 工具。注入的 macOS `CommandRunner` 测试断言生成的 JXA 含有 `clickAt`、`pasteText`、`chord` 与 `CGEventCreateScrollWheelEvent2`。
 
 人工编写的 headless overlay [`snapshots/session/computer-use/`](../../../../snapshots/session/computer-use/) 挂载场景本地的假桌面插件，以及视觉模型 `deepseek-v4-flash-vision-exp`，并把 `postActionWaitMs` 设为 `0`。回放使用固定 PNG，绝不驱动真实桌面。该插件不在已发布的 `dsh-base` 中。
