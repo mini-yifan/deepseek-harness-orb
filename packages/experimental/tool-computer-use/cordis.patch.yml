@@ -1,0 +1,9 @@
+# Built-artifact overlay for experimental computer-use:
+#   pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.patch.yml
+# Restart the running dsh web process after adding --patch. The relative entry
+# is anchored to this file. Run `pnpm run build` first. This plugin drives the
+# real unsandboxed desktop and is not part of dsh-base.
+
+- insert:
+    - id: tool-computer-use
+      name: './lib/index.js'

@@ -38,6 +38,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-subagent-control` | `interrupt_agent`, `list_agents`, `send_message` | `ctx.tools`, `ctx.subagents`, `ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`, `tool/result`, `child session events through ctx.subagents` | - | The globally named control tools over continuable background subagents: provider-bound `tool-subagent` instances register distinct delegation tools, while this package registers `send_message` and `interrupt_agent` once, plus `list_agents` from its separately loaded `/list-agents` plugin (whose catalog rows use the sessionProjections and live Agent registries). |
 | `@deepseek-ai/dsh-tool-jobs` | `job_kill`, `job_list`, `job_output` | `ctx.tools`, `ctx.jobs`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `user/message via agent.inject() for background completion notices` | - | The kind-agnostic background-job controller: background bash commands, PTY sends, and subagents are read, listed, and killed through the same three tools. Loading the plugin attaches the controller that arms producers' `ctx.jobs.start()`. |
 | `@deepseek-ai/dsh-experimental-tool-agent-team` | `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | All nine tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
+| `@deepseek-ai/dsh-experimental-tool-computer-use` | `click`, `hotkey`, `input_text`, `scroll`, `wait` | `ctx.tools`, `ctx.systemPrompt`, `ctx.attachments`, `ctx.llm + an image-capable route (execution and first-frame screenshot)` | `tool/call`, `durable attachment (saveImage)`, `user/message first-frame notice`, `tool/result` | - | Experimental opt-in GUI tools. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no screenshot tool: the first user turn and every GUI result attach screens. |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
@@ -2071,6 +2072,188 @@ Wait for the next teammate status, mailbox, or shared-task change after this cal
 Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
 
 All nine tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names.
+
+<a id="deepseek-aidsh-experimental-tool-computer-use"></a>
+
+## `@deepseek-ai/dsh-experimental-tool-computer-use`
+
+### `click`
+
+Click at a 0–1000 position on one desktop screen, then return the post-action screenshot. Use left (default) or right button; count 2 is a double-click. Exclusive: do not combine with other GUI tools in the same step.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "screen_index": {
+      "type": "integer",
+      "description": "Zero-based display index from the latest screenshot envelope."
+    },
+    "position": {
+      "type": "array",
+      "description": "[x, y] in the 0–1000 space of that screen.",
+      "items": {
+        "type": "number"
+      }
+    },
+    "button": {
+      "type": "string",
+      "description": "Mouse button. Default: left.",
+      "default": "left",
+      "enum": [
+        "left",
+        "right"
+      ]
+    },
+    "count": {
+      "type": "integer",
+      "description": "1 for a single click, 2 for a double-click. Default: 1.",
+      "default": 1,
+      "enum": [
+        1,
+        2
+      ]
+    }
+  },
+  "required": [
+    "screen_index",
+    "position"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `hotkey`
+
+Press a key combination on the desktop, then return the post-action screenshot. System screenshot shortcuts (Cmd/Win+Shift+3/4/5) are rejected. Exclusive.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "keys": {
+      "type": "array",
+      "description": "Key names in order, for example [\"cmd\", \"c\"].",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "keys"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `input_text`
+
+Click to focus a 0–1000 position, type text, optionally replace existing content and press Enter, then return the post-action screenshot. Exclusive.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "screen_index": {
+      "type": "integer",
+      "description": "Zero-based display index from the latest screenshot envelope."
+    },
+    "position": {
+      "type": "array",
+      "description": "[x, y] in the 0–1000 space of that screen; the click focuses the field.",
+      "items": {
+        "type": "number"
+      }
+    },
+    "text": {
+      "type": "string",
+      "description": "Characters to type after the focus click."
+    },
+    "replace": {
+      "type": "boolean",
+      "description": "When true, select all in the focused field before typing. Default: false.",
+      "default": false
+    },
+    "submit": {
+      "type": "boolean",
+      "description": "When true, press Enter after typing. Default: false.",
+      "default": false
+    }
+  },
+  "required": [
+    "screen_index",
+    "position",
+    "text"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `scroll`
+
+Scroll up or down at a 0–1000 position on one desktop screen, then return the post-action screenshot. scroll_level is 1–10. Exclusive.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "screen_index": {
+      "type": "integer",
+      "description": "Zero-based display index from the latest screenshot envelope."
+    },
+    "position": {
+      "type": "array",
+      "description": "[x, y] in the 0–1000 space of that screen.",
+      "items": {
+        "type": "number"
+      }
+    },
+    "direction": {
+      "type": "string",
+      "description": "Scroll direction.",
+      "enum": [
+        "up",
+        "down"
+      ]
+    },
+    "scroll_level": {
+      "type": "integer",
+      "description": "Scroll magnitude from 1 (smallest) to 10 (largest)."
+    }
+  },
+  "required": [
+    "screen_index",
+    "position",
+    "direction",
+    "scroll_level"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `wait`
+
+Pause, then return a fresh desktop screenshot without moving the pointer. wait_seconds defaults to 1 and is clamped by the deployment maxWaitSeconds. Exclusive.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "wait_seconds": {
+      "type": "number",
+      "description": "Seconds to pause before recapturing. Default: 1, clamped by maxWaitSeconds."
+    }
+  }
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+Experimental opt-in GUI tools. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no screenshot tool: the first user turn and every GUI result attach screens.
 
 <a id="deepseek-aidsh-tool-todo"></a>
 

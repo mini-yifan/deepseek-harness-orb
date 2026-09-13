@@ -324,6 +324,7 @@
     { "path": "./packages/experimental/agent-team" },
     { "path": "./packages/experimental/agent-team-profile" },
     { "path": "./packages/experimental/tool-agent-team" },
+    { "path": "./packages/experimental/tool-computer-use" },
     { "path": "./packages/experimental/agent-team-web-profile" },
     { "path": "./packages/workflow/workflow" },
     { "path": "./packages/workflow/workflow-worker-thread" },
