@@ -331,7 +331,6 @@ async function main() {
     pinned = !pinned
     document.body.classList.toggle('pinned', pinned)
     if (pinned) await setExpanded(true)
-    else scheduleCollapse()
   })
   ball.addEventListener('pointercancel', event => {
     void finishPointer(event)

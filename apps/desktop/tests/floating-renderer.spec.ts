@@ -137,6 +137,12 @@ it('creates a Computer Use session on dsh_orb and sends from the overlay', async
     await expect.poll(() => calls.filter(call => call.method === 'session/create').length).toBeGreaterThan(1)
     document.querySelector<HTMLButtonElement>('#ball')?.dispatchEvent(new dom.window.Event('pointerup', { bubbles: true }))
     await expect.poll(() => document.body.classList.contains('pinned')).toBe(true)
+    document.querySelector<HTMLButtonElement>('#ball')?.dispatchEvent(new dom.window.Event('pointerup', { bubbles: true }))
+    await expect.poll(() => document.body.classList.contains('pinned')).toBe(false)
+    expect(document.body.classList.contains('expanded')).toBe(true)
+    expect(document.body.classList.contains('expand-left')).toBe(true)
+    expect(document.body.classList.contains('expand-up')).toBe(true)
+    expect(setExpanded.mock.calls.some(call => call[0] === false)).toBe(false)
   } finally { dom.window.close() }
 })
 
@@ -227,4 +233,9 @@ it('collapses then moves by the ball grab offset instead of the window origin', 
     releaseCollapse?.()
     dom.window.close()
   }
+})
+
+it('does not snap the ball to the window origin when the panel collapses', () => {
+  const css = readFileSync(new URL('../renderer/floating.css', import.meta.url), 'utf8')
+  expect(css).not.toContain('body:not(.expanded) #ball')
 })
