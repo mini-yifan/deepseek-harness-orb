@@ -28,6 +28,7 @@
     "lib/preset-root.js",
     "lib/code-agent.js",
     "presets",
+    "lib/macos-sck-capture",
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",

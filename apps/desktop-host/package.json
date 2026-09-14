@@ -9,6 +9,7 @@
   "files": [
     "lib/index.js",
     "lib/computer-use-preset-root.js",
+    "lib/computer-use-overlay-guard.js",
     "config/desktop.cordis.patch.yml"
   ],
   "dependencies": {

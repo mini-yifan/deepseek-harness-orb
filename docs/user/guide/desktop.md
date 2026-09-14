@@ -58,7 +58,7 @@ Those background sessions are the same kind as a session you type in the main wi
 
 ## Limits
 
-The floating ball is macOS-only. There is no voice, selection toolbar, lasso, or per-click approval. Electron `contentProtection` hides Desktop chrome from captures; ScreenCaptureKit window exclusion is absent. The Computer Use package is a signed runtime extra, not a Desktop Host npm dependency.
+The floating ball is macOS-only. There is no voice, selection toolbar, lasso, or per-click approval. Computer Use capture omits the ball and expanded panel from that screenshot via ScreenCaptureKit window exclusion, and HID makes that whole overlay click-through only for that input burst; the main window stays capturable and hittable. The Computer Use package is a signed runtime extra, not a Desktop Host npm dependency.
 
 ## Continue
 

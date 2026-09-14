@@ -58,7 +58,7 @@ Host 就绪后才会创建球。悬停展开白底面板，球留在输入胶囊
 
 ## 限制
 
-悬浮球只做 Mac。没有语音、划词、圈选或逐次点击批准。Electron `contentProtection` 会把桌面 chrome 从截屏里藏起；没有 ScreenCaptureKit 窗口排除。Computer Use 包是签名 runtime extra，不是 Desktop Host 的 npm 依赖。
+悬浮球只做 Mac。没有语音、划词、圈选或逐次点击批准。Computer Use 通过 ScreenCaptureKit 窗口排除，只在那一次截屏里省略球和展开面板，只在那一次 HID 期间让整扇 overlay 点击穿透；主窗口始终可被截到、可被点到。Computer Use 包是签名 runtime extra，不是 Desktop Host 的 npm 依赖。
 
 ## 继续阅读
 

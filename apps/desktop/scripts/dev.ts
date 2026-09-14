@@ -80,11 +80,32 @@ async function launchElectron(): Promise<void> {
   ], APP_ROOT, environment)
 }
 
+async function buildPackage(cwd: string): Promise<void> {
+  const tsc = join(REPOSITORY_ROOT, 'node_modules', 'typescript', 'bin', 'tsc')
+  const tsdown = join(REPOSITORY_ROOT, 'node_modules', '.bin', 'tsdown')
+  await run(process.execPath, [tsc, '-b'], cwd)
+  await run(tsdown, [], cwd)
+}
+
+async function buildComputerUseRuntimeExtra(): Promise<void> {
+  const computerUse = join(REPOSITORY_ROOT, 'packages', 'experimental', 'tool-computer-use')
+  await buildPackage(computerUse)
+  await run(process.execPath, [join(computerUse, 'scripts', 'build-macos-sck-capture.mjs')], computerUse)
+}
+
+async function buildSkipBuildArtifacts(): Promise<void> {
+  await buildPackage(join(REPOSITORY_ROOT, 'apps', 'desktop-host'))
+  await runPackageScript('build', APP_ROOT)
+  await buildComputerUseRuntimeExtra()
+}
+
 async function main(): Promise<void> {
   const { values } = parseArgs({ options: { 'skip-build': { type: 'boolean', default: false } } })
   if (!values['skip-build']) {
     await runPackageScript('build', REPOSITORY_ROOT)
     await runPackageScript('build', APP_ROOT)
+  } else {
+    await buildSkipBuildArtifacts()
   }
   for (const path of [
     join(APP_ROOT, 'lib', 'main.js'),

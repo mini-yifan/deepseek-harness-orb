@@ -113,6 +113,12 @@ export function prepareDevelopmentProject(options: DevelopmentProjectOptions): s
   if (!existsSync(join(options.hostDir, 'lib', 'index.js'))) {
     throw new Error('desktop development: apps/desktop-host/lib/index.js is missing; run pnpm run build')
   }
+  const overlayGuardJs = join(options.hostDir, 'lib', 'computer-use-overlay-guard.js')
+  if (existsSync(overlayGuardJs) && !readFileSync(overlayGuardJs, 'utf8').includes('excludeWindowIds')) {
+    throw new Error(
+      'desktop development: Desktop Host overlay-guard is missing excludeWindowIds; rebuild apps/desktop-host',
+    )
+  }
 
   removeOwnedPath(options.projectDir)
   createDevelopmentProjectMetadata(options.projectDir, options.release)

@@ -67,6 +67,27 @@ describe('desktop development project', () => {
     expect(manifest.dependencies['@deepseek-ai/dsh-desktop-host']).toBe('1.2.3')
   })
 
+  it('rejects a Desktop Host overlay-guard bundle that cannot pass capture window ids', () => {
+    const root = temporaryRoot()
+    const cli = join(root, 'apps', 'cli')
+    const host = join(root, 'apps', 'desktop-host')
+    const dependencies = join(root, 'workspace-dependencies')
+    mkdirSync(join(cli, 'lib'), { recursive: true })
+    mkdirSync(join(host, 'lib'), { recursive: true })
+    mkdirSync(dependencies, { recursive: true })
+    writeFileSync(join(cli, 'package.json'), '{"name":"@deepseek-ai/dsh","version":"1.2.3"}\n')
+    writeFileSync(join(host, 'package.json'), '{"name":"@deepseek-ai/dsh-desktop-host","version":"1.2.3"}\n')
+    writeFileSync(join(host, 'lib', 'index.js'), '')
+    writeFileSync(join(host, 'lib', 'computer-use-overlay-guard.js'), 'export function apply() {}\n')
+    expect(() => prepareDevelopmentProject({
+      projectDir: join(root, 'development'),
+      cliDir: cli,
+      hostDir: host,
+      dependencyDir: dependencies,
+      release: release(),
+    })).toThrow(/excludeWindowIds/u)
+  })
+
   it('skips dangling hoist links left by a renamed workspace package', () => {
     const root = temporaryRoot()
     const cli = join(root, 'apps', 'cli')

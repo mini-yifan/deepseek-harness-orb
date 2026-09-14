@@ -1,7 +1,7 @@
 /** Framed request and response bytes for the Electron Desktop Host transport. */
 
 /** Protocol version shared with the Electron shell. */
-export const DESKTOP_HOST_PROTOCOL_VERSION = 3 as const
+export const DESKTOP_HOST_PROTOCOL_VERSION = 5 as const
 
 /** Child descriptor that receives Electron request frames. */
 export const DESKTOP_REQUEST_PIPE_FD = 3

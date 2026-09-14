@@ -23,6 +23,8 @@ const harness = await vi.hoisted(async () => {
   class FakeWindow extends EventEmitter {
     destroyed = false
     contentProtection = false
+    ignoreMouseEvents = false
+    ignoreMouseEventsForward: boolean | undefined = undefined
     visibleOnAllWorkspaces = false
     visibleOnAllWorkspacesOptions: { visibleOnFullScreen?: boolean; skipTransformProcessType?: boolean } | undefined = undefined
     bounds = { x: 0, y: 0, width: 72, height: 72 }
@@ -38,6 +40,7 @@ const harness = await vi.hoisted(async () => {
     })
     readonly show = vi.fn()
     readonly focus = vi.fn()
+    readonly blur = vi.fn()
     readonly restore = vi.fn()
     constructor(readonly options: { show?: boolean; type?: string; width?: number; height?: number }) {
       super()
@@ -45,9 +48,14 @@ const harness = await vi.hoisted(async () => {
       if (typeof options.width === 'number') this.bounds.width = options.width
       if (typeof options.height === 'number') this.bounds.height = options.height
     }
+    getMediaSourceId() { return 'window:4242:0' }
     isDestroyed() { return this.destroyed }
     isMinimized() { return false }
     setContentProtection(value: boolean) { this.contentProtection = value }
+    setIgnoreMouseEvents(value: boolean, options?: { forward?: boolean }) {
+      this.ignoreMouseEvents = value
+      this.ignoreMouseEventsForward = options?.forward
+    }
     setVisibleOnAllWorkspaces(
       value: boolean,
       options?: { visibleOnFullScreen?: boolean; skipTransformProcessType?: boolean },
@@ -73,13 +81,30 @@ const harness = await vi.hoisted(async () => {
     readonly ready = deferred()
     readonly exited = deferred()
     readonly stopping = deferred()
+    readonly onOverlayGuard: ((event: {
+      type: 'overlay-guard'
+      requestId: number
+      action: 'begin' | 'end'
+      mode: 'capture' | 'input'
+    }) => readonly number[] | Promise<readonly number[]>) | undefined
     readonly start = vi.fn(() => { hostStarted.resolve(); return this.ready.promise })
     readonly stop = vi.fn(() => {
       this.stopping.resolve()
       this.ready.reject(new Error('child stopped'))
       return this.exited.promise
     })
-    constructor(readonly node: string, readonly runtime: string, readonly profile: string) { hosts.push(this) }
+    constructor(
+      readonly node: string,
+      readonly runtime: string,
+      readonly profile: string,
+      _inspectPort?: number,
+      _environment?: NodeJS.ProcessEnv,
+      readonly onFailure?: (error: Error) => void,
+      onOverlayGuard?: FakeHost['onOverlayGuard'],
+    ) {
+      this.onOverlayGuard = onOverlayGuard
+      hosts.push(this)
+    }
   }
   const app = Object.assign(new EventEmitter(), {
     isPackaged: true,
@@ -426,7 +451,7 @@ describe('desktop floating overlay', () => {
     ])
   })
 
-  it('creates a macOS overlay after Host ready and protects both windows', async () => {
+  it('creates a macOS overlay after Host ready without standing contentProtection', async () => {
     vi.stubGlobal('process', { ...process, platform: 'darwin', resourcesPath: 'desktop-test-resources' })
     await import('../src/main.ts')
     await harness.preparing.promise
@@ -437,7 +462,7 @@ describe('desktop floating overlay', () => {
     const overlay = harness.windows.find(window => window.options.type === 'panel')
     expect(overlay).toBeDefined()
     expect(overlay?.urls).toEqual(['dsh-app://shell/floating.html'])
-    expect(overlay?.contentProtection).toBe(true)
+    expect(overlay?.contentProtection).toBe(false)
     expect(overlay?.visibleOnAllWorkspaces).toBe(true)
     expect(overlay?.visibleOnAllWorkspacesOptions).toEqual({
       visibleOnFullScreen: true,
@@ -445,7 +470,27 @@ describe('desktop floating overlay', () => {
     })
     expect(harness.app.dock.show).toHaveBeenCalled()
     expect(harness.app.setActivationPolicy).toHaveBeenCalledWith('regular')
-    expect(appWindows()[0]?.contentProtection).toBe(true)
+    expect(appWindows()[0]?.contentProtection).toBe(false)
+    expect(harness.hosts[0]!.onOverlayGuard?.({
+      type: 'overlay-guard', requestId: 1, action: 'begin', mode: 'capture',
+    })).toEqual([4242])
+    expect(overlay?.contentProtection).toBe(false)
+    expect(overlay?.ignoreMouseEvents).toBe(false)
+    harness.hosts[0]!.onOverlayGuard?.({
+      type: 'overlay-guard', requestId: 2, action: 'end', mode: 'capture',
+    })
+    expect(overlay?.contentProtection).toBe(false)
+    const inputBegin = harness.hosts[0]!.onOverlayGuard?.({
+      type: 'overlay-guard', requestId: 3, action: 'begin', mode: 'input',
+    })
+    expect(overlay?.ignoreMouseEvents).toBe(true)
+    expect(overlay?.ignoreMouseEventsForward).toBe(false)
+    expect(inputBegin).toBeInstanceOf(Promise)
+    expect(overlay?.blur).toHaveBeenCalled()
+    harness.hosts[0]!.onOverlayGuard?.({
+      type: 'overlay-guard', requestId: 4, action: 'end', mode: 'input',
+    })
+    expect(overlay?.ignoreMouseEvents).toBe(false)
     expect(invokeFloating(DESKTOP_IPC.floatingSetExpanded, true)).toMatchObject({
       expanded: true,
       horizontal: 'right',
@@ -462,6 +507,30 @@ describe('desktop floating overlay', () => {
     }
   })
 
+  it('restores overlay chrome when the Host stops', async () => {
+    vi.stubGlobal('process', { ...process, platform: 'darwin', resourcesPath: 'desktop-test-resources' })
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    harness.prepared.resolve()
+    await harness.hostStarted.promise
+    harness.hosts[0]!.ready.resolve()
+    await harness.navigated.promise
+    const overlay = harness.windows.find(window => window.options.type === 'panel')
+    const host = harness.hosts[0]!
+    host.onOverlayGuard?.({ type: 'overlay-guard', requestId: 1, action: 'begin', mode: 'input' })
+    expect(overlay?.ignoreMouseEvents).toBe(true)
+    host.stop.mockImplementation(() => {
+      host.stopping.resolve()
+      return host.exited.promise
+    })
+    harness.app.quit()
+    await host.stopping.promise
+    host.exited.resolve()
+    await harness.quitCompleted.promise
+    expect(overlay?.contentProtection).toBe(false)
+    expect(overlay?.ignoreMouseEvents).toBe(false)
+  })
+
   it('does not create a floating overlay off macOS', async () => {
     vi.stubGlobal('process', { ...process, platform: 'linux', resourcesPath: 'desktop-test-resources' })
     await import('../src/main.ts')
@@ -472,7 +541,7 @@ describe('desktop floating overlay', () => {
     await harness.navigated.promise
     expect(harness.windows.some(window => window.options.type === 'panel')).toBe(false)
     expect(appWindows()).toHaveLength(1)
-    expect(appWindows()[0]?.contentProtection).toBe(true)
+    expect(appWindows()[0]?.contentProtection).toBe(false)
     expect(harness.app.dock.show).not.toHaveBeenCalled()
     expect(harness.app.setActivationPolicy).not.toHaveBeenCalled()
   })

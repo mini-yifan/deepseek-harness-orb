@@ -213,7 +213,6 @@ export function createFloatingWindow(
     },
   })
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
-  window.setContentProtection(true)
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('context-menu', (_event, params) => {
     Menu.buildFromTemplate(floatingContextMenuTemplate(params, messages, onOpenMain, onQuit)).popup({ window })
@@ -280,4 +279,100 @@ export function clampFloatingWindow(window: BrowserWindow): void {
     return
   }
   setFloatingExpanded(window, true)
+}
+
+/** Overlay chrome mode for one Computer Use capture or HID burst. */
+export type FloatingOverlayGuardMode = 'capture' | 'input'
+
+/** Begin or end one overlay-guard interval. */
+export type FloatingOverlayGuardAction = 'begin' | 'end'
+
+interface OverlayGuardCounts {
+  capture: number
+  input: number
+}
+
+const overlayGuardCounts = new WeakMap<BrowserWindow, OverlayGuardCounts>()
+
+function countsOf(window: BrowserWindow): OverlayGuardCounts {
+  const existing = overlayGuardCounts.get(window)
+  if (existing !== undefined) return existing
+  const created: OverlayGuardCounts = { capture: 0, input: 0 }
+  overlayGuardCounts.set(window, created)
+  return created
+}
+
+/**
+ * Parse the overlay's `desktopCapturer` source id into a CGWindowID.
+ * @param sourceId - `BrowserWindow.getMediaSourceId()` value (`window:<id>:…`).
+ * @returns the CGWindowID ScreenCaptureKit excludes.
+ * @throws when the id is not a positive window source.
+ */
+export function cgWindowIdFromMediaSourceId(sourceId: string): number {
+  const match = /^window:(\d+)(?::|$)/u.exec(sourceId)
+  if (match === null) {
+    throw new Error(`dsh desktop: overlay media source id is not a CGWindowID: ${sourceId}`)
+  }
+  const id = Number(match[1])
+  if (!Number.isSafeInteger(id) || id < 1) {
+    throw new Error(`dsh desktop: overlay media source id is not a CGWindowID: ${sourceId}`)
+  }
+  return id
+}
+
+/**
+ * Overlay window ids Computer Use must omit from the next ScreenCaptureKit capture.
+ * Ball and expanded panel share this BrowserWindow, so one id covers both.
+ * @param window - floating overlay.
+ * @returns a one-element id list, or `[]` when the window is gone.
+ */
+export function overlayWindowExcludeIds(window: BrowserWindow): number[] {
+  if (window.isDestroyed()) return []
+  return [cgWindowIdFromMediaSourceId(window.getMediaSourceId())]
+}
+
+/** Milliseconds Electron waits after click-through before acking input begin, so WindowServer hit-testing has committed. */
+export const OVERLAY_GUARD_INPUT_APPLY_MS = 80
+
+function syncOverlayGuard(window: BrowserWindow, counts: OverlayGuardCounts): void {
+  if (window.isDestroyed()) return
+  if (counts.input > 0) {
+    window.setIgnoreMouseEvents(true, { forward: false })
+    window.blur()
+    return
+  }
+  window.setIgnoreMouseEvents(false)
+}
+
+/**
+ * Apply or restore overlay click-through for one Computer Use HID interval.
+ * Capture begin still refcounts so overlapping sessions stay paired with their ends;
+ * ScreenCaptureKit exclusion uses {@link overlayWindowExcludeIds} rather than `contentProtection`.
+ * HID click-through does not forward mouse events into the overlay renderer.
+ * Overlapping begins are refcounted.
+ * @param window - floating overlay.
+ * @param mode - capture exclusion or HID click-through.
+ * @param action - increment or decrement that mode's count.
+ */
+export function applyFloatingOverlayGuard(
+  window: BrowserWindow,
+  mode: FloatingOverlayGuardMode,
+  action: FloatingOverlayGuardAction,
+): void {
+  if (window.isDestroyed()) return
+  const counts = countsOf(window)
+  if (action === 'begin') counts[mode] += 1
+  else counts[mode] = Math.max(0, counts[mode] - 1)
+  syncOverlayGuard(window, counts)
+}
+
+/**
+ * Drop every overlay-guard interval and restore hittable chrome.
+ * Host exit uses this so a lost `end` cannot leave the ball click-through.
+ * @param window - floating overlay.
+ */
+export function resetFloatingOverlayGuard(window: BrowserWindow): void {
+  overlayGuardCounts.delete(window)
+  if (window.isDestroyed()) return
+  syncOverlayGuard(window, { capture: 0, input: 0 })
 }

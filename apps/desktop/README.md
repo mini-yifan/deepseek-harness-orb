@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-The desktop application is an Electron shell around the dsh Web UI. It opens no listening port: a bundled upstream Node.js child boots the installed dsh project, versioned framed byte pipes carry Fetch requests and streaming responses without an outer Base64 envelope, Node IPC carries lifecycle control, and `dsh-app://` serves the matching client assets.
+The desktop application is an Electron shell around the dsh Web UI. It opens no listening port: a bundled upstream Node.js child boots the installed dsh project, versioned framed byte pipes carry Fetch requests and streaming responses without an outer Base64 envelope, Node IPC carries lifecycle control and overlay-guard acknowledgements, and `dsh-app://` serves the matching client assets.
 
 ## Key technical decisions
 
@@ -13,7 +13,7 @@ The desktop application is an Electron shell around the dsh Web UI. It opens no 
 | Package sources | Core installation at startup adds work even when offline. | `extraResources/dsh` carries a complete production dependency tree; the profile installs only external plugins. |
 | Shared modules | Host APIs can depend on module identity. | Desktop links every bundled first-party package into the profile using directory symlinks, or Windows junctions; ordinary plugin dependencies remain local. |
 | State ownership | Sharing executable dependency graphs would let CLI and Desktop change each other's dsh, Cordis, plugin, or native-module versions, while two desktop processes could race on the same profile. | Electron acquires its process-lifetime single-instance lock before any profile access and exclusively owns `$DSH_HOME/profiles/desktop` plus its package-manager state. CLI and Desktop share supported product data under `$DSH_HOME`, but never executable packages, plugin activation, lockfiles, or `node_modules`. |
-| Transport | A listening Web service adds port ownership, authentication, CORS, and exposure concerns; Electron and upstream Node.js also need an explicit cross-process protocol. | The application opens no Web port. `dsh-app://` carries Web assets and Fetch traffic; framed byte pipes carry bounded request and response chunks with backpressure, while Node IPC carries only child lifecycle control. |
+| Transport | A listening Web service adds port ownership, authentication, CORS, and exposure concerns; Electron and upstream Node.js also need an explicit cross-process protocol. | The application opens no Web port. `dsh-app://` carries Web assets and Fetch traffic; framed byte pipes carry bounded request and response chunks with backpressure, while Node IPC carries child lifecycle control and overlay-guard acknowledgements. |
 | Plugin changes | Package installation and Host startup can fail. | Desktop stops the Host and modifies the current profile directly. Failures retain partial changes for explicit repair; there is no automatic profile rollback. |
 | Updates | Independent shell and dsh updates would recreate version splits, while unchanged shell blocks should not require a complete transfer. | The Electron shell, matching dsh runtime, Node.js, and pnpm form one signed update unit. Platform update artifacts may reuse unchanged blocks, but runtime version selection never splits from the Desktop release. |
 
@@ -55,7 +55,7 @@ pnpm run dev:desktop
 
 Development Harness state defaults to `apps/desktop/.desktop-build/development/home`, the disposable npm project lives at `apps/desktop/.desktop-build/development/project`, and Electron browser data lives at `apps/desktop/.desktop-build/development/electron-user-data`. Sessions, settings, credentials, package links, and browser data therefore stay out of the user's normal Harness home. An explicit `DSH_HOME` replaces only the development Harness home. Renderer DevTools opens automatically; Main, Renderer, and dsh Host debugging listen on ports 9229, 9222, and 9230. `DSH_DESKTOP_MAIN_INSPECT_PORT`, `DSH_DESKTOP_RENDERER_DEBUG_PORT`, and `DSH_DESKTOP_HOST_INSPECT_PORT` replace those ports, while `DSH_DESKTOP_OPEN_DEVTOOLS=0` keeps the detached Renderer tools closed.
 
-After an explicit build, `start:desktop` reconstructs the disposable project and launches the existing artifacts without building again:
+After an explicit build, `start:desktop` rebuilds Desktop Host, the Electron shell, and the Computer Use runtime extra, reconstructs the disposable project, and launches:
 
 ```sh
 pnpm run start:desktop
@@ -203,4 +203,4 @@ An unpackaged Electron process uses `.desktop-build/development/project` under i
 - Desktop plugins with dependency lifecycle scripts are rejected unless their package appears in the desktop project's reviewed `allowBuilds` policy.
 - The desktop shell shares sessions, settings, credentials, workspaces, and storage under `$DSH_HOME` with CLI dsh, while executable packages, plugin activation, lockfiles, and package-manager state remain separate.
 - The macOS floating ball is a second Electron overlay on the same Desktop Host. It locks Computer Use sessions under the `dsh_orb` sidebar folder; the main window stays on its current session. Windows keeps a single main window.
-- Computer Use ships as a signed runtime extra under `extraResources/dsh`, not as a Desktop Host npm dependency. Electron `contentProtection` hides Desktop chrome from captures; ScreenCaptureKit window exclusion is absent.
+- Computer Use ships as a signed runtime extra under `extraResources/dsh`, not as a Desktop Host npm dependency. The main window stays capturable. The macOS overlay is omitted from Computer Use screenshots by ScreenCaptureKit window exclusion and is click-through only for the matching HID burst.

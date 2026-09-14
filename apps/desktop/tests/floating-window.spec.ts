@@ -7,7 +7,9 @@ vi.mock('electron', () => ({
 }))
 
 import {
+  applyFloatingOverlayGuard,
   ballOriginFromWindow,
+  cgWindowIdFromMediaSourceId,
   clampFloatingWindow,
   clampedBallOrigin,
   expandDirection,
@@ -16,6 +18,8 @@ import {
   FLOATING_BALL_SIZE,
   FLOATING_PANEL_SIZE,
   moveFloatingBall,
+  overlayWindowExcludeIds,
+  resetFloatingOverlayGuard,
   setFloatingExpanded,
 } from '../src/floating-window.ts'
 
@@ -154,5 +158,75 @@ describe('floating window context menu', () => {
       { type: 'separator' },
       { label: 'Quit DeepSeek Harness', click: onQuit },
     ])
+  })
+})
+
+describe('floating overlay guard', () => {
+  function overlayWindow() {
+    return {
+      destroyed: false,
+      contentProtection: false,
+      ignoreMouseEvents: false,
+      ignoreMouseEventsForward: undefined as boolean | undefined,
+      isDestroyed() { return this.destroyed },
+      setContentProtection(value: boolean) { this.contentProtection = value },
+      setIgnoreMouseEvents(value: boolean, options?: { forward?: boolean }) {
+        this.ignoreMouseEvents = value
+        this.ignoreMouseEventsForward = options?.forward
+      },
+      blur: vi.fn(),
+    }
+  }
+
+  it('does not set contentProtection during capture; HID still click-through', () => {
+    const window = overlayWindow()
+    applyFloatingOverlayGuard(window as never, 'capture', 'begin')
+    expect(window.contentProtection).toBe(false)
+    expect(window.ignoreMouseEvents).toBe(false)
+    applyFloatingOverlayGuard(window as never, 'capture', 'end')
+    expect(window.contentProtection).toBe(false)
+  })
+
+  it('makes the overlay click-through only while input is held', () => {
+    const window = overlayWindow()
+    applyFloatingOverlayGuard(window as never, 'input', 'begin')
+    expect(window.ignoreMouseEvents).toBe(true)
+    expect(window.ignoreMouseEventsForward).toBe(false)
+    expect(window.blur).toHaveBeenCalled()
+    expect(window.contentProtection).toBe(false)
+    applyFloatingOverlayGuard(window as never, 'input', 'end')
+    expect(window.ignoreMouseEvents).toBe(false)
+  })
+
+  it('keeps click-through while a nested input begin is still open', () => {
+    const window = overlayWindow()
+    applyFloatingOverlayGuard(window as never, 'input', 'begin')
+    applyFloatingOverlayGuard(window as never, 'input', 'begin')
+    applyFloatingOverlayGuard(window as never, 'input', 'end')
+    expect(window.ignoreMouseEvents).toBe(true)
+    applyFloatingOverlayGuard(window as never, 'input', 'end')
+    expect(window.ignoreMouseEvents).toBe(false)
+  })
+
+  it('resets both modes so Host exit cannot leave the overlay cloaked', () => {
+    const window = overlayWindow()
+    applyFloatingOverlayGuard(window as never, 'capture', 'begin')
+    applyFloatingOverlayGuard(window as never, 'input', 'begin')
+    resetFloatingOverlayGuard(window as never)
+    expect(window.contentProtection).toBe(false)
+    expect(window.ignoreMouseEvents).toBe(false)
+  })
+
+  it('parses overlay CGWindowIDs from desktopCapturer source ids', () => {
+    expect(cgWindowIdFromMediaSourceId('window:4242:0')).toBe(4242)
+    expect(() => cgWindowIdFromMediaSourceId('screen:1:0')).toThrow(/not a CGWindowID/u)
+    const window = {
+      destroyed: false,
+      isDestroyed() { return this.destroyed },
+      getMediaSourceId() { return 'window:77:0' },
+    }
+    expect(overlayWindowExcludeIds(window as never)).toEqual([77])
+    window.destroyed = true
+    expect(overlayWindowExcludeIds(window as never)).toEqual([])
   })
 })
