@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-14-desktop-floating-orb.md
-2026-09-14-desktop-floating-orb.md: 5af985bac7630fd7e115cafee556d739aa64339b
-2026-09-14-desktop-floating-orb.zh.md: c8af7060ea8e5840f994bff624a088b4a7c9302e
+2026-09-14-desktop-floating-orb.md: 6c77bdd2f8f2e96cf5c12df891f40b15b2e0a9f5
+2026-09-14-desktop-floating-orb.zh.md: ba85f331768a9d045fd7d736519cdd089b57b125

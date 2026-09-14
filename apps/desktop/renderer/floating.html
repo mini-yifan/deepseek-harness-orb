@@ -9,8 +9,15 @@
   </head>
   <body>
     <section id="panel" hidden>
+      <button id="history" type="button" aria-pressed="false">
+        <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.5"></circle>
+          <path d="M8 4.5v4l2.5 1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+      </button>
       <button id="new-conversation" type="button"></button>
       <div id="transcript" role="log" aria-live="polite"></div>
+      <div id="history-list" role="listbox" hidden></div>
       <p id="status" role="status"></p>
       <form id="composer">
         <label id="input-label" for="prompt"></label>

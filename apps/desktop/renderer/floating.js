@@ -49,6 +49,18 @@ function eventText(record) {
   return { role: event.type === 'user/message' ? 'user' : 'assistant', text }
 }
 
+function orbComputerUseItems(items, orbPath) {
+  return (items ?? []).filter(item =>
+    item.origin !== 'subagent'
+    && item.cwd === orbPath
+    && item.projections?.values?.agentPreset === 'computer-use')
+}
+
+function overlayTitle(item, untitled) {
+  const title = item.projections?.values?.title
+  return typeof title === 'string' && title !== '' ? title : untitled
+}
+
 async function main() {
   const locale = await api.locale()
   const messages = locale.messages
@@ -59,15 +71,21 @@ async function main() {
   document.querySelector('#stop').title = messages.floatingStop
   document.querySelector('#new-conversation').textContent = messages.floatingNewConversation
   document.querySelector('#new-conversation').setAttribute('aria-label', messages.floatingNewConversation)
+  const historyButton = document.querySelector('#history')
+  historyButton.setAttribute('aria-label', messages.floatingHistory)
+  historyButton.title = messages.floatingHistory
   document.querySelector('#input-label').textContent = messages.floatingPlaceholder
   const ball = document.querySelector('#ball')
   const panel = document.querySelector('#panel')
   const transcript = document.querySelector('#transcript')
+  const historyList = document.querySelector('#history-list')
   const status = document.querySelector('#status')
   const prompt = document.querySelector('#prompt')
   const stop = document.querySelector('#stop')
   let sessionId = await api.floating.sessionId()
   let workspaceId
+  let orbWorkspacePath
+  let historyOpen = false
   let dragging = false
   let collapsing = false
   let pinned = false
@@ -194,12 +212,35 @@ async function main() {
     }
   }
 
+  async function orbCwd() {
+    if (orbWorkspacePath === undefined) orbWorkspacePath = await api.floating.orbWorkspacePath()
+    return orbWorkspacePath
+  }
+
   async function ensureWorkspace() {
     if (workspaceId !== undefined) return workspaceId
-    const path = await api.floating.orbWorkspacePath()
+    const path = await orbCwd()
     const created = await rpc('workspace/create', { request: { path } })
     workspaceId = created.workspace.workspaceId
     return workspaceId
+  }
+
+  async function persistSession(id) {
+    sessionId = id
+    await api.floating.setSessionId(id)
+    await selectDefaultModel(id)
+    return id
+  }
+
+  async function adoptSession(id) {
+    await rpc('session/create', {
+      request: {
+        sessionId: id,
+        agentPreset: 'computer-use',
+        workspaceId: await ensureWorkspace(),
+      },
+    })
+    return persistSession(id)
   }
 
   async function createOrbSession() {
@@ -209,30 +250,26 @@ async function main() {
         workspaceId: await ensureWorkspace(),
       },
     })).sessionId
-    sessionId = id
-    await api.floating.setSessionId(id)
-    await selectDefaultModel(id)
-    return id
+    return persistSession(id)
   }
 
   async function ensureSession() {
     if (sessionId !== undefined) {
       try {
-        await rpc('session/create', {
-          request: {
-            sessionId,
-            agentPreset: 'computer-use',
-            workspaceId: await ensureWorkspace(),
-          },
-        })
-        await selectDefaultModel(sessionId)
-        return sessionId
+        return await adoptSession(sessionId)
       } catch {
         // A persisted id that the Host no longer holds is replaced below.
         sessionId = undefined
       }
     }
     return createOrbSession()
+  }
+
+  function setHistoryOpen(next) {
+    historyOpen = next
+    transcript.hidden = historyOpen
+    historyList.hidden = !historyOpen
+    historyButton.setAttribute('aria-pressed', String(historyOpen))
   }
 
   function renderTranscript(records) {
@@ -247,11 +284,52 @@ async function main() {
     transcript.scrollTop = transcript.scrollHeight
   }
 
-  async function refreshTranscript() {
-    if (sessionId === undefined) return
+  async function renderHistory(items) {
+    const rows = orbComputerUseItems(items, await orbCwd())
+    historyList.replaceChildren()
+    if (rows.length === 0) {
+      const empty = document.createElement('p')
+      empty.className = 'history-empty'
+      empty.textContent = messages.floatingHistoryEmpty
+      historyList.append(empty)
+      return
+    }
+    for (const item of rows) {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = item.sessionId === sessionId ? 'history-row current' : 'history-row'
+      button.setAttribute('role', 'option')
+      button.setAttribute('aria-selected', String(item.sessionId === sessionId))
+      button.textContent = overlayTitle(item, messages.floatingUntitledConversation)
+      button.addEventListener('click', () => { void selectHistory(item.sessionId) })
+      historyList.append(button)
+    }
+  }
+
+  async function selectHistory(id) {
+    setHistoryOpen(false)
+    if (id !== sessionId) {
+      try {
+        await adoptSession(id)
+      } catch {
+        sessionId = undefined
+        await createOrbSession()
+      }
+    }
+    await refreshOverlay()
+  }
+
+  async function refreshOverlay() {
     try {
       const list = await rpc('session/list', { _request: {} })
-      const row = (list.items ?? []).find(item => item.sessionId === sessionId)
+      const items = list.items ?? []
+      const row = sessionId === undefined ? undefined : items.find(item => item.sessionId === sessionId)
+      setRunning(row?.running === true)
+      if (historyOpen) {
+        await renderHistory(items)
+        return
+      }
+      if (sessionId === undefined) return
       const throughSeq = row?.projections?.asOfSeq ?? -1
       const page = await rpc('session/page', {
         request: {
@@ -261,7 +339,6 @@ async function main() {
         },
       })
       renderTranscript(page.records)
-      setRunning(row?.running === true)
     } catch {
       status.textContent = messages.floatingDisconnected
     }
@@ -269,12 +346,12 @@ async function main() {
 
   api.backend.subscribe(state => {
     status.textContent = state.phase === 'ready' ? '' : messages.floatingDisconnected
-    if (state.phase === 'ready') void ensureSession().then(refreshTranscript)
+    if (state.phase === 'ready') void ensureSession().then(refreshOverlay)
   })
   const backend = await api.backend.status()
   if (backend.phase === 'ready') {
     status.textContent = ''
-    void ensureSession().then(refreshTranscript)
+    void ensureSession().then(refreshOverlay)
   } else {
     status.textContent = messages.floatingDisconnected
   }
@@ -344,6 +421,7 @@ async function main() {
     const text = prompt.value.trim()
     if (text === '') return
     prompt.value = ''
+    setHistoryOpen(false)
     const id = await ensureSession()
     setRunning(true)
     await rpc('session/prompt', {
@@ -354,22 +432,27 @@ async function main() {
         content: [{ type: 'text', text }],
       },
     })
-    await refreshTranscript()
+    await refreshOverlay()
   })
   stop.addEventListener('click', async () => {
     if (sessionId === undefined) return
     await rpc('session/cancel', { request: { sessionId } })
-    await refreshTranscript()
+    await refreshOverlay()
+  })
+  historyButton.addEventListener('click', async () => {
+    setHistoryOpen(!historyOpen)
+    await refreshOverlay()
   })
   document.querySelector('#new-conversation').addEventListener('click', async () => {
     prompt.value = ''
     transcript.replaceChildren()
+    setHistoryOpen(false)
     setRunning(false)
     await createOrbSession()
-    await refreshTranscript()
+    await refreshOverlay()
   })
   syncGif()
-  setInterval(() => { void refreshTranscript() }, 1500)
+  setInterval(() => { void refreshOverlay() }, 1500)
 }
 
 void main()

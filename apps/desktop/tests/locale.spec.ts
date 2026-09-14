@@ -15,9 +15,15 @@ describe('desktop locale dictionaries', () => {
       .toBe('plugin@1.2.3 {missing}')
   })
 
-  it('owns overlay copy for placeholder, stop, new conversation, and disconnect', () => {
+  it('owns overlay copy for placeholder, stop, new conversation, history, and disconnect', () => {
     expect(en.floatingNewConversation).toBe('New')
     expect(zh.floatingNewConversation).toBe('新建')
+    expect(en.floatingHistory).toBe('History')
+    expect(zh.floatingHistory).toBe('历史')
+    expect(en.floatingUntitledConversation).toBe('Untitled conversation')
+    expect(zh.floatingUntitledConversation).toBe('未命名对话')
+    expect(en.floatingHistoryEmpty).toBe('No Computer Use chats yet.')
+    expect(zh.floatingHistoryEmpty).toBe('还没有 Computer Use 对话。')
     expect(en).not.toHaveProperty('floatingSend')
     expect(zh).not.toHaveProperty('floatingSend')
   })
