@@ -1,5 +1,7 @@
 const api = window.dshDesktop
-const VISION_MODEL = 'deepseek-v4-flash-vision-exp'
+const DEFAULT_PROVIDER = 'deepseek-official'
+const DEFAULT_MODEL = 'deepseek-flash'
+const DEFAULT_REASONING = 'max'
 const GIF_SRC = 'defaultgif.gif'
 const COLLAPSE_MS = 180
 const ANIMATION_MS = 300
@@ -26,16 +28,12 @@ async function rpc(method, args = {}) {
   return envelope.result.value
 }
 
-function pickVision(catalog) {
+function pickDefault(catalog) {
   for (const group of catalog.groups ?? []) {
-    const exact = group.models.find(model => model.id === VISION_MODEL)
+    const exact = group.models.find(model => model.id === DEFAULT_MODEL)
     if (exact) return { provider: group.id, model: exact.id }
   }
-  for (const group of catalog.groups ?? []) {
-    const vision = group.models.find(model => String(model.id).includes('vision'))
-    if (vision) return { provider: group.id, model: vision.id }
-  }
-  return undefined
+  return { provider: DEFAULT_PROVIDER, model: DEFAULT_MODEL }
 }
 
 function eventText(record) {
@@ -179,13 +177,18 @@ async function main() {
     }, COLLAPSE_MS)
   }
 
-  async function selectVision(id) {
+  async function selectDefaultModel(id) {
     try {
       const catalog = await rpc('session/modelCatalog')
-      const vision = pickVision(catalog)
-      if (vision !== undefined) {
-        await rpc('session/selectModel', { request: { sessionId: id, provider: vision.provider, model: vision.model } })
-      }
+      const selected = pickDefault(catalog)
+      await rpc('session/selectModel', {
+        request: {
+          sessionId: id,
+          provider: selected.provider,
+          model: selected.model,
+          reasoningEffort: DEFAULT_REASONING,
+        },
+      })
     } catch {
       // A missing catalog or unsupported route leaves the session on its deployment default.
     }
@@ -208,7 +211,7 @@ async function main() {
     })).sessionId
     sessionId = id
     await api.floating.setSessionId(id)
-    await selectVision(id)
+    await selectDefaultModel(id)
     return id
   }
 
@@ -222,7 +225,7 @@ async function main() {
             workspaceId: await ensureWorkspace(),
           },
         })
-        await selectVision(sessionId)
+        await selectDefaultModel(sessionId)
         return sessionId
       } catch {
         // A persisted id that the Host no longer holds is replaced below.
