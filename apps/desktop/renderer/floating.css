@@ -186,6 +186,8 @@ body.running #composer {
 
 #ball {
   position: absolute;
+  top: 0;
+  left: 0;
   width: var(--ball);
   height: var(--ball);
   border: 0;
@@ -197,23 +199,23 @@ body.running #composer {
 }
 
 body.expand-left #ball {
+  left: auto;
   right: 0;
 }
 
 body.expand-right #ball {
+  right: auto;
   left: 0;
 }
 
 body.expand-up #ball {
+  top: auto;
   bottom: 0;
 }
 
 body.expand-down #ball {
+  bottom: auto;
   top: 0;
-}
-
-body:not(.expanded) #ball {
-  inset: 0;
 }
 
 #ball:active {
