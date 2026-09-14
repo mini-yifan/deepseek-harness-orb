@@ -8,10 +8,12 @@ import type { Context } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller/types'
+import type { SessionCreateRequest, SessionRequestId } from '@deepseek-ai/dsh-api-session-controller/types'
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-tools'
+
+type WorkspaceId = NonNullable<SessionCreateRequest['workspaceId']>
 
 /** Cordis plugin name. */
 export const name = 'tool-code-agent'
@@ -53,19 +55,20 @@ function requireAgent(exec: { agent?: { id: SessionId; session: { header: Header
  * Resolve a Workspace id when `directory` is already registered.
  * @param ctx - Host context; `workspaceRegistry` is optional.
  * @param directory - session cwd or explicit `code_agent` cwd.
- * @returns the Workspace id, or undefined when none matches.
+ * @returns the branded Workspace id, or undefined when none matches.
  */
 async function workspaceIdForDirectory(
   ctx: Context,
   directory: string | undefined,
-): Promise<string | undefined> {
+): Promise<WorkspaceId | undefined> {
   if (directory === undefined || directory === '') return undefined
   const registry = ctx.get('workspaceRegistry') as
     | { resolveByPath(path: string): Promise<{ id: string } | undefined> }
     | undefined
   if (registry === undefined || typeof registry.resolveByPath !== 'function') return undefined
   try {
-    return (await registry.resolveByPath(directory))?.id
+    const id = (await registry.resolveByPath(directory))?.id
+    return id === undefined ? undefined : brandString<WorkspaceId>(id)
   } catch {
     // Missing or relative directories cannot join a Workspace record.
     return undefined
@@ -81,7 +84,7 @@ async function workspaceIdForDirectory(
 async function locationForCreate(
   ctx: Context,
   directory: string | undefined,
-): Promise<{ workspaceId: string } | { cwd: string } | Record<string, never>> {
+): Promise<Pick<SessionCreateRequest, 'workspaceId'> | Pick<SessionCreateRequest, 'cwd'> | Record<string, never>> {
   const workspaceId = await workspaceIdForDirectory(ctx, directory)
   if (workspaceId !== undefined) return { workspaceId }
   if (directory === undefined) return {}
