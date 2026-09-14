@@ -132,6 +132,8 @@ it('creates a Computer Use session on dsh_orb and sends from the overlay', async
       },
     })
     await expect.poll(() => document.body.classList.contains('running')).toBe(true)
+    expect(document.querySelector('#panel')?.contains(document.querySelector('#stop'))).toBe(false)
+    expect(document.querySelector('#stop')?.parentElement).toBe(document.body)
     expect(document.querySelector<HTMLButtonElement>('#stop')?.hidden).toBe(false)
     document.querySelector<HTMLButtonElement>('#stop')?.click()
     await expect.poll(() => calls.some(call => call.method === 'session/cancel')).toBe(true)
@@ -240,4 +242,20 @@ it('collapses then moves by the ball grab offset instead of the window origin', 
 it('does not snap the ball to the window origin when the panel collapses', () => {
   const css = readFileSync(new URL('../renderer/floating.css', import.meta.url), 'utf8')
   expect(css).not.toContain('body:not(.expanded) #ball')
+})
+
+it('places Stop at the opposite pill end from the ball', () => {
+  const html = readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8')
+  const css = readFileSync(new URL('../renderer/floating.css', import.meta.url), 'utf8')
+  const ball = html.indexOf('id="ball"')
+  const stop = html.indexOf('id="stop"')
+  expect(ball).toBeGreaterThan(-1)
+  expect(stop).toBeGreaterThan(ball)
+  expect(html).not.toMatch(/id="panel"[\s\S]*id="stop"[\s\S]*<\/section>/u)
+  expect(css).toMatch(/#ball \{[^}]*z-index: 1/u)
+  expect(css).toMatch(/#stop \{[^}]*z-index: 2/u)
+  expect(css).toMatch(/body\.expand-left #stop \{\s*left: 14px/u)
+  expect(css).toMatch(/body\.expand-right #stop \{\s*right: 14px/u)
+  expect(css).not.toMatch(/body\.expand-left #stop \{\s*right:/u)
+  expect(css).not.toMatch(/body\.expand-right #stop \{\s*left:/u)
 })

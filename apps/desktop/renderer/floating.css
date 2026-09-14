@@ -186,6 +186,7 @@ body.running #composer {
 
 #ball {
   position: absolute;
+  z-index: 1;
   top: 0;
   left: 0;
   width: var(--ball);
@@ -230,8 +231,9 @@ body.expand-down #ball {
 }
 
 #stop {
+  /* Opposite 72px cap of the input pill from #ball; 14px is (72-44)/2. */
   position: absolute;
-  z-index: 3;
+  z-index: 2;
   width: 44px;
   height: 44px;
   border: 1px solid var(--pin);
@@ -250,11 +252,11 @@ body.expand-down #ball {
 }
 
 body.expand-left #stop {
-  right: 14px;
+  left: 14px;
 }
 
 body.expand-right #stop {
-  left: 14px;
+  right: 14px;
 }
 
 body.expand-up #stop {
