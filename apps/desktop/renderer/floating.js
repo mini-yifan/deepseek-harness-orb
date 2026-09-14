@@ -71,10 +71,12 @@ async function main() {
   let sessionId = await api.floating.sessionId()
   let workspaceId
   let dragging = false
+  let collapsing = false
   let pinned = false
   let expanded = false
   let running = false
   let pointer = undefined
+  let lastOrigin = undefined
   let collapseTimer = undefined
   let collapseFrame = undefined
 
@@ -132,11 +134,11 @@ async function main() {
       clearTimeout(collapseTimer)
       collapseTimer = undefined
     }
+    if (collapseFrame !== undefined) {
+      clearTimeout(collapseFrame)
+      collapseFrame = undefined
+    }
     if (next) {
-      if (collapseFrame !== undefined) {
-        clearTimeout(collapseFrame)
-        collapseFrame = undefined
-      }
       const state = await api.floating.setExpanded(true)
       applyDirection(state)
       panel.hidden = false
@@ -151,11 +153,21 @@ async function main() {
     document.body.classList.remove('expanded')
     stop.hidden = true
     syncGif()
+    if (force) {
+      panel.hidden = true
+      await api.floating.setExpanded(false)
+      return
+    }
     collapseFrame = setTimeout(() => {
       collapseFrame = undefined
       panel.hidden = true
       void api.floating.setExpanded(false)
     }, ANIMATION_MS)
+  }
+
+  function ballGrabOffset(event) {
+    const rect = ball.getBoundingClientRect()
+    return { dx: event.clientX - rect.left, dy: event.clientY - rect.top }
   }
 
   function scheduleCollapse() {
@@ -265,42 +277,64 @@ async function main() {
   }
 
   document.body.addEventListener('pointerenter', () => {
-    if (dragging) return
+    if (dragging || collapsing) return
     void setExpanded(true)
   })
   document.body.addEventListener('pointerleave', () => {
-    if (dragging) return
+    if (dragging || collapsing) return
     scheduleCollapse()
   })
 
   ball.addEventListener('pointerdown', event => {
     dragging = false
-    pointer = { x: event.screenX, y: event.screenY, dx: event.clientX, dy: event.clientY }
+    collapsing = false
+    lastOrigin = undefined
+    pointer = { ...ballGrabOffset(event), startX: event.screenX, startY: event.screenY }
     ball.setPointerCapture(event.pointerId)
   })
   ball.addEventListener('pointermove', event => {
     if (pointer === undefined) return
-    if (Math.hypot(event.screenX - pointer.x, event.screenY - pointer.y) > 4) {
-      if (!dragging) {
-        dragging = true
-        pinned = false
-        document.body.classList.remove('pinned')
-        void setExpanded(false, true)
-      }
-      void api.floating.move(event.screenX - pointer.dx, event.screenY - pointer.dy)
-    }
-  })
-  ball.addEventListener('pointerup', async () => {
-    pointer = undefined
-    if (dragging) {
-      dragging = false
-      await api.floating.clamp()
+    lastOrigin = { x: event.screenX - pointer.dx, y: event.screenY - pointer.dy }
+    if (!dragging) {
+      if (Math.hypot(event.screenX - pointer.startX, event.screenY - pointer.startY) <= 4) return
+      dragging = true
+      collapsing = true
+      pinned = false
+      document.body.classList.remove('pinned')
+      void setExpanded(false, true).then(() => {
+        collapsing = false
+        if (dragging && lastOrigin !== undefined) void api.floating.move(lastOrigin.x, lastOrigin.y)
+      })
       return
     }
+    if (!collapsing) void api.floating.move(lastOrigin.x, lastOrigin.y)
+  })
+  async function finishPointer(event) {
+    if (dragging) {
+      dragging = false
+      collapsing = false
+      const origin = pointer === undefined
+        ? lastOrigin
+        : { x: event.screenX - pointer.dx, y: event.screenY - pointer.dy }
+      pointer = undefined
+      lastOrigin = undefined
+      if (origin !== undefined) await api.floating.move(origin.x, origin.y)
+      await api.floating.clamp()
+      return true
+    }
+    pointer = undefined
+    lastOrigin = undefined
+    return false
+  }
+  ball.addEventListener('pointerup', async event => {
+    if (await finishPointer(event)) return
     pinned = !pinned
     document.body.classList.toggle('pinned', pinned)
     if (pinned) await setExpanded(true)
     else scheduleCollapse()
+  })
+  ball.addEventListener('pointercancel', event => {
+    void finishPointer(event)
   })
 
   document.querySelector('#composer').addEventListener('submit', async event => {
