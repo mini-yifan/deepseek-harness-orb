@@ -42,7 +42,7 @@ Closing the main window does not quit the app. The Dock icon stays after the bal
 
 ## Use the macOS floating ball
 
-The ball is created only after Host ready. Hover it to expand a white panel; the ball stays in the input corner. Click the ball to pin the panel; click again to unpin, then move away to collapse. Drag moves the ball and keeps it on screen; it does not snap to an edge. The panel shows chat bubbles, a single-line input that sends on Enter, Stop only while that Computer Use session is running, and **New** at the top-right for another Computer Use chat on `dsh_orb`. There is no Send button, mode picker, voice, selection toolbar, or lasso.
+The ball is created only after Host ready. Hover it to expand a white panel; the ball stays in the input corner. Click the ball to pin the panel; click again to unpin, then move away to collapse. Drag moves the ball and keeps it on screen; it does not snap to an edge. The panel shows chat bubbles, a single-line input that sends on Enter, Stop at the opposite end of the input pill from the ball only while that Computer Use session is running, and **New** at the top-right for another Computer Use chat on `dsh_orb`. There is no Send button, mode picker, voice, selection toolbar, or lasso.
 
 The input placeholder is “Ask the desktop agent…”. Sends go to the Computer Use session with DeepSeek-V41-Flash at Max thinking. Stop cancels only that Computer Use session, not sidebar standard sessions. The context menu offers **Open Main Window** and **Quit DeepSeek Harness**; only an explicit Quit ends the process.
 
