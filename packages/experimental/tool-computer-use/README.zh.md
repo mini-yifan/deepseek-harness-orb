@@ -29,7 +29,7 @@ kind: "package-reference"
 
 ### 何时选择
 
-当视觉模型需要驱动 bash 无法到达的可见 GUI，并且你希望工具目录仅含 Shell、网页检索与抓取、五个 GUI 工具和 `ask_user_question` 时，选择它。普通编码会话、纯文本路由，以及不得授予屏幕录制加辅助功能权限的宿主，都不要选择。它不是 Skill，不是能力 seam，也不属于 `dsh-base`。
+当视觉模型需要驱动 bash 无法到达的可见 GUI，并且你希望工具目录仅含 Shell、网页检索与抓取、五个 GUI 工具、`code_agent` 和 `ask_user_question` 时，选择它。普通编码会话、纯文本路由，以及不得授予屏幕录制加辅助功能权限的宿主，都不要选择。它不是 Skill，不是能力 seam，也不属于 `dsh-base`。Desktop macOS 也会把该 overlay 作为签名 runtime extra 挂上，以便悬浮球锁死 Computer Use 会话。
 
 ### 最小配置
 
@@ -75,6 +75,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 | `scroll` | `screen_index`、`position`、`direction`（`up`/`down`）、`scroll_level` 1–10 | 滚动、等待、重新截屏 |
 | `hotkey` | `keys: string[]` | 组合键；系统截屏快捷键会被拒绝；等待、重新截屏 |
 | `wait` | 可选 `wait_seconds`，受 `maxWaitSeconds` 限制 | 等待、重新截屏 |
+| `code_agent` | `task`、可选 `session_id`、可选 `cwd` | 在一等 standard 会话上入队；返回该 `session_id` |
 
 五个工具都互斥运行。`presentCall` 为 generic。文本信封标明屏幕序号、逻辑尺寸、0–1000 坐标空间、附件像素尺寸，以及 `saveImage` 缩放栅格时的倍率。它从不包含文件系统路径。
 
@@ -102,9 +103,10 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件入口：宿主平台后端上的 `name` / `inject` / `Config` / `apply` |
 | [`src/preset-root.ts`](src/preset-root.ts) | 仅 overlay 使用的插件：发布额外的 agent-presets 根目录 |
-| [`src/plugin.ts`](src/plugin.ts) | 共享的 `applyComputerUse`：策略、五个工具、首帧 pre-step |
+| [`src/plugin.ts`](src/plugin.ts) | 共享的 `applyComputerUse`：策略、五个 GUI 工具、首帧 pre-step |
+| [`src/code-agent.ts`](src/code-agent.ts) | 仅 Computer Use 的 `code_agent`：`session.create` / `session.prompt` |
 | [`src/macos.ts`](src/macos.ts) | Darwin 通过 `screencapture` 捕获；click、scroll 与 hotkey 走 JXA `CGEvent`；`input_text` 通过 NSPasteboard 粘贴 |
-| [`presets/computer-use/`](presets/computer-use/) | Computer Use agent preset：Shell、网页、GUI 工具、`ask_user_question`、压缩 |
+| [`presets/computer-use/`](presets/computer-use/) | Computer Use agent preset：Shell、网页、GUI 工具、`code_agent`、`ask_user_question`、压缩 |
 | — | 不发布运行时不变式伴生入口，因为本插件不引入新的会话事件；观察结果走现有的 `user/message` 与 `tool/result`。 |
 
 </details>
@@ -115,9 +117,10 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 ## 进一步探索
 
 - [实验组](../README.zh.md) — 私有原型与公开的 Agent Teams 例外。
-- [生成的工具目录](../../../docs/tool-catalog.zh.md#deepseek-aidsh-experimental-tool-computer-use) — 五个 GUI schema。
+- [生成的工具目录](../../../docs/tool-catalog.zh.md#deepseek-aidsh-experimental-tool-computer-use) — 五个 GUI schema 与 `code_agent`。
 - [添加工具](../../../docs/cookbook/adding-a-tool.zh.md) — UI 呈现意图（`generic`）与内容中的图片块。
 - [Computer Use Agent Note](../../../.agents/notes/implemented/feature/2026-09-13-experimental-computer-use.zh.md) — 插件 vs Skill vs loop、Computer Use agent preset、结果内观察，以及同意门槛。
+- [桌面悬浮球](../../../.agents/notes/implemented/feature/2026-09-14-desktop-floating-orb.zh.md) — macOS overlay、runtime extra，以及一等 `code_agent` 会话。
 - [Headless computer-use snapshot](../../../snapshots/session/computer-use/snapshot.yml) — 在假桌面与视觉模型上人工编写的点击循环。
 
 -----
@@ -146,7 +149,13 @@ Do not click or type into a target you cannot see. Do not read file paths off th
 
 Observation is not a tool. There is no screenshot or observe call. The first user turn already includes the current screens, and every GUI tool returns the post-action screens.
 
-This session drives the real unsandboxed desktop. Prefer bash for files and terminals.
+This session drives the real unsandboxed desktop. Use bash only for short commands inside a GUI loop. Do not use bash to write long reports or a whole project — send that work to code_agent.
+
+Route the user's request yourself:
+- Visible GUI such as opening WeChat or clicking a button in Pages → GUI tools only. Do not call code_agent.
+- New background work such as writing a Word document → code_agent without session_id.
+- Follow-up on the same artifact such as making that Word document's font green → code_agent with the session_id from that earlier result.
+- Unrelated new background work such as making a gobang game after the Word document → code_agent without session_id. Do not reuse the Word session.
 ```
 
 #### Token 影响
@@ -161,7 +170,7 @@ This session drives the real unsandboxed desktop. Prefer bash for files and term
 
 #### 模型看到什么
 
-模型看到生成的 [`click`、`input_text`、`scroll`、`hotkey` 与 `wait` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-experimental-tool-computer-use)。没有截屏工具。纯文本路由仍会收到这些 schema，并在执行时被拒绝。
+模型看到生成的 [`click`、`input_text`、`scroll`、`hotkey`、`wait` 与 `code_agent` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-experimental-tool-computer-use)。没有截屏工具。纯文本路由仍会收到 GUI schema，并在执行时被拒绝。`code_agent` 只注册在 Computer Use preset 中。
 
 #### Token 影响
 
@@ -169,7 +178,7 @@ This session drives the real unsandboxed desktop. Prefer bash for files and term
 
 #### KV Cache 影响
 
-五个定义及其顺序不变时前缀稳定。注册生命周期可能从第一个变化的 schema token 起使复用失效。
+六个定义及其顺序不变时前缀稳定。注册生命周期可能从第一个变化的 schema token 起使复用失效。
 
 ## 已知限制与延期工作
 
@@ -180,11 +189,12 @@ This session drives the real unsandboxed desktop. Prefer bash for files and term
 - **仅 macOS** — 捕获与 HID 输入在 Darwin 上实现；其他平台在执行时抛错。
 - **屏幕录制与辅助功能 TCC** — 捕获需要屏幕录制；点击、输入、滚动与热键需要辅助功能。插件不会提示授予这些权限。
 - **没有逐次点击批准** — 安装或 patch 插件就是同意门槛；视觉循环不能在每个动作上询问。
-- **宿主 chrome 会出现在截屏中** — Web 与 Electron 窗口会出现在捕获中；没有 chrome 排除。
+- **宿主 chrome 会出现在截屏中** — Web 窗口会出现在捕获中。Desktop 会在 Electron 主窗口和 macOS overlay 上设置 `contentProtection`；没有 ScreenCaptureKit 窗口排除。
 - **输入会使用字符串剪贴板** — `input_text` 通过 Cmd+V 粘贴，并在之后恢复先前的字符串剪贴板。其他剪贴板类型不会被恢复。
 - **Retina 与附件尺寸** — backing scale 可能与附件栅格不同；使用 0–1000 空间以及信封中的倍率。
 - **固定等待** — 动作后延迟只有 `postActionWaitMs`；没有像素差 stall。
-- **没有拖拽、套索或启动应用** — 本轮只有 click、type、scroll、hotkey 与 wait。
+- **没有拖拽、套索或启动应用** — GUI 覆盖是 click、type、scroll、hotkey 与 wait。后台文档与代码走 `code_agent`。
+- **桌面 overlay 仅 macOS** — Windows Desktop 仍是单主窗口。实验包是签名 runtime extra，不是 Desktop Host 的 npm 依赖。
 - **实验性原型，不提供稳定性承诺** — 本包为私有；schema 与后端可以自由变更。
 
 <a id="dev-note"></a>

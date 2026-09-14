@@ -64,6 +64,7 @@ const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
   '@deepseek-ai/dsh': ['lib/*.js'],
   '@deepseek-ai/dsh-desktop-host': [
     'lib/index.js',
+    'lib/computer-use-preset-root.js',
     'config/desktop.cordis.patch.yml',
   ],
   // Sourcemaps stay out by payload policy; the worker-preview surface
@@ -185,6 +186,12 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   // through a hashed chunk. The committed bin.js is the link target pnpm can
   // resolve at install time, before the build produces lib/bin.js.
   '@deepseek-ai/dsh-experimental-webworker-packer': ['bin.js', 'lib/repository-*.js'],
+  // Overlay extra agent-presets root plus Computer Use-only code_agent.
+  '@deepseek-ai/dsh-experimental-tool-computer-use': [
+    'lib/preset-root.js',
+    'lib/code-agent.js',
+    'presets',
+  ],
 }
 
 function sameStringList(actual: readonly string[] | undefined, expected: readonly string[]): boolean {

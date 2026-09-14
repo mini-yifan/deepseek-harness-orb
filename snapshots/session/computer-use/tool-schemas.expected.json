@@ -88,6 +88,30 @@
       }
     },
     {
+      "name": "code_agent",
+      "description": "Delegate background coding and document work to a standard-mode Code agent that appears in the desktop sidebar like a user-created session. Do not call this tool for visible GUI work such as opening WeChat or clicking a button in Pages — use the GUI tools instead. Omit session_id to create a new blank standard session: write a Word document, make a gobang game, or any task that is not a follow-up to a previous code_agent result. Pass session_id with the id returned by an earlier code_agent result when continuing the same artifact, for example making that Word document's font green. Do not pass a previous id when the new work is unrelated. task is the user message to enqueue. The call returns after the standard session accepts the message; it does not wait for that session to finish. cwd defaults to this session's workspace; omit it unless the new session needs a different directory. session_id cannot target this Computer Use session, a subagent child, or a non-standard session.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task": {
+            "type": "string",
+            "description": "User message to enqueue on a standard session. Required."
+          },
+          "session_id": {
+            "type": "string",
+            "description": "Existing standard session to continue. Omit to create a blank session. Required when following up on the same artifact; forbidden when starting unrelated work."
+          },
+          "cwd": {
+            "type": "string",
+            "description": "Workspace directory for a newly created session. Defaults to this Computer Use session's cwd."
+          }
+        },
+        "required": [
+          "task"
+        ]
+      }
+    },
+    {
       "name": "create_goal",
       "description": "Create one persisted same-session completion goal when the current direct human request is a long-running objective that should continue across autonomous goal rounds. You may infer that intent without requiring the user to say \"create a goal\". Do not use this for trivial single-turn work. Execution rejects non-human and subagent authority.",
       "parameters": {

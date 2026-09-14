@@ -14,6 +14,7 @@ import {
 import { dirname, join } from 'node:path'
 import { createDevelopmentProjectMetadata } from '../src/project-manager.ts'
 import type { DesktopRelease } from '../src/release.ts'
+import { copyComputerUseRuntimeExtra } from './computer-use-runtime-extra.ts'
 
 interface PackageManifest {
   readonly name?: string
@@ -59,7 +60,15 @@ function removeOwnedPath(path: string): void {
 
 function linkDirectory(source: string, destination: string): void {
   mkdirSync(dirname(destination), { recursive: true })
-  symlinkSync(realpathSync(source), destination, process.platform === 'win32' ? 'junction' : 'dir')
+  let resolved: string
+  try {
+    resolved = realpathSync(source)
+  } catch (error) {
+    // pnpm's virtual hoist can leave dangling names after a package rename.
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return
+    throw error
+  }
+  symlinkSync(resolved, destination, process.platform === 'win32' ? 'junction' : 'dir')
 }
 
 function mirrorDependencyLinks(sourceRoot: string, destinationRoot: string): void {
@@ -116,5 +125,9 @@ export function prepareDevelopmentProject(options: DevelopmentProjectOptions): s
   const hostLink = join(destinationModules, '@deepseek-ai', 'dsh-desktop-host')
   removeOwnedPath(hostLink)
   linkDirectory(options.hostDir, hostLink)
+  const computerUseSource = join(options.hostDir, '..', '..', 'packages', 'experimental', 'tool-computer-use')
+  if (existsSync(join(computerUseSource, 'package.json'))) {
+    copyComputerUseRuntimeExtra(computerUseSource, options.projectDir)
+  }
   return options.projectDir
 }

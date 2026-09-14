@@ -37,8 +37,10 @@ import {
   encodeDesktopResponseStart,
   type DesktopHostRequestFrame,
 } from './wire.ts'
+import { computerUsePresetRoot } from './computer-use-preset-root.ts'
 
 export { DESKTOP_HOST_PROTOCOL_VERSION } from './wire.ts'
+export { computerUsePresetRoot, COMPUTER_USE_PACKAGE } from './computer-use-preset-root.ts'
 
 /** One request forwarded from Electron's `dsh-app://` handler. */
 export interface DesktopHostFetchCommand {
@@ -165,11 +167,18 @@ function desktopPatches(runtimeDir: string, projectDir: string, allowLinkedPacka
   const rows = new Map(composeEntries(layers).flatMap(row => typeof row.id === 'string' ? [[row.id, row] as const] : []))
   const agentPresets = rows.get('agent-presets')
   if (agentPresets !== undefined) {
+    const extra = computerUsePresetRoot(runtimeDir)
+    if (extra === undefined) {
+      throw new Error('dsh desktop: Computer Use experimental package is missing from the Desktop runtime')
+    }
     layers.push([{
       id: 'agent-presets',
       config: {
         ...(agentPresets.config ?? {}) as Record<string, unknown>,
-        roots: [{ path: join(dshRoot, 'config', 'agent-presets'), trust: 'system' }],
+        roots: [
+          { path: join(dshRoot, 'config', 'agent-presets'), trust: 'system' },
+          { path: extra, trust: 'system' },
+        ],
       },
     }])
   }
@@ -182,12 +191,29 @@ function dshVersion(runtimeDir: string): string {
   return manifest.version
 }
 
-function assetHandler(ctx: Context, runtimeDir: string): ConnectionFetchHandler {
+function hiddenSessionIdsScript(projectDir: string): string | undefined {
+  const path = join(projectDir, 'floating-session.json')
+  if (!existsSync(path)) return undefined
+  try {
+    const value: unknown = JSON.parse(readFileSync(path, 'utf8'))
+    if (!isRecord(value) || typeof value.sessionId !== 'string' || value.sessionId === '') return undefined
+    return `globalThis.__DSH_HIDDEN_SESSION_IDS__=${JSON.stringify([value.sessionId])}`
+  } catch {
+    // Missing or invalid profile JSON means the main window hides no Session.
+    return undefined
+  }
+}
+
+function assetHandler(ctx: Context, runtimeDir: string, projectDir: string): ConnectionFetchHandler {
   const require = createRequire(join(runtimeDir, 'package.json'))
   const distIndex = require.resolve('@deepseek-ai/dsh-web-frontend/dist/index.html')
   const distRoot = realpathSync(dirname(distIndex))
   const renderIndex = async (): Promise<Response> => {
-    const rows: IndexInjection[] = [{ kind: 'script', placement: 'head', text: DESKTOP_TRANSPORT_SCRIPT }]
+    const hidden = hiddenSessionIdsScript(projectDir)
+    const rows: IndexInjection[] = [
+      { kind: 'script', placement: 'head', text: DESKTOP_TRANSPORT_SCRIPT },
+      ...(hidden === undefined ? [] : [{ kind: 'script' as const, placement: 'head' as const, text: hidden }]),
+    ]
     ctx.emit('webserver/index-inject', rows)
     const body = renderIndexInjections(await readFile(distIndex, 'utf8'), rows)
     return new Response(body, { headers: { 'content-type': MIME['.html'] ?? 'text/html; charset=utf-8' } })
@@ -306,7 +332,7 @@ export async function runDesktopHost(
     throw new Error('dsh desktop: composition did not provide connection, typertGateway, and clientModules')
   }
   const api = connection.createSharedFetchHandler('/api')
-  const assets = assetHandler(ctx, resolve(runtimeDir))
+  const assets = assetHandler(ctx, resolve(runtimeDir), absoluteProject)
   const streams = remoteStreamHandler(ctx)
   const requests = new Map<number, AbortController>()
   let disposing: Promise<void> | undefined

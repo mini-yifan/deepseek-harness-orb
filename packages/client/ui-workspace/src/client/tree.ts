@@ -17,6 +17,16 @@ import {
   indexSubagentDescendants, type SubagentDescendantSummary,
 } from './subagent-lineage.ts'
 
+/**
+ * Read Desktop-injected Session ids that the sidebar must omit.
+ * @returns ids from `globalThis.__DSH_HIDDEN_SESSION_IDS__`, or an empty list.
+ */
+export function desktopHiddenSessionIds(): readonly SessionId[] {
+  const value = (globalThis as { __DSH_HIDDEN_SESSION_IDS__?: unknown }).__DSH_HIDDEN_SESSION_IDS__
+  if (!Array.isArray(value)) return []
+  return value.filter((id): id is string => typeof id === 'string') as SessionId[]
+}
+
 /** Group key for Sessions outside every Workspace. */
 export const UNGROUPED_KEY = ''
 
@@ -107,6 +117,8 @@ export interface TreeView {
   expandedGroups: readonly string[]
   /** Browser-local order for Sessions without a backing Workspace account. */
   ungroupedOrder?: readonly string[]
+  /** Desktop floating-ball Computer Use Session ids omitted from the sidebar. */
+  hiddenSessionIds?: readonly SessionId[]
 }
 
 interface Group {
@@ -140,11 +152,18 @@ function byRecency(a: SessionSummary, b: SessionSummary): number {
  * Ordinary sessions are visible; among blank sessions, only the current one
  * is visible. Subagent children use their parent header catalog; archived
  * sessions are visible nowhere, while their accounting slots remain so
- * unarchiving restores position.
+ * unarchiving restores position. Desktop hides the floating-ball Computer Use
+ * session without changing Session header origin.
  */
-function sessionVisible(session: SessionSummary, current: SessionId | undefined, archived: ReadonlySet<SessionId>): boolean {
+function sessionVisible(
+  session: SessionSummary,
+  current: SessionId | undefined,
+  archived: ReadonlySet<SessionId>,
+  hidden: ReadonlySet<SessionId>,
+): boolean {
   return session.origin !== 'subagent'
     && !archived.has(session.id)
+    && !hidden.has(session.id)
     && (!session.blank || session.id === current)
 }
 
@@ -208,6 +227,7 @@ function groupByWorkspace(
   workspaces: readonly WorkspaceView[],
   archived: ReadonlySet<SessionId>,
   ungroupedOrder: readonly string[] | undefined,
+  hidden: ReadonlySet<SessionId>,
 ): Group[] {
   const groups: Group[] = []
   const accounted = new Set<SessionId>()
@@ -217,7 +237,7 @@ function groupByWorkspace(
       const summary = list.byId[id]
       if (summary === undefined) continue // account may lead the list pull; the row appears when the summary lands
       accounted.add(id)
-      if (!sessionVisible(summary, list.current, archived)) continue
+      if (!sessionVisible(summary, list.current, archived, hidden)) continue
       members.push(summary)
     }
     groups.push(buildGroup(
@@ -228,7 +248,7 @@ function groupByWorkspace(
   const stray = list.ids
     .map(id => list.byId[id])
     .filter((s): s is SessionSummary =>
-      s !== undefined && !accounted.has(s.id) && sessionVisible(s, list.current, archived))
+      s !== undefined && !accounted.has(s.id) && sessionVisible(s, list.current, archived, hidden))
   if (stray.length > 0) {
     groups.push(buildGroup(
       UNGROUPED_KEY,
@@ -297,13 +317,14 @@ export function deriveGroups(
   view: TreeView,
 ): GroupNode[] {
   const archived = new Set(archivedSessionIds)
+  const hidden = new Set(view.hiddenSessionIds ?? [])
   const expandedGroups = new Set(view.expandedGroups)
   const descendants = indexSubagentDescendants(list.byId)
   const currentGroup = list.current === undefined
     ? undefined
     : owningGroupKey(workspaces, list.current)
   const groups: GroupNode[] = []
-  for (const g of groupByWorkspace(list, workspaces, archived, view.ungroupedOrder)) {
+  for (const g of groupByWorkspace(list, workspaces, archived, view.ungroupedOrder, hidden)) {
     const expanded = expandedGroups.has(g.key)
     groups.push({
       key: g.key,
@@ -330,19 +351,22 @@ export function deriveGroups(
  * @param list - sessions list snapshot.
  * @param archivedSessionIds - registry-global archive set.
  * @param pendingInteractions - pending UI interactions by Session.
+ * @param hiddenSessionIds - Desktop floating-ball Session ids omitted from the list.
  * @returns flat rows in render order.
  */
 export function deriveFlat(
   list: SessionListState,
   archivedSessionIds: readonly SessionId[],
   pendingInteractions: SessionPendingInteractions,
+  hiddenSessionIds: readonly SessionId[] = [],
 ): SessionNode[] {
   const archived = new Set(archivedSessionIds)
+  const hidden = new Set(hiddenSessionIds)
   const descendants = indexSubagentDescendants(list.byId)
   const rows: SessionSummary[] = []
   for (const id of list.ids) {
     const s = list.byId[id]
-    if (s === undefined || !sessionVisible(s, list.current, archived)) continue
+    if (s === undefined || !sessionVisible(s, list.current, archived, hidden)) continue
     rows.push(s)
   }
   rows.sort(byRecency)
@@ -360,6 +384,7 @@ export function deriveFlat(
  * @param pendingInteractions - pending UI interactions by Session.
  * @param content - ranked Host content-search page.
  * @param limit - protocol-owned maximum merged row count.
+ * @param hiddenSessionIds - Desktop floating-ball Session ids omitted from search.
  * @returns bounded deduplicated flat rows and a refine-query hint bit.
  */
 export function deriveSearchResults(
@@ -370,10 +395,12 @@ export function deriveSearchResults(
   pendingInteractions: SessionPendingInteractions,
   content: { items: readonly SessionSearchResultItem[]; hasMore: boolean },
   limit: number,
+  hiddenSessionIds: readonly SessionId[] = [],
 ): SearchResultSet {
   const q = query.trim().toLowerCase()
   if (q === '') return { items: [], hasMore: false }
   const archived = new Set(archivedSessionIds)
+  const hidden = new Set(hiddenSessionIds)
   const descendants = indexSubagentDescendants(list.byId)
 
   const workspaceBySession = new Map<SessionId, string>()
@@ -394,7 +421,7 @@ export function deriveSearchResults(
     const summary = list.byId[id]
     // Blank placeholders never match a query (their canonical title displays
     // localized, so matching it would tie search to one language).
-    if (summary === undefined || summary.blank || !sessionVisible(summary, list.current, archived)) continue
+    if (summary === undefined || summary.blank || !sessionVisible(summary, list.current, archived, hidden)) continue
     if (
       sessionTitle(summary).toLowerCase().includes(q)
       || labelOf(summary).toLowerCase().includes(q)
@@ -414,7 +441,7 @@ export function deriveSearchResults(
   for (const summary of local) include(summary)
   for (const item of content.items) {
     const summary = list.byId[item.sessionId]
-    if (summary !== undefined && !summary.blank && sessionVisible(summary, list.current, archived)) include(summary)
+    if (summary !== undefined && !summary.blank && sessionVisible(summary, list.current, archived, hidden)) include(summary)
   }
 
   return {

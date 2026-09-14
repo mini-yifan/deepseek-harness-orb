@@ -62,6 +62,7 @@ import * as ToolTasks from '@deepseek-ai/dsh-tool-jobs'
 import type TeamService from '@deepseek-ai/dsh-experimental-agent-team'
 import * as ToolTeam from '@deepseek-ai/dsh-experimental-tool-agent-team'
 import * as ToolComputerUse from '@deepseek-ai/dsh-experimental-tool-computer-use'
+import * as ToolCodeAgent from '@deepseek-ai/dsh-experimental-tool-computer-use/code-agent'
 import * as ToolTodo from '@deepseek-ai/dsh-tool-todo'
 import * as ToolSubagent from '@deepseek-ai/dsh-tool-subagent'
 import { registerListSubagentModels } from '../packages/subagent/tool-subagent/src/list-models.ts'
@@ -562,15 +563,28 @@ const TOOL_PACKAGES: ToolPackage[] = [
   {
     pkg: '@deepseek-ai/dsh-experimental-tool-computer-use',
     dir: 'tool-computer-use',
-    source: 'packages/experimental/tool-computer-use/src/plugin.ts',
-    requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.attachments', 'ctx.llm + an image-capable route (execution and first-frame screenshot)'],
-    writes: ['tool/call', 'durable attachment (saveImage)', 'user/message first-frame notice', 'tool/result'],
+    source: {
+      click: 'packages/experimental/tool-computer-use/src/plugin.ts',
+      hotkey: 'packages/experimental/tool-computer-use/src/plugin.ts',
+      input_text: 'packages/experimental/tool-computer-use/src/plugin.ts',
+      scroll: 'packages/experimental/tool-computer-use/src/plugin.ts',
+      wait: 'packages/experimental/tool-computer-use/src/plugin.ts',
+      code_agent: 'packages/experimental/tool-computer-use/src/code-agent.ts',
+    },
+    requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.attachments', 'ctx.llm + an image-capable route (execution and first-frame screenshot)', 'ctx.sessionController (code_agent)'],
+    writes: ['tool/call', 'durable attachment (saveImage)', 'user/message first-frame notice', 'tool/result', 'session.create + session.prompt (code_agent)'],
     async mount(ctx) {
       await ctx.plugin(CatalogAttachmentStore)
       await ctx.plugin(ToolComputerUse)
+      ctx.provide('sessionController', {
+        create: () => Promise.reject(new Error('gen-tool-catalog: code_agent execute is unreachable')),
+        prompt: () => Promise.reject(new Error('gen-tool-catalog: code_agent execute is unreachable')),
+        inspect: () => Promise.reject(new Error('gen-tool-catalog: code_agent execute is unreachable')),
+      })
+      await ctx.plugin(ToolCodeAgent)
     },
     note:
-      'Experimental opt-in GUI tools. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no screenshot tool: the first user turn and every GUI result attach screens.',
+      'Experimental opt-in GUI tools plus Computer Use-only code_agent. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no screenshot tool: the first user turn and every GUI result attach screens. code_agent is registered only with the Computer Use preset; the catalog stub satisfies inject so the schema is harvestable.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-todo',

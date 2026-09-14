@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' dsh-app://app; img-src 'self' data:">
+    <title id="page-title"></title>
+    <link rel="stylesheet" href="floating.css">
+  </head>
+  <body>
+    <button id="ball" type="button"></button>
+    <section id="panel" hidden>
+      <div id="transcript" role="log" aria-live="polite"></div>
+      <p id="status" role="status"></p>
+      <form id="composer">
+        <label id="input-label" for="prompt"></label>
+        <textarea id="prompt" rows="3" required></textarea>
+        <div id="actions">
+          <button id="stop" type="button"></button>
+          <button id="send" type="submit"></button>
+        </div>
+      </form>
+    </section>
+    <script src="floating.js"></script>
+  </body>
+</html>

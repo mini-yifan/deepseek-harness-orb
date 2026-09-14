@@ -20,7 +20,8 @@
     suffix: Your working directory is {{cwd}}.
     prefix: >-
       You are a desktop GUI agent powered by the {{model}} model.
-      Drive visible windows with the GUI tools. Use bash for files and terminals.
+      Drive visible windows with the GUI tools. Use bash for short commands inside a GUI loop.
+      Send background coding and document work to code_agent.
 
 # ── shell ───────────────────────────────────────────────────────────────────
 
@@ -73,5 +74,9 @@
 
 # Relative to this composition so the CLI app does not depend on the
 # experimental package. `pnpm dsh` loads the TypeScript through tsx.
+# Packaged Desktop copies rewrite these entries to `../../lib/*.js`.
 - id: tool-computer-use
   name: '../../src/index.ts'
+
+- id: tool-code-agent
+  name: '../../src/code-agent.ts'

@@ -64,6 +64,7 @@ describe('desktop package-set selection', () => {
   it('requires the Desktop Host entry and its packaged overlay', () => {
     const files = [
       'package/lib/index.js',
+      'package/lib/computer-use-preset-root.js',
       'package/config/desktop.cordis.patch.yml',
     ]
     expect(() => {

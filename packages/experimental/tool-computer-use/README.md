@@ -29,7 +29,7 @@ Patch this private overlay onto a running Web composition when you want a dedica
 
 ### When to choose it
 
-Choose it when a vision model should drive visible GUI chrome that bash cannot reach, and you want a catalog limited to Shell, web search and fetch, the five GUI tools, and `ask_user_question`. Avoid it for ordinary coding sessions, text-only routes, and any host that must not grant Screen Recording plus Accessibility. It is not a Skill, not a capability seam, and not part of `dsh-base`.
+Choose it when a vision model should drive visible GUI chrome that bash cannot reach, and you want a catalog limited to Shell, web search and fetch, the five GUI tools, `code_agent`, and `ask_user_question`. Avoid it for ordinary coding sessions, text-only routes, and any host that must not grant Screen Recording plus Accessibility. It is not a Skill, not a capability seam, and not part of `dsh-base`. Desktop macOS also mounts this overlay as a signed runtime extra so the floating ball can lock a Computer Use session.
 
 ### Minimal configuration
 
@@ -75,6 +75,7 @@ There is no `screenshot` or `observe` tool. The first user turn already includes
 | `scroll` | `screen_index`, `position`, `direction` (`up`/`down`), `scroll_level` 1–10 | scroll, wait, recapture |
 | `hotkey` | `keys: string[]` | key combo; system screenshot chords are rejected; wait, recapture |
 | `wait` | optional `wait_seconds`, clamped by `maxWaitSeconds` | wait, recapture |
+| `code_agent` | `task`, optional `session_id`, optional `cwd` | enqueue on a first-class standard session; returns that `session_id` |
 
 All five run exclusive. `presentCall` is generic. The text envelope names screen index, logical size, the 0–1000 space, attached pixel size, and downscale multipliers when `saveImage` resized the raster. It never includes a filesystem path.
 
@@ -102,9 +103,10 @@ First-frame attachment uses `agent/pre-step`: the listener always awaits `next()
 |---|---|
 | [`src/index.ts`](src/index.ts) | Plugin entry: `name` / `inject` / `Config` / `apply` over the host-platform backend |
 | [`src/preset-root.ts`](src/preset-root.ts) | Overlay-only plugin: publishes the extra agent-presets root |
-| [`src/plugin.ts`](src/plugin.ts) | Shared `applyComputerUse`: policy, five tools, first-frame pre-step |
+| [`src/plugin.ts`](src/plugin.ts) | Shared `applyComputerUse`: policy, five GUI tools, first-frame pre-step |
+| [`src/code-agent.ts`](src/code-agent.ts) | Computer Use-only `code_agent`: `session.create` / `session.prompt` |
 | [`src/macos.ts`](src/macos.ts) | Darwin capture via `screencapture`; click, scroll, and hotkey via JXA `CGEvent`; `input_text` pastes via NSPasteboard |
-| [`presets/computer-use/`](presets/computer-use/) | Computer Use agent preset: Shell, web, GUI tools, `ask_user_question`, compaction |
+| [`presets/computer-use/`](presets/computer-use/) | Computer Use agent preset: Shell, web, GUI tools, `code_agent`, `ask_user_question`, compaction |
 | — | No runtime invariant companion is published because this plugin introduces no new session events; observations ride existing `user/message` and `tool/result`. |
 
 </details>
@@ -115,9 +117,10 @@ First-frame attachment uses `agent/pre-step`: the listener always awaits `next()
 ## Further Exploration
 
 - [Experimental group](../README.md) — private prototypes and the public Agent Teams exceptions.
-- [Generated tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-experimental-tool-computer-use) — the five GUI schemas.
+- [Generated tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-experimental-tool-computer-use) — the five GUI schemas and `code_agent`.
 - [Adding a tool](../../../docs/cookbook/adding-a-tool.md) — UI render intent (`generic`) and image blocks in content.
 - [Computer Use Agent Note](../../../.agents/notes/implemented/feature/2026-09-13-experimental-computer-use.md) — plugin vs Skill vs loop, the Computer Use agent preset, observation-in-result, and the consent gate.
+- [Desktop floating orb](../../../.agents/notes/implemented/feature/2026-09-14-desktop-floating-orb.md) — macOS overlay, runtime extra, and first-class `code_agent` sessions.
 - [Headless computer-use snapshot](../../../snapshots/session/computer-use/snapshot.yml) — authored click loop over a fake desktop and a vision model.
 
 -----
@@ -146,7 +149,13 @@ Do not click or type into a target you cannot see. Do not read file paths off th
 
 Observation is not a tool. There is no screenshot or observe call. The first user turn already includes the current screens, and every GUI tool returns the post-action screens.
 
-This session drives the real unsandboxed desktop. Prefer bash for files and terminals.
+This session drives the real unsandboxed desktop. Use bash only for short commands inside a GUI loop. Do not use bash to write long reports or a whole project — send that work to code_agent.
+
+Route the user's request yourself:
+- Visible GUI such as opening WeChat or clicking a button in Pages → GUI tools only. Do not call code_agent.
+- New background work such as writing a Word document → code_agent without session_id.
+- Follow-up on the same artifact such as making that Word document's font green → code_agent with the session_id from that earlier result.
+- Unrelated new background work such as making a gobang game after the Word document → code_agent without session_id. Do not reuse the Word session.
 ```
 
 #### Token effect
@@ -161,7 +170,7 @@ Prefix-stable while the policy text and tool schemas remain unchanged. First-fra
 
 #### What the model sees
 
-The model sees the generated [`click`, `input_text`, `scroll`, `hotkey`, and `wait` schemas](../../../docs/tool-catalog.md#deepseek-aidsh-experimental-tool-computer-use). There is no screenshot tool. Text-only routes still receive the schemas and are refused at execute.
+The model sees the generated [`click`, `input_text`, `scroll`, `hotkey`, `wait`, and `code_agent` schemas](../../../docs/tool-catalog.md#deepseek-aidsh-experimental-tool-computer-use). There is no screenshot tool. Text-only routes still receive the GUI schemas and are refused at execute. `code_agent` is registered only in the Computer Use preset.
 
 #### Token effect
 
@@ -169,7 +178,7 @@ Fixed schema cost on every request in that tool view.
 
 #### KV Cache effect
 
-Prefix-stable while the five definitions and order are unchanged. Registration lifecycle may invalidate reuse from the first changed schema token.
+Prefix-stable while the six definitions and order are unchanged. Registration lifecycle may invalidate reuse from the first changed schema token.
 
 ## Known Limitations and Deferred Work
 
@@ -180,11 +189,12 @@ These limits are current package constraints. The plugin drives the real unsandb
 - **macOS only** — capture and HID input are implemented on Darwin; other platforms throw at execute.
 - **Screen Recording and Accessibility TCC** — capture needs Screen Recording; clicks, typing, scroll, and hotkeys need Accessibility. The plugin does not prompt for those rights.
 - **No per-click approval** — installing or patching the plugin is the consent gate; a visual loop cannot ask on every action.
-- **Host chrome is in the shot** — Web and Electron windows appear in captures; there is no chrome exclusion.
+- **Host chrome is in the shot** — Web windows appear in captures. Desktop sets `contentProtection` on the Electron main window and the macOS overlay; ScreenCaptureKit window exclusion is absent.
 - **Typing uses the string clipboard** — `input_text` pastes with Cmd+V and restores the previous string clipboard afterwards. Other clipboard types are not restored.
 - **Retina vs attached size** — backing scale can differ from the attached raster; use the 0–1000 space and any envelope multipliers.
 - **Fixed settle wait** — post-action delay is `postActionWaitMs` only; there is no pixel-diff stall.
-- **No drag, lasso, or app launch** — this cut is click, type, scroll, hotkey, and wait.
+- **No drag, lasso, or app launch** — GUI coverage is click, type, scroll, hotkey, and wait. Background documents and code go through `code_agent`.
+- **Desktop overlay is macOS-only** — Windows Desktop keeps a single main window. The experimental package is a signed runtime extra, not a Desktop Host npm dependency.
 - **Experimental prototype with no stability promise** — the package is private; schemas and backends can change freely.
 
 <a id="dev-note"></a>

@@ -260,6 +260,7 @@ describe('computer-use tools', () => {
     expect(ctx.tools.schemas().map(schema => schema.name).sort()).toEqual([
       'click', 'hotkey', 'input_text', 'scroll', 'wait',
     ])
+    expect(ctx.tools.schemas().map(schema => schema.name)).not.toContain('code_agent')
     await fiber.dispose()
     expect(ctx.tools.schemas()).toEqual([])
   })
@@ -289,6 +290,7 @@ describe('computer-use tools', () => {
     expect(host.tools.schemas().map(schema => schema.name).sort()).toEqual([
       'click', 'hotkey', 'input_text', 'scroll', 'wait',
     ])
+    expect(host.tools.schemas().map(schema => schema.name)).not.toContain('code_agent')
     if (process.platform === 'darwin') return
     const result = await host.tools.execute({
       signal: SIGNAL,

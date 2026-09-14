@@ -12,7 +12,7 @@ const harness = await vi.hoisted(async () => {
   }
   const windows: FakeWindow[] = []
   const hosts: FakeHost[] = []
-  const handlers = new Map<string, (event: { senderFrame: { url: string } }) => unknown>()
+  const handlers = new Map<string, (event: { sender?: unknown; senderFrame: { url: string } }, ...args: unknown[]) => unknown>()
   let pluginsEnabled = false
   let preparing = deferred()
   let prepared = deferred()
@@ -22,11 +22,16 @@ const harness = await vi.hoisted(async () => {
   let quitCompleted = deferred()
   class FakeWindow extends EventEmitter {
     destroyed = false
+    contentProtection = false
+    visibleOnAllWorkspaces = false
+    visibleOnAllWorkspacesOptions: { visibleOnFullScreen?: boolean; skipTransformProcessType?: boolean } | undefined = undefined
+    bounds = { x: 0, y: 0, width: 72, height: 72 }
     readonly urls: string[] = []
     readonly webContents = Object.assign(new EventEmitter(), {
       setWindowOpenHandler: vi.fn(),
       openDevTools: vi.fn(),
       getURL: () => this.urls.at(-1) ?? '',
+      executeJavaScript: vi.fn(async () => undefined),
       send: vi.fn((channel: string, state: { phase?: string }) => {
         if (channel === 'dsh-desktop:backend-state' && state.phase === 'error') errorPublished.resolve()
       }),
@@ -34,14 +39,33 @@ const harness = await vi.hoisted(async () => {
     readonly show = vi.fn()
     readonly focus = vi.fn()
     readonly restore = vi.fn()
-    constructor(readonly options: { show: boolean }) { super(); windows.push(this) }
+    constructor(readonly options: { show?: boolean; type?: string; width?: number; height?: number }) {
+      super()
+      windows.push(this)
+      if (typeof options.width === 'number') this.bounds.width = options.width
+      if (typeof options.height === 'number') this.bounds.height = options.height
+    }
     isDestroyed() { return this.destroyed }
     isMinimized() { return false }
+    setContentProtection(value: boolean) { this.contentProtection = value }
+    setVisibleOnAllWorkspaces(
+      value: boolean,
+      options?: { visibleOnFullScreen?: boolean; skipTransformProcessType?: boolean },
+    ) {
+      this.visibleOnAllWorkspaces = value
+      this.visibleOnAllWorkspacesOptions = options
+    }
+    setPosition(x: number, y: number) { this.bounds.x = x; this.bounds.y = y }
+    getBounds() { return { ...this.bounds } }
+    setSize(width: number, height: number) { this.bounds.width = width; this.bounds.height = height }
+    static getAllWindows() { return windows.filter(window => !window.destroyed) }
+    static fromWebContents(contents: unknown) {
+      return windows.find(window => window.webContents === contents) ?? null
+    }
     async loadURL(url: string) {
       this.urls.push(url)
       if (url === 'dsh-app://app/index.html') navigated.resolve()
     }
-    static getAllWindows() { return windows.filter(window => !window.destroyed) }
     close() { this.destroyed = true; this.emit('closed') }
   }
   class FakeHost {
@@ -71,6 +95,8 @@ const harness = await vi.hoisted(async () => {
       app.emit('before-quit', event)
       if (event.preventDefault.mock.calls.length === 0) quitCompleted.resolve()
     }),
+    dock: { show: vi.fn() },
+    setActivationPolicy: vi.fn(),
   })
   return {
     windows, hosts, handlers, app, FakeWindow, FakeHost,
@@ -99,10 +125,16 @@ vi.mock('electron', () => ({
   BrowserWindow: harness.FakeWindow,
   dialog: harness.dialog,
   ipcMain: {
-    handle: (channel: string, handler: (event: { senderFrame: { url: string } }) => unknown) => { harness.handlers.set(channel, handler) },
+    handle: (channel: string, handler: (
+      event: { sender?: unknown; senderFrame: { url: string } },
+      ...args: unknown[]
+    ) => unknown) => { harness.handlers.set(channel, handler) },
   },
-  Menu: { setApplicationMenu: vi.fn(), buildFromTemplate: vi.fn() },
+  Menu: { setApplicationMenu: vi.fn(), buildFromTemplate: vi.fn(() => ({ popup: vi.fn() })) },
   protocol: { registerSchemesAsPrivileged: vi.fn(), handle: vi.fn() },
+  screen: {
+    getDisplayNearestPoint: () => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } }),
+  },
 }))
 vi.mock('../src/paths.ts', () => ({ resolveDesktopPaths: () => ({ profile: 'desktop-test-profile' }) }))
 vi.mock('../src/project-manager.ts', () => ({
@@ -123,10 +155,22 @@ vi.mock('../src/project-manager.ts', () => ({
 vi.mock('../src/host-process.ts', () => ({ DesktopHostProcess: harness.FakeHost }))
 vi.mock('../src/update-coordinator.ts', () => ({ DesktopUpdateCoordinator: vi.fn() }))
 
-function invoke(channel: string): unknown {
+function invoke(channel: string, ...args: unknown[]): unknown {
   const handler = harness.handlers.get(channel)
   if (handler === undefined) throw new Error(`missing handler ${channel}`)
-  return handler({ senderFrame: { url: 'dsh-app://shell/startup.html' } })
+  return handler({ senderFrame: { url: 'dsh-app://shell/startup.html' } }, ...args)
+}
+
+function invokeFloating(channel: string, ...args: unknown[]): unknown {
+  const handler = harness.handlers.get(channel)
+  if (handler === undefined) throw new Error(`missing handler ${channel}`)
+  const window = harness.windows.find(entry => entry.options.type === 'panel')
+  if (window === undefined) throw new Error('missing floating window')
+  return handler({ sender: window.webContents, senderFrame: { url: 'dsh-app://shell/floating.html' } }, ...args)
+}
+
+function appWindows(): typeof harness.windows {
+  return harness.windows.filter(window => window.options.type !== 'panel')
 }
 
 beforeEach(() => {
@@ -240,7 +284,7 @@ describe('desktop main startup', () => {
     await harness.hostStarted.promise
     harness.hosts[0]!.ready.resolve()
     await Promise.resolve(invoke(DESKTOP_IPC.backendRetry))
-    expect(harness.windows).toHaveLength(1)
+    expect(appWindows()).toHaveLength(1)
     expect(window.urls.at(-1)).toContain('data:text/html')
     expect(harness.dialog.showErrorBox).not.toHaveBeenCalled()
   })
@@ -261,7 +305,7 @@ describe('desktop main startup', () => {
     expect(harness.pluginsEnabled).toBe(false)
     harness.hosts[1]!.ready.resolve()
     await recovery
-    expect(harness.windows).toHaveLength(1)
+    expect(appWindows()).toHaveLength(1)
     expect(invoke(DESKTOP_IPC.backendStatus)).toEqual({ phase: 'ready' })
   })
 
@@ -304,7 +348,7 @@ describe('desktop main startup', () => {
       profile: 'desktop-test-profile',
     })
     expect(harness.hosts[0]!.start).toHaveBeenCalledTimes(1)
-    expect(harness.windows).toHaveLength(1)
+    expect(appWindows()).toHaveLength(1)
     expect(window.urls).toEqual(['dsh-app://shell/startup.html', 'dsh-app://app/index.html'])
     expect(invoke(DESKTOP_IPC.backendStatus)).toEqual({ phase: 'ready' })
   })
@@ -341,7 +385,7 @@ describe('desktop main startup', () => {
     expect(harness.hosts).toHaveLength(2)
     harness.hosts[1]!.ready.resolve()
     await retry
-    expect(harness.windows).toHaveLength(1)
+    expect(appWindows()).toHaveLength(1)
     expect(harness.windows[0]!.urls.at(-1)).toBe('dsh-app://app/index.html')
     expect(harness.dialog.showErrorBox).not.toHaveBeenCalled()
   })
@@ -364,5 +408,70 @@ describe('desktop main startup', () => {
     expect(host.stop).toHaveBeenCalledTimes(1)
     expect(window.urls).toEqual(['dsh-app://shell/startup.html'])
     expect(harness.windows).toHaveLength(1)
+  })
+})
+
+describe('desktop floating overlay', () => {
+  it('enables CORS so the overlay can fetch the Host API', async () => {
+    const { protocol } = await import('electron')
+    await import('../src/main.ts')
+    expect(protocol.registerSchemesAsPrivileged).toHaveBeenCalledWith([
+      expect.objectContaining({
+        scheme: 'dsh-app',
+        privileges: expect.objectContaining({ corsEnabled: true, supportFetchAPI: true }),
+      }),
+    ])
+  })
+
+  it('creates a macOS overlay after Host ready and protects both windows', async () => {
+    vi.stubGlobal('process', { ...process, platform: 'darwin', resourcesPath: 'desktop-test-resources' })
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    harness.prepared.resolve()
+    await harness.hostStarted.promise
+    harness.hosts[0]!.ready.resolve()
+    await harness.navigated.promise
+    const overlay = harness.windows.find(window => window.options.type === 'panel')
+    expect(overlay).toBeDefined()
+    expect(overlay?.urls).toEqual(['dsh-app://shell/floating.html'])
+    expect(overlay?.contentProtection).toBe(true)
+    expect(overlay?.visibleOnAllWorkspaces).toBe(true)
+    expect(overlay?.visibleOnAllWorkspacesOptions).toEqual({
+      visibleOnFullScreen: true,
+      skipTransformProcessType: true,
+    })
+    expect(harness.app.dock.show).toHaveBeenCalled()
+    expect(harness.app.setActivationPolicy).toHaveBeenCalledWith('regular')
+    expect(appWindows()[0]?.contentProtection).toBe(true)
+    expect(invokeFloating(DESKTOP_IPC.floatingToggle)).toBe(true)
+    expect(overlay?.bounds).toMatchObject({ width: 360, height: 520 })
+    invokeFloating(DESKTOP_IPC.floatingMove, 20, 30)
+    expect(overlay?.bounds).toMatchObject({ x: 20, y: 30 })
+    invokeFloating(DESKTOP_IPC.floatingDock)
+    expect(overlay?.bounds.x).toBe(0)
+  })
+
+  it('does not create a floating overlay off macOS', async () => {
+    vi.stubGlobal('process', { ...process, platform: 'linux', resourcesPath: 'desktop-test-resources' })
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    harness.prepared.resolve()
+    await harness.hostStarted.promise
+    harness.hosts[0]!.ready.resolve()
+    await harness.navigated.promise
+    expect(harness.windows.some(window => window.options.type === 'panel')).toBe(false)
+    expect(appWindows()).toHaveLength(1)
+    expect(appWindows()[0]?.contentProtection).toBe(true)
+    expect(harness.app.dock.show).not.toHaveBeenCalled()
+    expect(harness.app.setActivationPolicy).not.toHaveBeenCalled()
+  })
+
+  it('installs the standard Edit and Window menus so clipboard shortcuts reach inputs', async () => {
+    const { Menu } = await import('electron')
+    await import('../src/main.ts')
+    expect(Menu.buildFromTemplate).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ role: 'editMenu' }),
+      expect.objectContaining({ role: 'windowMenu' }),
+    ]))
   })
 })
