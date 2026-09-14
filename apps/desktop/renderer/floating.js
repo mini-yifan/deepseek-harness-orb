@@ -2,7 +2,7 @@ const api = window.dshDesktop
 const DEFAULT_PROVIDER = 'deepseek-official'
 const DEFAULT_MODEL = 'deepseek-flash'
 const DEFAULT_REASONING = 'max'
-const GIF_SRC = 'defaultgif.gif'
+const GIF_SRC = 'deepseek-avatar-square.gif'
 const COLLAPSE_MS = 180
 const ANIMATION_MS = 300
 
