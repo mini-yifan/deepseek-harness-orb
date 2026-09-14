@@ -49,6 +49,45 @@ function requireAgent(exec: { agent?: { id: SessionId; session: { header: Header
   return exec.agent
 }
 
+/**
+ * Resolve a Workspace id when `directory` is already registered.
+ * @param ctx - Host context; `workspaceRegistry` is optional.
+ * @param directory - session cwd or explicit `code_agent` cwd.
+ * @returns the Workspace id, or undefined when none matches.
+ */
+async function workspaceIdForDirectory(
+  ctx: Context,
+  directory: string | undefined,
+): Promise<string | undefined> {
+  if (directory === undefined || directory === '') return undefined
+  const registry = ctx.get('workspaceRegistry') as
+    | { resolveByPath(path: string): Promise<{ id: string } | undefined> }
+    | undefined
+  if (registry === undefined || typeof registry.resolveByPath !== 'function') return undefined
+  try {
+    return (await registry.resolveByPath(directory))?.id
+  } catch {
+    // Missing or relative directories cannot join a Workspace record.
+    return undefined
+  }
+}
+
+/**
+ * Prefer `workspaceId` so the new session appears under that sidebar folder.
+ * @param ctx - Host context; `workspaceRegistry` is optional.
+ * @param directory - session cwd or explicit `code_agent` cwd.
+ * @returns create fields that `session.create` accepts together.
+ */
+async function locationForCreate(
+  ctx: Context,
+  directory: string | undefined,
+): Promise<{ workspaceId: string } | { cwd: string } | Record<string, never>> {
+  const workspaceId = await workspaceIdForDirectory(ctx, directory)
+  if (workspaceId !== undefined) return { workspaceId }
+  if (directory === undefined) return {}
+  return { cwd: directory }
+}
+
 function ownedBySubagent(
   ctx: Context,
   header: HeaderFacts,
@@ -127,7 +166,7 @@ export function apply(ctx: Context): void {
       if (args.session_id === undefined) {
         const createdSession = await ctx.sessionController.create({
           agentPreset: 'standard',
-          ...(cwd === undefined ? {} : { cwd }),
+          ...await locationForCreate(ctx, cwd),
         })
         sessionId = createdSession.sessionId
         created = true

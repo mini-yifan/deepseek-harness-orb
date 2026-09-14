@@ -58,6 +58,7 @@ const harness = await vi.hoisted(async () => {
     setPosition(x: number, y: number) { this.bounds.x = x; this.bounds.y = y }
     getBounds() { return { ...this.bounds } }
     setSize(width: number, height: number) { this.bounds.width = width; this.bounds.height = height }
+    setBounds(next: { x: number; y: number; width: number; height: number }) { this.bounds = { ...next } }
     static getAllWindows() { return windows.filter(window => !window.destroyed) }
     static fromWebContents(contents: unknown) {
       return windows.find(window => window.webContents === contents) ?? null
@@ -136,7 +137,9 @@ vi.mock('electron', () => ({
     getDisplayNearestPoint: () => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } }),
   },
 }))
-vi.mock('../src/paths.ts', () => ({ resolveDesktopPaths: () => ({ profile: 'desktop-test-profile' }) }))
+vi.mock('../src/paths.ts', () => ({
+  resolveDesktopPaths: () => ({ profile: 'desktop-test-profile', orbWorkspace: 'desktop-test-orb' }),
+}))
 vi.mock('../src/project-manager.ts', () => ({
   DesktopProjectManager: class {
     readonly applyRelease = harness.applyRelease
@@ -443,12 +446,20 @@ describe('desktop floating overlay', () => {
     expect(harness.app.dock.show).toHaveBeenCalled()
     expect(harness.app.setActivationPolicy).toHaveBeenCalledWith('regular')
     expect(appWindows()[0]?.contentProtection).toBe(true)
-    expect(invokeFloating(DESKTOP_IPC.floatingToggle)).toBe(true)
-    expect(overlay?.bounds).toMatchObject({ width: 360, height: 520 })
+    expect(invokeFloating(DESKTOP_IPC.floatingSetExpanded, true)).toMatchObject({
+      expanded: true,
+      horizontal: 'right',
+      vertical: 'down',
+    })
+    expect(overlay?.bounds).toMatchObject({ width: 320, height: 420, x: 0, y: 0 })
+    invokeFloating(DESKTOP_IPC.floatingSetExpanded, false)
     invokeFloating(DESKTOP_IPC.floatingMove, 20, 30)
     expect(overlay?.bounds).toMatchObject({ x: 20, y: 30 })
-    invokeFloating(DESKTOP_IPC.floatingDock)
-    expect(overlay?.bounds.x).toBe(0)
+    invokeFloating(DESKTOP_IPC.floatingClamp)
+    expect(overlay?.bounds).toMatchObject({ x: 20, y: 30 })
+    for (const window of harness.windows) {
+      expect(window.webContents.executeJavaScript).not.toHaveBeenCalled()
+    }
   })
 
   it('does not create a floating overlay off macOS', async () => {

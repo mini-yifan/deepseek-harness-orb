@@ -12,7 +12,9 @@ Computer Use 是 Web `--patch` 可以挂上的实验 overlay，但 Desktop 把 W
 
 macOS Desktop 在 Host 就绪后创建第二扇 Electron overlay：72px 置顶 panel，通过现有 shell preload 加载 `dsh-app://shell/floating.html`。该页 fetch 与主窗口相同的 Host `/api`。它不启动 `dsh-app://app/index.html`。Windows 保持今天的单主窗口。
 
-overlay 会话调用 `session.create({ agentPreset: 'computer-use' })`，并在该路由存在时选择 `deepseek-v4-flash-vision-exp`。id 以 `floating-session.json` 存在 Desktop profile。主窗口通过 `globalThis.__DSH_HIDDEN_SESSION_IDS__`（index 注入加实时广播）隐藏该 id。SessionHeader origin 不变。委派出的 standard 会话保持可见。
+overlay 会话在 `$DSH_HOME/dsh_orb` 上 `workspace.create` 后调用 `session.create({ agentPreset: 'computer-use', workspaceId })`（侧栏标题 `dsh_orb`），并在该路由存在时选择 `deepseek-v4-flash-vision-exp`。当前 overlay id 以 `floating-session.json` 存在 Desktop profile。主窗口保持当前会话；overlay 会话以及 cwd 匹配该工作区的 `code_agent` 行出现在 `dsh_orb` 下。SessionHeader origin 不变。
+
+overlay 是 72px GIF 球：悬停以 300ms 展开 320×420 白底面板，球留在输入胶囊一角。单击固定面板；再点取消固定，指针离开两者后 180ms 折叠。拖动移动球并夹在工作区内，不吸边。回车发送；仅 Computer Use 会话运行时显示停止；新建会在 `dsh_orb` 上再开一条 Computer Use 会话。
 
 `code_agent` 只注册在 Computer Use preset。创建走 `session.create({ agentPreset: 'standard' })`，不设 `origin: 'subagent'`，也不传 `parentAgent`。发送任务走 `mode: 'queue'`，返回 `{ accepted: true }`，不等待回合结束。省略 `session_id` 会新建空白 standard 会话；带上先前结果 id 则在那条会话再入队一条用户消息。Computer Use 策略要求模型把可见 GUI 留在五件套上，用先前 id 续写同一产物，无关新工作则不带 id。
 
@@ -28,7 +30,7 @@ Desktop Host overlay YAML 从 `../lib/computer-use-preset-root.js` 插入 `compu
 
 **用 `tool-subagent` 做后台编码。** 侧栏会过滤 `origin: 'subagent'`，且 `session.prompt` 会拒绝这些 id。委派工作必须是一等 standard 会话。
 
-**给球会话加新的 SessionHeader origin。** 那会为仅 Desktop 的隐藏去抬 `SESSION_FORMAT_VERSION`。profile JSON 加客户端注入已经够用。
+**给球会话加新的 SessionHeader origin。** 那会为仅 Desktop 的分组去抬 `SESSION_FORMAT_VERSION`。挂到 `dsh_orb` 工作区已经够用。
 
 **把实验包写成 Desktop Host 依赖。** 实验组 AGENTS.md 禁止发布应用点名它。runtime extra 拷贝是这条例外；locator 放在 Desktop Host。
 
@@ -36,8 +38,8 @@ Desktop Host overlay YAML 从 `../lib/computer-use-preset-root.js` 插入 `compu
 
 ## 影响
 
-在 darwin 上关掉主窗口后，球仍会运行，直到从 Dock、Cmd+Q 或 overlay 右键明确退出。overlay 没有语音、套索、划词工具条或逐次点击批准。chrome 排除只有 Electron `contentProtection`；没有 ScreenCaptureKit 窗口排除。重启会在 Host 仍持有该会话时续上已存 Computer Use 会话。snapshot 与包测试钉住 `code_agent` 路由例子（微信/Pages 走 GUI、Word 新建、字体改绿续写、五子棋新建），以及仅 macOS 的 overlay 构造。
+在 darwin 上关掉主窗口后，球仍会运行，直到从 Dock、Cmd+Q 或 overlay 右键明确退出。overlay 没有语音、套索、划词工具条或逐次点击批准。chrome 排除只有 Electron `contentProtection`；没有 ScreenCaptureKit 窗口排除。重启会在 Host 仍持有该会话时续上已存 Computer Use 会话。overlay Computer Use 的 cwd 是 `$DSH_HOME/dsh_orb`。snapshot 与包测试钉住 `code_agent` 路由例子（微信/Pages 走 GUI、Word 新建、字体改绿续写、五子棋新建），以及仅 macOS 的 overlay 构造。
 
 ## 测试
 
-Desktop 拷贝 runtime extra，并把 overlay YAML 保持在 `default: standard`。Computer Use 包测试覆盖 `code_agent` 创建时没有 subagent origin、按 `session_id` 续写、拒绝 CU/subagent/cwd 冲突，以及续写会话上的两条 `user/message` 对比省略 id 时的新会话。computer-use snapshot overlay 会桩掉 `sessionController`，以便 header pin 含有 `code_agent` schema。客户端 tree 测试会省略隐藏的球 id，并保留委派出的 standard 行。Electron 测试在 darwin 创建 `type: 'panel'` overlay，在非 darwin 不创建，在两扇窗口上设置 `contentProtection`，传入 `skipTransformProcessType: true`，并在创建 overlay 后调用 `app.setActivationPolicy('regular')` 和 `app.dock.show()`。它们还钉住应用 Edit 菜单和 overlay 可编辑区粘贴项。overlay 渲染页通过 Host RPC 创建 Computer Use 会话并选择视觉模型。
+Desktop 拷贝 runtime extra，并把 overlay YAML 保持在 `default: standard`。Computer Use 包测试覆盖 `code_agent` 创建时没有 subagent origin、caller cwd 匹配工作区时带 `workspaceId` 创建、按 `session_id` 续写、拒绝 CU/subagent/cwd 冲突，以及续写会话上的两条 `user/message` 对比省略 id 时的新会话。computer-use snapshot overlay 会桩掉 `sessionController`，以便 header pin 含有 `code_agent` schema。客户端 tree 测试仍会省略作为 `hiddenSessionIds` 传入的 id，并保留委派出的 standard 行。Electron 测试在 darwin 创建 `type: 'panel'` overlay，在非 darwin 不创建，在两扇窗口上设置 `contentProtection`，传入 `skipTransformProcessType: true`，并在创建 overlay 后调用 `app.setActivationPolicy('regular')` 和 `app.dock.show()`。它们还钉住应用 Edit 菜单、overlay 可编辑区粘贴项、保持球原点的展开几何，以及不吸边的工作区夹取。overlay 渲染页会创建 `dsh_orb` 工作区，通过 Host RPC 创建 Computer Use 会话并选择视觉模型，回车发送。

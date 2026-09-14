@@ -1,10 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  ensureOrbWorkspaceDir,
   FLOATING_SESSION_FILE,
-  hiddenSessionBroadcast,
   readFloatingSessionId,
   writeFloatingSessionId,
 } from '../src/floating-session.ts'
@@ -39,9 +39,12 @@ describe('floating session persistence', () => {
     expect(readFloatingSessionId(root)).toBeUndefined()
   })
 
-  it('broadcasts the hidden id into an already-booted main window', () => {
-    expect(hiddenSessionBroadcast('session-orb')).toBe(
-      'globalThis.__DSH_HIDDEN_SESSION_IDS__=["session-orb"];globalThis.dispatchEvent(new Event(\'dsh-hidden-sessions-changed\'))',
-    )
+  it('creates the dsh_orb directory', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-floating-orb-dir-'))
+    roots.push(root)
+    const path = join(root, 'dsh_orb')
+    expect(ensureOrbWorkspaceDir(path)).toBe(path)
+    expect(existsSync(path)).toBe(true)
+    expect(ensureOrbWorkspaceDir(path)).toBe(path)
   })
 })

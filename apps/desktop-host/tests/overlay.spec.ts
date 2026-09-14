@@ -14,6 +14,11 @@ afterEach(() => {
 })
 
 describe('desktop Computer Use overlay', () => {
+  it('does not hide overlay sessions from the main window', () => {
+    const index = readFileSync(fileURLToPath(new URL('../src/index.ts', import.meta.url)), 'utf8')
+    expect(index).not.toContain('__DSH_HIDDEN_SESSION_IDS__')
+  })
+
   it('inserts the locator and keeps the deployment default on standard', () => {
     const overlay = readFileSync(OVERLAY, 'utf8')
     expect(overlay).toContain('id: computer-use-preset-root')

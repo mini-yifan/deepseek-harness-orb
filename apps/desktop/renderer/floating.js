@@ -1,13 +1,15 @@
 const api = window.dshDesktop
 const VISION_MODEL = 'deepseek-v4-flash-vision-exp'
+const GIF_SRC = 'defaultgif.gif'
+const COLLAPSE_MS = 180
+const ANIMATION_MS = 300
 
 function rpcId() {
   return crypto.randomUUID()
 }
 
-async function rpc(method, request) {
+async function rpc(method, args = {}) {
   const id = rpcId()
-  const args = request === undefined ? {} : { request }
   const response = await fetch(`dsh-app://app/api/${method}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -38,11 +40,15 @@ function pickVision(catalog) {
 
 function eventText(record) {
   const event = record?.event
-  if (event === undefined) return ''
-  if (event.type !== 'user/message' && event.type !== 'assistant/message') return ''
+  if (event === undefined) return undefined
+  if (event.type !== 'user/message' && event.type !== 'assistant/message') return undefined
   const data = event.data ?? {}
+  const source = data.source ?? data.message?.source
+  if (source?.kind === 'plugin' || source?.form === 'notice') return undefined
   const content = data.content ?? data.message?.content ?? []
-  return content.filter(block => block.type === 'text').map(block => block.text).join('\n')
+  const text = content.filter(block => block.type === 'text').map(block => block.text).join('\n')
+  if (text === '') return undefined
+  return { role: event.type === 'user/message' ? 'user' : 'assistant', text }
 }
 
 async function main() {
@@ -51,8 +57,10 @@ async function main() {
   document.documentElement.lang = locale.id
   document.querySelector('#page-title').textContent = messages.floatingTitle
   document.querySelector('#prompt').placeholder = messages.floatingPlaceholder
-  document.querySelector('#stop').textContent = messages.floatingStop
-  document.querySelector('#send').textContent = messages.floatingSend
+  document.querySelector('#stop').setAttribute('aria-label', messages.floatingStop)
+  document.querySelector('#stop').title = messages.floatingStop
+  document.querySelector('#new-conversation').textContent = messages.floatingNewConversation
+  document.querySelector('#new-conversation').setAttribute('aria-label', messages.floatingNewConversation)
   document.querySelector('#input-label').textContent = messages.floatingPlaceholder
   const ball = document.querySelector('#ball')
   const panel = document.querySelector('#panel')
@@ -61,12 +69,102 @@ async function main() {
   const prompt = document.querySelector('#prompt')
   const stop = document.querySelector('#stop')
   let sessionId = await api.floating.sessionId()
+  let workspaceId
   let dragging = false
+  let pinned = false
+  let expanded = false
+  let running = false
   let pointer = undefined
+  let collapseTimer = undefined
+  let collapseFrame = undefined
 
-  function setExpanded(expanded) {
-    document.body.classList.toggle('expanded', expanded)
-    panel.hidden = !expanded
+  function freezeGif(gif) {
+    const still = () => {
+      if (gif.dataset.mode !== 'still' || gif.naturalWidth === 0) return
+      const canvas = document.createElement('canvas')
+      canvas.width = gif.naturalWidth
+      canvas.height = gif.naturalHeight
+      const context = canvas.getContext('2d')
+      if (context === null) return
+      context.drawImage(gif, 0, 0)
+      try {
+        gif.src = canvas.toDataURL()
+      } catch {
+        // JSDOM may reject toDataURL; the GIF already reset to frame 0.
+      }
+    }
+    if (gif.complete && gif.naturalWidth > 0) still()
+    else gif.addEventListener('load', still, { once: true })
+  }
+
+  function syncGif() {
+    const gif = document.querySelector('#ball-gif')
+    const play = expanded || running
+    if (play) {
+      if (gif.dataset.mode !== 'play') {
+        gif.dataset.mode = 'play'
+        gif.src = GIF_SRC
+      }
+      return
+    }
+    if (gif.dataset.mode === 'still') return
+    gif.dataset.mode = 'still'
+    gif.src = GIF_SRC
+    freezeGif(gif)
+  }
+
+  function setRunning(next) {
+    running = next
+    document.body.classList.toggle('running', running)
+    stop.hidden = !expanded || !running
+    syncGif()
+  }
+
+  function applyDirection(state) {
+    document.body.classList.toggle('expand-left', state.horizontal === 'left')
+    document.body.classList.toggle('expand-right', state.horizontal === 'right')
+    document.body.classList.toggle('expand-up', state.vertical === 'up')
+    document.body.classList.toggle('expand-down', state.vertical === 'down')
+  }
+
+  async function setExpanded(next, force = false) {
+    if (collapseTimer !== undefined) {
+      clearTimeout(collapseTimer)
+      collapseTimer = undefined
+    }
+    if (next) {
+      if (collapseFrame !== undefined) {
+        clearTimeout(collapseFrame)
+        collapseFrame = undefined
+      }
+      const state = await api.floating.setExpanded(true)
+      applyDirection(state)
+      panel.hidden = false
+      expanded = true
+      document.body.classList.add('expanded')
+      stop.hidden = !running
+      syncGif()
+      return
+    }
+    if (!force && (pinned || running)) return
+    expanded = false
+    document.body.classList.remove('expanded')
+    stop.hidden = true
+    syncGif()
+    collapseFrame = setTimeout(() => {
+      collapseFrame = undefined
+      panel.hidden = true
+      void api.floating.setExpanded(false)
+    }, ANIMATION_MS)
+  }
+
+  function scheduleCollapse() {
+    if (pinned || running || dragging) return
+    if (collapseTimer !== undefined) clearTimeout(collapseTimer)
+    collapseTimer = setTimeout(() => {
+      collapseTimer = undefined
+      void setExpanded(false)
+    }, COLLAPSE_MS)
   }
 
   async function selectVision(id) {
@@ -74,17 +172,44 @@ async function main() {
       const catalog = await rpc('session/modelCatalog')
       const vision = pickVision(catalog)
       if (vision !== undefined) {
-        await rpc('session/selectModel', { sessionId: id, provider: vision.provider, model: vision.model })
+        await rpc('session/selectModel', { request: { sessionId: id, provider: vision.provider, model: vision.model } })
       }
     } catch {
       // A missing catalog or unsupported route leaves the session on its deployment default.
     }
   }
 
+  async function ensureWorkspace() {
+    if (workspaceId !== undefined) return workspaceId
+    const path = await api.floating.orbWorkspacePath()
+    const created = await rpc('workspace/create', { request: { path } })
+    workspaceId = created.workspace.workspaceId
+    return workspaceId
+  }
+
+  async function createOrbSession() {
+    const id = (await rpc('session/create', {
+      request: {
+        agentPreset: 'computer-use',
+        workspaceId: await ensureWorkspace(),
+      },
+    })).sessionId
+    sessionId = id
+    await api.floating.setSessionId(id)
+    await selectVision(id)
+    return id
+  }
+
   async function ensureSession() {
     if (sessionId !== undefined) {
       try {
-        await rpc('session/create', { sessionId, agentPreset: 'computer-use' })
+        await rpc('session/create', {
+          request: {
+            sessionId,
+            agentPreset: 'computer-use',
+            workspaceId: await ensureWorkspace(),
+          },
+        })
         await selectVision(sessionId)
         return sessionId
       } catch {
@@ -92,22 +217,36 @@ async function main() {
         sessionId = undefined
       }
     }
-    const created = await rpc('session/create', { agentPreset: 'computer-use' })
-    sessionId = created.sessionId
-    await api.floating.setSessionId(sessionId)
-    await selectVision(sessionId)
-    return sessionId
+    return createOrbSession()
+  }
+
+  function renderTranscript(records) {
+    const bubbles = (records ?? []).map(eventText).filter(entry => entry !== undefined)
+    transcript.replaceChildren()
+    for (const bubble of bubbles) {
+      const node = document.createElement('div')
+      node.className = `bubble ${bubble.role}`
+      node.textContent = bubble.text
+      transcript.append(node)
+    }
+    transcript.scrollTop = transcript.scrollHeight
   }
 
   async function refreshTranscript() {
     if (sessionId === undefined) return
     try {
+      const list = await rpc('session/list', { _request: {} })
+      const row = (list.items ?? []).find(item => item.sessionId === sessionId)
+      const throughSeq = row?.projections?.asOfSeq ?? -1
       const page = await rpc('session/page', {
-        address: { kind: 'session', sessionId },
-        throughSeq: Number.MAX_SAFE_INTEGER,
+        request: {
+          address: { kind: 'session', sessionId },
+          throughSeq,
+          maxMessages: 50,
+        },
       })
-      const lines = (page.records ?? []).map(eventText).filter(line => line !== '')
-      transcript.textContent = lines.join('\n\n')
+      renderTranscript(page.records)
+      setRunning(row?.running === true)
     } catch {
       status.textContent = messages.floatingDisconnected
     }
@@ -125,6 +264,15 @@ async function main() {
     status.textContent = messages.floatingDisconnected
   }
 
+  document.body.addEventListener('pointerenter', () => {
+    if (dragging) return
+    void setExpanded(true)
+  })
+  document.body.addEventListener('pointerleave', () => {
+    if (dragging) return
+    scheduleCollapse()
+  })
+
   ball.addEventListener('pointerdown', event => {
     dragging = false
     pointer = { x: event.screenX, y: event.screenY, dx: event.clientX, dy: event.clientY }
@@ -132,13 +280,27 @@ async function main() {
   })
   ball.addEventListener('pointermove', event => {
     if (pointer === undefined) return
-    if (Math.hypot(event.screenX - pointer.x, event.screenY - pointer.y) > 4) dragging = true
-    if (dragging) void api.floating.move(event.screenX - pointer.dx, event.screenY - pointer.dy)
+    if (Math.hypot(event.screenX - pointer.x, event.screenY - pointer.y) > 4) {
+      if (!dragging) {
+        dragging = true
+        pinned = false
+        document.body.classList.remove('pinned')
+        void setExpanded(false, true)
+      }
+      void api.floating.move(event.screenX - pointer.dx, event.screenY - pointer.dy)
+    }
   })
   ball.addEventListener('pointerup', async () => {
     pointer = undefined
-    if (dragging) await api.floating.dock()
-    else setExpanded(await api.floating.toggle())
+    if (dragging) {
+      dragging = false
+      await api.floating.clamp()
+      return
+    }
+    pinned = !pinned
+    document.body.classList.toggle('pinned', pinned)
+    if (pinned) await setExpanded(true)
+    else scheduleCollapse()
   })
 
   document.querySelector('#composer').addEventListener('submit', async event => {
@@ -147,19 +309,30 @@ async function main() {
     if (text === '') return
     prompt.value = ''
     const id = await ensureSession()
+    setRunning(true)
     await rpc('session/prompt', {
-      requestId: rpcId(),
-      sessionId: id,
-      mode: 'queue',
-      content: [{ type: 'text', text }],
+      request: {
+        requestId: rpcId(),
+        sessionId: id,
+        mode: 'queue',
+        content: [{ type: 'text', text }],
+      },
     })
     await refreshTranscript()
   })
   stop.addEventListener('click', async () => {
     if (sessionId === undefined) return
-    await rpc('session/cancel', { sessionId })
+    await rpc('session/cancel', { request: { sessionId } })
     await refreshTranscript()
   })
+  document.querySelector('#new-conversation').addEventListener('click', async () => {
+    prompt.value = ''
+    transcript.replaceChildren()
+    setRunning(false)
+    await createOrbSession()
+    await refreshTranscript()
+  })
+  syncGif()
   setInterval(() => { void refreshTranscript() }, 1500)
 }
 

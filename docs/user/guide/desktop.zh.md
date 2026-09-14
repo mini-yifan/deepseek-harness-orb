@@ -2,7 +2,7 @@
 
 [English](desktop.md) | 中文
 
-桌面端在同一 Desktop Host 上打开 Electron 主窗口，并在 macOS 上再打开一颗悬浮球。主窗口沿用 Web UI，新建会话默认走 standard；悬浮球锁死 Computer Use，并把后台编码委派成侧栏里可见的标准会话。
+桌面端在同一 Desktop Host 上打开 Electron 主窗口，并在 macOS 上再打开一颗悬浮球。主窗口沿用 Web UI，新建会话默认走 standard；悬浮球锁死 Computer Use，其对话和委派编码会话出现在侧栏的 `dsh_orb` 文件夹下。
 
 ## 启动前准备
 
@@ -36,13 +36,13 @@ pnpm run start:desktop
 
 ## 使用主窗口
 
-主窗口默认新建 standard 会话，模式选择器保持可用。在这里写代码、改文件、跑命令，和浏览器里的 Web UI 是同一条路径。悬浮球委派出来的后台会话也会出现在侧栏，可以打开、接着聊、停止。球自己的 Computer Use 会话不会出现在侧栏。
+主窗口默认新建 standard 会话，模式选择器保持可用。在这里写代码、改文件、跑命令，和浏览器里的 Web UI 是同一条路径。悬浮球委派出来的后台会话也会出现在侧栏的 `dsh_orb` 下，可以打开、接着聊、停止。球新建或切换 Computer Use 对话时，主窗口保持当前会话。
 
 关掉主窗口不会退出应用。悬浮球出现后 Dock 图标仍在。退出请用 Dock、Cmd+Q，或球右键「退出 DeepSeek Harness」。Dock 图标或悬浮球右键「打开主窗口」可以再打开主窗口。
 
 ## 使用 macOS 悬浮球
 
-Host 就绪后才会创建球。把球拖到屏幕边缘会贴边。单击展开面板，再点收起。面板只有 transcript、输入框和停止按钮；没有模式选择器、语音、划词或圈选。
+Host 就绪后才会创建球。悬停展开白底面板，球留在输入胶囊一角。单击固定面板；再点取消固定，指针离开后折叠。拖动移动球并夹在屏幕内，不吸边。面板显示气泡、单行输入（回车发送）、仅 Computer Use 会话运行时的停止，以及右上角**新建**以在 `dsh_orb` 上再开一条 Computer Use 对话。没有发送按钮、模式选择器、语音、划词或圈选。
 
 输入框占位符是「向桌面 agent 发送消息…」。发送后，球会话使用 Computer Use 与视觉模型。停止按钮只取消球的 Computer Use 会话，不会停止侧栏里的标准会话。右键菜单提供「打开主窗口」和「退出 DeepSeek Harness」；只有明确退出才会结束进程。
 
@@ -58,7 +58,7 @@ Host 就绪后才会创建球。把球拖到屏幕边缘会贴边。单击展开
 
 ## 限制
 
-悬浮球只做 Mac。没有语音、划词、圈选、拖拽或逐次点击批准。Electron `contentProtection` 会把桌面 chrome 从截屏里藏起；没有 ScreenCaptureKit 窗口排除。Computer Use 包是签名 runtime extra，不是 Desktop Host 的 npm 依赖。
+悬浮球只做 Mac。没有语音、划词、圈选或逐次点击批准。Electron `contentProtection` 会把桌面 chrome 从截屏里藏起；没有 ScreenCaptureKit 窗口排除。Computer Use 包是签名 runtime extra，不是 Desktop Host 的 npm 依赖。
 
 ## 继续阅读
 

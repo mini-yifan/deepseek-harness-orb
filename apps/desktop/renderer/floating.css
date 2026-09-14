@@ -1,6 +1,13 @@
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   font-family: ui-sans-serif, system-ui, sans-serif;
+  --ball: 72px;
+  --panel-radius: 36px;
+  --black: #111111;
+  --white: #ffffff;
+  --input-bg: #eeeeee;
+  --border: #8a8a93;
+  --pin: #5c5c66;
 }
 
 html,
@@ -12,52 +19,150 @@ body {
   background: transparent;
 }
 
-#ball {
-  position: absolute;
-  inset: 4px;
-  border: 0;
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #5eead4, #0f766e 62%, #042f2e);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 40%);
-  cursor: grab;
-}
-
-#ball:active {
-  cursor: grabbing;
-}
-
-body.expanded #ball {
-  display: none;
-}
-
 #panel {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  width: 100%;
-  height: 100%;
-  padding: 12px;
-  color: #ecfdf5;
-  background: rgb(15 23 42 / 92%);
-  border: 1px solid rgb(45 212 191 / 35%);
-  border-radius: 18px;
+  padding: 20px 20px calc(var(--ball) + 10px);
+  color: var(--black);
+  background: var(--white);
+  border-radius: var(--panel-radius);
+  opacity: 0;
+  transform-origin: var(--origin-x) var(--origin-y);
+  transform: scale(0.18);
+  pointer-events: none;
+  transition: opacity 300ms ease-in-out, transform 300ms ease-in-out;
 }
 
-#panel[hidden] {
-  display: none;
+body.expand-left {
+  --origin-x: 100%;
+}
+
+body.expand-right {
+  --origin-x: 0%;
+}
+
+body.expand-up {
+  --origin-y: 100%;
+}
+
+body.expand-down {
+  --origin-y: 0%;
+}
+
+body.expanded #panel {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+#panel::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--ball);
+  border-radius: 999px;
+  background: var(--input-bg);
+}
+
+body.expand-up #panel::after {
+  bottom: 0;
+}
+
+body.expand-down #panel::after {
+  top: 0;
+}
+
+body.pinned #panel,
+body.pinned #ball {
+  box-shadow: inset 0 0 0 3px var(--pin);
+}
+
+#new-conversation {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  color: var(--black);
+  background: var(--input-bg);
+  cursor: pointer;
 }
 
 #transcript {
   flex: 1;
   overflow: auto;
-  font-size: 13px;
-  line-height: 1.45;
-  white-space: pre-wrap;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 36px;
 }
 
 #status {
+  margin: 0;
   font-size: 12px;
-  color: #99f6e4;
+  color: var(--pin);
+}
+
+.bubble {
+  max-width: 80%;
+  border-radius: 14px;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.bubble.user {
+  align-self: flex-end;
+  color: var(--white);
+  background: var(--black);
+}
+
+.bubble.assistant {
+  align-self: flex-start;
+  color: var(--black);
+  background: var(--white);
+  border: 1px solid var(--border);
+}
+
+#composer {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: var(--ball);
+  width: calc(100% - var(--ball) - 28px);
+  padding: 0 12px;
+}
+
+body.expand-left #composer {
+  left: 16px;
+}
+
+body.expand-right #composer {
+  right: 16px;
+}
+
+body.expand-up #composer {
+  bottom: 0;
+}
+
+body.expand-down #composer {
+  top: 0;
+}
+
+body.running #composer {
+  visibility: hidden;
 }
 
 #input-label {
@@ -70,31 +175,95 @@ body.expanded #ball {
 
 #prompt {
   width: 100%;
+  height: 100%;
   box-sizing: border-box;
-  resize: none;
-  border: 1px solid rgb(45 212 191 / 40%);
-  border-radius: 10px;
-  padding: 8px;
-  color: inherit;
-  background: rgb(15 23 42 / 80%);
-}
-
-#actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-button {
   border: 0;
-  border-radius: 999px;
-  padding: 6px 12px;
-  color: #042f2e;
-  background: #5eead4;
+  padding: 0;
+  color: var(--black);
+  background: transparent;
+  outline: none;
+}
+
+#ball {
+  position: absolute;
+  width: var(--ball);
+  height: var(--ball);
+  border: 0;
+  padding: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--black);
+  cursor: grab;
+}
+
+body.expand-left #ball {
+  right: 0;
+}
+
+body.expand-right #ball {
+  left: 0;
+}
+
+body.expand-up #ball {
+  bottom: 0;
+}
+
+body.expand-down #ball {
+  top: 0;
+}
+
+body:not(.expanded) #ball {
+  inset: 0;
+}
+
+#ball:active {
+  cursor: grabbing;
+}
+
+#ball-gif {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
 }
 
 #stop {
-  color: #ecfdf5;
-  background: rgb(248 113 113 / 85%);
+  position: absolute;
+  z-index: 3;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--pin);
+  border-radius: 50%;
+  padding: 0;
+  background: var(--white);
+  cursor: pointer;
+}
+
+#stop::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  background: var(--black);
+}
+
+body.expand-left #stop {
+  right: 14px;
+}
+
+body.expand-right #stop {
+  left: 14px;
+}
+
+body.expand-up #stop {
+  bottom: 14px;
+}
+
+body.expand-down #stop {
+  top: 14px;
+}
+
+body:not(.expanded) #stop,
+body:not(.running) #stop {
+  display: none;
 }

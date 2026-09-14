@@ -15,6 +15,13 @@ describe('desktop locale dictionaries', () => {
       .toBe('plugin@1.2.3 {missing}')
   })
 
+  it('owns overlay copy for placeholder, stop, new conversation, and disconnect', () => {
+    expect(en.floatingNewConversation).toBe('New')
+    expect(zh.floatingNewConversation).toBe('新建')
+    expect(en).not.toHaveProperty('floatingSend')
+    expect(zh).not.toHaveProperty('floatingSend')
+  })
+
   it('keeps visible plugin-manager and floating HTML copy in the locale dictionaries', () => {
     const plugin = readFileSync(new URL('../renderer/plugin-manager.html', import.meta.url), 'utf8')
     const floating = readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8')

@@ -3,6 +3,7 @@
 import type { DesktopPluginRecord } from './project-manager.ts'
 import type { DesktopLocale } from './locale.ts'
 import type { DesktopBackendState } from './backend-controller.ts'
+import type { FloatingExpandState } from './floating-window.ts'
 
 /** IPC channel names kept private to the desktop application bundle. */
 export const DESKTOP_IPC = {
@@ -22,10 +23,11 @@ export const DESKTOP_IPC = {
   updatesInstall: 'dsh-desktop:updates-install',
   updatesState: 'dsh-desktop:updates-state',
   floatingMove: 'dsh-desktop:floating-move',
-  floatingDock: 'dsh-desktop:floating-dock',
-  floatingToggle: 'dsh-desktop:floating-toggle',
+  floatingClamp: 'dsh-desktop:floating-clamp',
+  floatingSetExpanded: 'dsh-desktop:floating-set-expanded',
   floatingSessionGet: 'dsh-desktop:floating-session-get',
   floatingSessionSet: 'dsh-desktop:floating-session-set',
+  floatingOrbWorkspace: 'dsh-desktop:floating-orb-workspace',
   floatingFocusMain: 'dsh-desktop:floating-focus-main',
   floatingQuit: 'dsh-desktop:floating-quit',
 } as const
@@ -61,10 +63,11 @@ export interface DshDesktopApi {
   }
   readonly floating: {
     move(x: number, y: number): Promise<void>
-    dock(): Promise<void>
-    toggle(): Promise<boolean>
+    clamp(): Promise<void>
+    setExpanded(expanded: boolean): Promise<FloatingExpandState>
     sessionId(): Promise<string | undefined>
     setSessionId(sessionId: string): Promise<void>
+    orbWorkspacePath(): Promise<string>
     focusMain(): Promise<void>
     quit(): Promise<void>
   }
