@@ -259,3 +259,181 @@ it('places Stop at the opposite pill end from the ball', () => {
   expect(css).not.toMatch(/body\.expand-left #stop \{\s*right:/u)
   expect(css).not.toMatch(/body\.expand-right #stop \{\s*left:/u)
 })
+
+it('places History at the top-left opposite New', () => {
+  const html = readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8')
+  const css = readFileSync(new URL('../renderer/floating.css', import.meta.url), 'utf8')
+  expect(html.indexOf('id="history"')).toBeGreaterThan(-1)
+  expect(html.indexOf('id="history"')).toBeLessThan(html.indexOf('id="new-conversation"'))
+  expect(html).toContain('id="history-list"')
+  expect(css).toMatch(/#history \{\s*left: 12px/u)
+  expect(css).toMatch(/#new-conversation \{\s*right: 12px/u)
+})
+
+it('lists orb Computer Use chats and reopens the selected session', async () => {
+  const dom = new JSDOM(readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8'), {
+    runScripts: 'outside-only',
+    url: 'dsh-app://shell/floating.html',
+  })
+  const calls: { method: string; payload: unknown }[] = []
+  const pages: Record<string, string> = {
+    'session-orb': 'Open WeChat',
+    'session-old': 'Click Pages',
+  }
+  const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as {
+      rpcId: string
+      method: string
+      payload: { args: Record<string, unknown> }
+    }
+    calls.push({ method: body.method, payload: body.payload.args })
+    let value: unknown = {}
+    if (body.method === 'workspace/create') {
+      value = { workspace: { workspaceId: 'ws-orb' }, created: true }
+    }
+    if (body.method === 'session/create') {
+      const request = body.payload.args.request as { sessionId?: string }
+      value = {
+        sessionId: request.sessionId ?? 'session-orb',
+        agentPreset: 'computer-use',
+      }
+    }
+    if (body.method === 'session/modelCatalog') {
+      value = { groups: [{ id: 'deepseek-official', models: [{ id: 'deepseek-flash' }] }] }
+    }
+    if (body.method === 'session/page') {
+      const request = body.payload.args.request as { address: { sessionId: string } }
+      value = {
+        records: [{
+          type: 'event',
+          event: {
+            type: 'user/message',
+            data: { content: [{ type: 'text', text: pages[request.address.sessionId] ?? 'unknown' }] },
+          },
+        }],
+      }
+    }
+    if (body.method === 'session/list') {
+      value = {
+        items: [
+          {
+            sessionId: 'session-orb',
+            cwd: '/tmp/dsh_orb',
+            running: false,
+            projections: { asOfSeq: 0, values: { agentPreset: 'computer-use', title: 'Open WeChat' } },
+          },
+          {
+            sessionId: 'session-old',
+            cwd: '/tmp/dsh_orb',
+            running: false,
+            projections: { asOfSeq: 2, values: { agentPreset: 'computer-use', title: 'Click Pages' } },
+          },
+          {
+            sessionId: 'session-blank',
+            cwd: '/tmp/dsh_orb',
+            blank: true,
+            running: false,
+            projections: { asOfSeq: -1, values: { agentPreset: 'computer-use' } },
+          },
+          {
+            sessionId: 'session-code',
+            cwd: '/tmp/dsh_orb',
+            running: false,
+            projections: { asOfSeq: 1, values: { agentPreset: 'standard', title: 'Write Word' } },
+          },
+          {
+            sessionId: 'session-other',
+            cwd: '/other',
+            running: false,
+            projections: { asOfSeq: 1, values: { agentPreset: 'computer-use', title: 'Other workspace' } },
+          },
+          {
+            sessionId: 'session-sub',
+            cwd: '/tmp/dsh_orb',
+            origin: 'subagent',
+            running: false,
+            projections: { asOfSeq: 1, values: { agentPreset: 'computer-use', title: 'Child' } },
+          },
+        ],
+      }
+    }
+    if (body.method === 'session/prompt') value = { accepted: true }
+    return {
+      ok: true,
+      json: async () => ({
+        type: 'server-response',
+        rpcId: body.rpcId,
+        result: { ok: true, value },
+      }),
+    }
+  })
+  Object.defineProperty(dom.window, 'fetch', { value: fetchMock })
+  Object.defineProperty(dom.window, 'crypto', { value: globalThis.crypto })
+  const setSessionId = vi.fn()
+  const api = {
+    locale: async () => resolveDesktopLocale('en'),
+    backend: {
+      status: async () => ({ phase: 'ready' }),
+      subscribe: vi.fn(),
+    },
+    floating: {
+      sessionId: async () => undefined,
+      setSessionId,
+      move: vi.fn(),
+      clamp: vi.fn(),
+      setExpanded: async (expanded: boolean) => ({ expanded, horizontal: 'left', vertical: 'up' }),
+      orbWorkspacePath: async () => '/tmp/dsh_orb',
+    },
+  }
+  Object.defineProperty(dom.window, 'dshDesktop', { value: api })
+  try {
+    runInContext(readFileSync(new URL('../renderer/floating.js', import.meta.url), 'utf8'), dom.getInternalVMContext())
+    const document = dom.window.document
+    await expect.poll(() => document.querySelector('.bubble.user')?.textContent).toBe('Open WeChat')
+    const history = document.querySelector<HTMLButtonElement>('#history')
+    const transcript = document.querySelector<HTMLElement>('#transcript')
+    const historyList = document.querySelector<HTMLElement>('#history-list')
+    if (history === null || transcript === null || historyList === null) throw new Error('missing overlay history chrome')
+    expect(historyList.hidden).toBe(true)
+    history.click()
+    await expect.poll(() => historyList.hidden).toBe(false)
+    expect(transcript.hidden).toBe(true)
+    expect(history.getAttribute('aria-pressed')).toBe('true')
+    await expect.poll(() => [...document.querySelectorAll('.history-row')].map(node => node.textContent)).toEqual([
+      'Open WeChat',
+      'Click Pages',
+      'Untitled conversation',
+    ])
+    history.click()
+    await expect.poll(() => historyList.hidden).toBe(true)
+    expect(transcript.hidden).toBe(false)
+    expect(document.querySelector('.bubble.user')?.textContent).toBe('Open WeChat')
+    history.click()
+    await expect.poll(() => [...document.querySelectorAll('.history-row')].some(node => node.textContent === 'Click Pages')).toBe(true)
+    const prior = [...document.querySelectorAll('.history-row')].find(node => node.textContent === 'Click Pages')
+    if (prior === undefined) throw new Error('missing prior Computer Use row')
+    prior.dispatchEvent(new dom.window.Event('click', { bubbles: true }))
+    await expect.poll(() => historyList.hidden).toBe(true)
+    await expect.poll(() => document.querySelector('.bubble.user')?.textContent).toBe('Click Pages')
+    expect(setSessionId.mock.calls.at(-1)).toEqual(['session-old'])
+    expect(calls.some((call) => {
+      if (call.method !== 'session/create') return false
+      const request = (call.payload as { request?: { sessionId?: string } }).request
+      return request?.sessionId === 'session-old'
+    })).toBe(true)
+    const prompt = document.querySelector<HTMLInputElement>('#prompt')
+    if (prompt === null) throw new Error('missing prompt')
+    prompt.value = 'Scroll down'
+    document.querySelector<HTMLFormElement>('#composer')?.dispatchEvent(
+      new dom.window.Event('submit', { bubbles: true, cancelable: true }),
+    )
+    await expect.poll(() => calls.some(call => call.method === 'session/prompt')).toBe(true)
+    expect(calls.findLast(call => call.method === 'session/prompt')?.payload).toMatchObject({
+      request: {
+        sessionId: 'session-old',
+        mode: 'queue',
+        content: [{ type: 'text', text: 'Scroll down' }],
+      },
+    })
+  } finally { dom.window.close() }
+})

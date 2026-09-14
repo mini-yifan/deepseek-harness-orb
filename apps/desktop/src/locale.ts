@@ -54,6 +54,9 @@ export const en = {
   floatingPlaceholder: 'Ask the desktop agent…',
   floatingStop: 'Stop',
   floatingNewConversation: 'New',
+  floatingHistory: 'History',
+  floatingUntitledConversation: 'Untitled conversation',
+  floatingHistoryEmpty: 'No Computer Use chats yet.',
   floatingDisconnected: 'Waiting for Desktop Host…',
   floatingTitle: 'Desktop agent',
 } as const
@@ -115,6 +118,9 @@ export const zh = {
   floatingPlaceholder: '向桌面 agent 发送消息…',
   floatingStop: '停止',
   floatingNewConversation: '新建',
+  floatingHistory: '历史',
+  floatingUntitledConversation: '未命名对话',
+  floatingHistoryEmpty: '还没有 Computer Use 对话。',
   floatingDisconnected: '正在等待 Desktop Host…',
   floatingTitle: '桌面 agent',
 } as const satisfies DesktopMessages
