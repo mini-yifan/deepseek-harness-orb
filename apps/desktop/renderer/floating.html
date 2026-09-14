@@ -8,19 +8,19 @@
     <link rel="stylesheet" href="floating.css">
   </head>
   <body>
-    <button id="ball" type="button"></button>
     <section id="panel" hidden>
+      <button id="new-conversation" type="button"></button>
       <div id="transcript" role="log" aria-live="polite"></div>
       <p id="status" role="status"></p>
       <form id="composer">
         <label id="input-label" for="prompt"></label>
-        <textarea id="prompt" rows="3" required></textarea>
-        <div id="actions">
-          <button id="stop" type="button"></button>
-          <button id="send" type="submit"></button>
-        </div>
+        <input id="prompt" type="text" autocomplete="off" required>
       </form>
+      <button id="stop" type="button" hidden></button>
     </section>
+    <button id="ball" type="button">
+      <img id="ball-gif" src="defaultgif.gif" alt="" draggable="false">
+    </button>
     <script src="floating.js"></script>
   </body>
 </html>

@@ -15,6 +15,7 @@ const STANDARD_B = SessionId('session-standard-2')
 interface CreateRequest {
   readonly agentPreset?: string
   readonly cwd?: string
+  readonly workspaceId?: string
   readonly origin?: string
   readonly parentAgent?: unknown
 }
@@ -61,6 +62,7 @@ async function setup(options: {
   readonly headers?: Record<string, HeaderFacts>
   readonly createId?: SessionId
   readonly owned?: boolean
+  readonly workspaceId?: string
 } = {}) {
   const ctx = new Context()
   contexts.push(ctx)
@@ -103,6 +105,14 @@ async function setup(options: {
       },
       isOwnedBy(agentId: SessionId, owner: { id: SessionId }) {
         return agentId === child.id && owner.id === CALLER
+      },
+    })
+  }
+  if (options.workspaceId !== undefined) {
+    const workspaceId = options.workspaceId
+    ctx.provide('workspaceRegistry', {
+      async resolveByPath() {
+        return { id: workspaceId }
       },
     })
   }
@@ -150,6 +160,13 @@ describe('code_agent plugin', () => {
     })
     expect(result.value).toEqual({ accepted: true, created: true, session_id: STANDARD })
     expect(text(result)).toContain(STANDARD)
+  })
+
+  it('creates with workspaceId when caller cwd matches a workspace', async () => {
+    const { ctx, created } = await setup({ workspaceId: 'ws-orb' })
+    const result = await execute(ctx, { task: 'Write a Word document' })
+    expect(result.isError).toBe(false)
+    expect(created).toEqual([{ agentPreset: 'standard', workspaceId: 'ws-orb' }])
   })
 
   it('continues the same session when session_id is supplied', async () => {

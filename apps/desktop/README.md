@@ -202,5 +202,5 @@ An unpackaged Electron process uses `.desktop-build/development/project` under i
 - Release signing, notarization, update hosting, and previous-version installed-artifact qualification require the production release environment.
 - Desktop plugins with dependency lifecycle scripts are rejected unless their package appears in the desktop project's reviewed `allowBuilds` policy.
 - The desktop shell shares sessions, settings, credentials, workspaces, and storage under `$DSH_HOME` with CLI dsh, while executable packages, plugin activation, lockfiles, and package-manager state remain separate.
-- The macOS floating ball is a second Electron overlay on the same Desktop Host. It locks a Computer Use session; delegated standard sessions appear in the main sidebar. Windows keeps a single main window.
+- The macOS floating ball is a second Electron overlay on the same Desktop Host. It locks Computer Use sessions under the `dsh_orb` sidebar folder; the main window stays on its current session. Windows keeps a single main window.
 - Computer Use ships as a signed runtime extra under `extraResources/dsh`, not as a Desktop Host npm dependency. Electron `contentProtection` hides Desktop chrome from captures; ScreenCaptureKit window exclusion is absent.

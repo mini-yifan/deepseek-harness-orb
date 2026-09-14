@@ -2,7 +2,7 @@
 
 English | [中文](desktop.zh.md)
 
-The Desktop app opens an Electron main window on one Desktop Host, and on macOS it also opens a floating ball. The main window reuses the Web UI and creates standard sessions by default. The ball locks Computer Use and delegates background coding into standard sessions that appear in the sidebar.
+The Desktop app opens an Electron main window on one Desktop Host, and on macOS it also opens a floating ball. The main window reuses the Web UI and creates standard sessions by default. The ball locks Computer Use; its chats and delegated coding sessions appear under the `dsh_orb` sidebar folder.
 
 ## Before you start
 
@@ -36,13 +36,13 @@ The main window matches the [Web UI](./index.md): open **Settings → Models**, 
 
 ## Use the main window
 
-New sessions in the main window default to standard, and the mode picker stays available. Coding, file edits, and commands follow the same path as the browser Web UI. Background sessions the ball delegates also appear in the sidebar, where you can open them, continue chatting, and stop them. The ball’s own Computer Use session does not appear in the sidebar.
+New sessions in the main window default to standard, and the mode picker stays available. Coding, file edits, and commands follow the same path as the browser Web UI. Background sessions the ball delegates also appear in the sidebar under `dsh_orb`, where you can open them, continue chatting, and stop them. The main window keeps its current session when the ball starts or switches Computer Use chats.
 
 Closing the main window does not quit the app. The Dock icon stays after the ball appears. Quit from the Dock, with Cmd+Q, or from the ball’s right-click **Quit DeepSeek Harness**. The Dock icon or the ball’s right-click **Open Main Window** opens the main window again.
 
 ## Use the macOS floating ball
 
-The ball is created only after Host ready. Drag it to a screen edge to dock. Click to expand the panel, and click again to collapse it. The panel has only a transcript, an input, and Stop; there is no mode picker, voice, selection toolbar, or lasso.
+The ball is created only after Host ready. Hover it to expand a white panel; the ball stays in the input corner. Click the ball to pin the panel; click again to unpin, then move away to collapse. Drag moves the ball and keeps it on screen; it does not snap to an edge. The panel shows chat bubbles, a single-line input that sends on Enter, Stop only while that Computer Use session is running, and **New** at the top-right for another Computer Use chat on `dsh_orb`. There is no Send button, mode picker, voice, selection toolbar, or lasso.
 
 The input placeholder is “Ask the desktop agent…”. Sends go to the Computer Use session with a vision model. Stop cancels only that Computer Use session, not sidebar standard sessions. The context menu offers **Open Main Window** and **Quit DeepSeek Harness**; only an explicit Quit ends the process.
 
@@ -58,7 +58,7 @@ Those background sessions are the same kind as a session you type in the main wi
 
 ## Limits
 
-The floating ball is macOS-only. There is no voice, selection toolbar, lasso, drag, or per-click approval. Electron `contentProtection` hides Desktop chrome from captures; ScreenCaptureKit window exclusion is absent. The Computer Use package is a signed runtime extra, not a Desktop Host npm dependency.
+The floating ball is macOS-only. There is no voice, selection toolbar, lasso, or per-click approval. Electron `contentProtection` hides Desktop chrome from captures; ScreenCaptureKit window exclusion is absent. The Computer Use package is a signed runtime extra, not a Desktop Host npm dependency.
 
 ## Continue
 

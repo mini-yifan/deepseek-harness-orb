@@ -22,9 +22,9 @@ import { claimDesktopSingleInstance } from './single-instance.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
 import { desktopErrorState } from './startup-error.ts'
 import { startupFailureDocument } from './startup-document.ts'
-import { createFloatingWindow, dockFloatingWindow, setFloatingExpanded } from './floating-window.ts'
+import { clampFloatingWindow, createFloatingWindow, setFloatingExpanded } from './floating-window.ts'
 import {
-  hiddenSessionBroadcast,
+  ensureOrbWorkspaceDir,
   readFloatingSessionId,
   writeFloatingSessionId,
 } from './floating-session.ts'
@@ -65,6 +65,7 @@ const MIME: Readonly<Record<string, string>> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.svg': 'image/svg+xml',
+  '.gif': 'image/gif',
 }
 
 interface RuntimeResources {
@@ -167,7 +168,6 @@ async function main(): Promise<void> {
   let mainWindow: BrowserWindow | undefined
   let pluginWindow: BrowserWindow | undefined
   let floatingWindow: BrowserWindow | undefined
-  let floatingExpanded = false
   let shellInstallerOwnsQuit = false
   let updateState: DesktopUpdateState = { phase: 'idle' }
   const locale = resolveDesktopLocale(app.getLocale())
@@ -207,13 +207,6 @@ async function main(): Promise<void> {
   const publishBackend = (state: DesktopBackendState): void => {
     for (const window of BrowserWindow.getAllWindows()) {
       window.webContents.send(DESKTOP_IPC.backendState, state)
-    }
-  }
-  const broadcastHiddenSession = (sessionId: string): void => {
-    const script = hiddenSessionBroadcast(sessionId)
-    for (const window of BrowserWindow.getAllWindows()) {
-      if (window === floatingWindow || window === pluginWindow) continue
-      void window.webContents.executeJavaScript(script).catch(() => undefined)
     }
   }
   const ensureFloating = (): void => {
@@ -421,14 +414,12 @@ async function main(): Promise<void> {
     }
     window.setPosition(Math.round(x), Math.round(y))
   })
-  ipcMain.handle(DESKTOP_IPC.floatingDock, (event) => {
-    dockFloatingWindow(requireFloatingWindow(event))
+  ipcMain.handle(DESKTOP_IPC.floatingClamp, (event) => {
+    clampFloatingWindow(requireFloatingWindow(event))
   })
-  ipcMain.handle(DESKTOP_IPC.floatingToggle, (event) => {
-    requireFloatingWindow(event)
-    floatingExpanded = !floatingExpanded
-    if (floatingWindow !== undefined) setFloatingExpanded(floatingWindow, floatingExpanded)
-    return floatingExpanded
+  ipcMain.handle(DESKTOP_IPC.floatingSetExpanded, (event, expanded: unknown) => {
+    if (typeof expanded !== 'boolean') throw new Error('dsh desktop: floating expand requires a boolean')
+    return setFloatingExpanded(requireFloatingWindow(event), expanded)
   })
   ipcMain.handle(DESKTOP_IPC.floatingSessionGet, (event) => {
     requireFloatingWindow(event)
@@ -440,7 +431,10 @@ async function main(): Promise<void> {
       throw new Error('dsh desktop: floating session id must be a non-empty string')
     }
     writeFloatingSessionId(activeProject, sessionId)
-    broadcastHiddenSession(sessionId)
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingOrbWorkspace, (event) => {
+    requireFloatingWindow(event)
+    return ensureOrbWorkspaceDir(paths.orbWorkspace)
   })
   ipcMain.handle(DESKTOP_IPC.floatingFocusMain, (event) => {
     requireFloatingWindow(event)

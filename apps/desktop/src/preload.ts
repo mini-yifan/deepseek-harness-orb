@@ -35,10 +35,11 @@ const api: DshDesktopApi = {
   },
   floating: {
     move: (x, y) => ipcRenderer.invoke(DESKTOP_IPC.floatingMove, x, y) as Promise<void>,
-    dock: () => ipcRenderer.invoke(DESKTOP_IPC.floatingDock) as Promise<void>,
-    toggle: () => ipcRenderer.invoke(DESKTOP_IPC.floatingToggle) as Promise<boolean>,
+    clamp: () => ipcRenderer.invoke(DESKTOP_IPC.floatingClamp) as Promise<void>,
+    setExpanded: expanded => ipcRenderer.invoke(DESKTOP_IPC.floatingSetExpanded, expanded) as ReturnType<DshDesktopApi['floating']['setExpanded']>,
     sessionId: () => ipcRenderer.invoke(DESKTOP_IPC.floatingSessionGet) as Promise<string | undefined>,
     setSessionId: sessionId => ipcRenderer.invoke(DESKTOP_IPC.floatingSessionSet, sessionId) as Promise<void>,
+    orbWorkspacePath: () => ipcRenderer.invoke(DESKTOP_IPC.floatingOrbWorkspace) as Promise<string>,
     focusMain: () => ipcRenderer.invoke(DESKTOP_IPC.floatingFocusMain) as Promise<void>,
     quit: () => ipcRenderer.invoke(DESKTOP_IPC.floatingQuit) as Promise<void>,
   },

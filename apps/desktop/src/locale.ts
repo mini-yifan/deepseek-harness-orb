@@ -53,7 +53,7 @@ export const en = {
   floatingQuit: 'Quit DeepSeek Harness',
   floatingPlaceholder: 'Ask the desktop agent…',
   floatingStop: 'Stop',
-  floatingSend: 'Send',
+  floatingNewConversation: 'New',
   floatingDisconnected: 'Waiting for Desktop Host…',
   floatingTitle: 'Desktop agent',
 } as const
@@ -114,7 +114,7 @@ export const zh = {
   floatingQuit: '退出 DeepSeek Harness',
   floatingPlaceholder: '向桌面 agent 发送消息…',
   floatingStop: '停止',
-  floatingSend: '发送',
+  floatingNewConversation: '新建',
   floatingDisconnected: '正在等待 Desktop Host…',
   floatingTitle: '桌面 agent',
 } as const satisfies DesktopMessages

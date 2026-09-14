@@ -1,6 +1,6 @@
 /** Persist the macOS floating-ball Computer Use Session id in the Desktop profile. */
 
-import { readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 /** Profile-relative JSON file holding the floating-ball Session id. */
@@ -36,11 +36,11 @@ export function writeFloatingSessionId(profileDir: string, sessionId: string): v
 }
 
 /**
- * Script that hides the orb Session from the main-window sidebar and notifies
- * an already-booted client to re-derive the tree.
- * @param sessionId - Computer Use Session identity created for the ball.
- * @returns JavaScript assigned into an `app` renderer.
+ * Create the `dsh_orb` workspace directory when missing.
+ * @param path - absolute directory used as both cwd and sidebar folder.
+ * @returns the same path after `mkdir`.
  */
-export function hiddenSessionBroadcast(sessionId: string): string {
-  return `globalThis.__DSH_HIDDEN_SESSION_IDS__=${JSON.stringify([sessionId])};globalThis.dispatchEvent(new Event('dsh-hidden-sessions-changed'))`
+export function ensureOrbWorkspaceDir(path: string): string {
+  mkdirSync(path, { recursive: true })
+  return path
 }
