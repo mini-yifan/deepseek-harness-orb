@@ -145,19 +145,28 @@ export function expandedOverlayBounds(
   workArea: OverlayRect,
 ): OverlayRect & { horizontal: FloatingHorizontalExpand; vertical: FloatingVerticalExpand } {
   const direction = expandDirection(ball, workArea)
+  const unclamped = overlayBoundsFromBall(ball, direction)
+  return {
+    x: clamp(unclamped.x, workArea.x, workArea.x + workArea.width - unclamped.width),
+    y: clamp(unclamped.y, workArea.y, workArea.y + workArea.height - unclamped.height),
+    width: unclamped.width,
+    height: unclamped.height,
+    ...direction,
+  }
+}
+
+function overlayBoundsFromBall(
+  ball: { readonly x: number; readonly y: number },
+  direction: { readonly horizontal: FloatingHorizontalExpand; readonly vertical: FloatingVerticalExpand },
+): OverlayRect {
   const width = FLOATING_PANEL_SIZE.width
   const height = FLOATING_PANEL_SIZE.height
-  const x = clamp(
-    direction.horizontal === 'left' ? ball.x - (width - FLOATING_BALL_SIZE) : ball.x,
-    workArea.x,
-    workArea.x + workArea.width - width,
-  )
-  const y = clamp(
-    direction.vertical === 'up' ? ball.y - (height - FLOATING_BALL_SIZE) : ball.y,
-    workArea.y,
-    workArea.y + workArea.height - height,
-  )
-  return { x, y, width, height, ...direction }
+  return {
+    x: direction.horizontal === 'left' ? ball.x - (width - FLOATING_BALL_SIZE) : ball.x,
+    y: direction.vertical === 'up' ? ball.y - (height - FLOATING_BALL_SIZE) : ball.y,
+    width,
+    height,
+  }
 }
 
 function currentBallOrigin(window: BrowserWindow, workArea: OverlayRect): { x: number; y: number } {
@@ -234,6 +243,25 @@ export function setFloatingExpanded(window: BrowserWindow, expanded: boolean): F
   const origin = clampedBallOrigin(currentBallOrigin(window, workArea), workArea)
   window.setBounds({ x: origin.x, y: origin.y, width: FLOATING_BALL_SIZE, height: FLOATING_BALL_SIZE })
   return { expanded: false, ...direction }
+}
+
+/**
+ * Move the overlay so the 72px ball origin follows `(x, y)`.
+ * An expanded overlay keeps its stored growth and does not clamp the panel.
+ * @param window - floating overlay.
+ * @param x - ball top-left x in screen coordinates.
+ * @param y - ball top-left y in screen coordinates.
+ */
+export function moveFloatingBall(window: BrowserWindow, x: number, y: number): void {
+  const origin = { x: Math.round(x), y: Math.round(y) }
+  const bounds = window.getBounds()
+  if (bounds.width <= FLOATING_BALL_SIZE && bounds.height <= FLOATING_BALL_SIZE) {
+    window.setPosition(origin.x, origin.y)
+    return
+  }
+  const stored = overlayDirection.get(window)
+  const direction = stored ?? expandDirection(origin, workAreaOf(origin))
+  window.setBounds(overlayBoundsFromBall(origin, direction))
 }
 
 /**

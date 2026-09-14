@@ -22,7 +22,7 @@ import { claimDesktopSingleInstance } from './single-instance.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
 import { desktopErrorState } from './startup-error.ts'
 import { startupFailureDocument } from './startup-document.ts'
-import { clampFloatingWindow, createFloatingWindow, setFloatingExpanded } from './floating-window.ts'
+import { clampFloatingWindow, createFloatingWindow, moveFloatingBall, setFloatingExpanded } from './floating-window.ts'
 import {
   ensureOrbWorkspaceDir,
   readFloatingSessionId,
@@ -412,7 +412,7 @@ async function main(): Promise<void> {
     if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) {
       throw new Error('dsh desktop: floating move requires finite coordinates')
     }
-    window.setPosition(Math.round(x), Math.round(y))
+    moveFloatingBall(window, x, y)
   })
   ipcMain.handle(DESKTOP_IPC.floatingClamp, (event) => {
     clampFloatingWindow(requireFloatingWindow(event))

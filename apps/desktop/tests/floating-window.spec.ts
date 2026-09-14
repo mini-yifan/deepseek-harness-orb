@@ -15,6 +15,7 @@ import {
   floatingContextMenuTemplate,
   FLOATING_BALL_SIZE,
   FLOATING_PANEL_SIZE,
+  moveFloatingBall,
   setFloatingExpanded,
 } from '../src/floating-window.ts'
 
@@ -81,6 +82,41 @@ describe('floating window expand geometry', () => {
     })
     clampFloatingWindow(window as never)
     expect(window.setPosition).toHaveBeenCalledWith(100, 50)
+  })
+
+  it('moves an expanded overlay by ball origin without clamping the panel', async () => {
+    const { screen } = await import('electron')
+    vi.mocked(screen.getDisplayNearestPoint).mockReturnValue({ workArea } as never)
+    const window = {
+      bounds: { x: 900, y: 400, width: FLOATING_BALL_SIZE, height: FLOATING_BALL_SIZE },
+      getBounds() {
+        return this.bounds
+      },
+      setBounds(next: { x: number; y: number; width: number; height: number }) {
+        this.bounds = { ...next }
+      },
+      setPosition: vi.fn(),
+    }
+    setFloatingExpanded(window as never, true)
+    moveFloatingBall(window as never, 900, 380)
+    expect(window.bounds).toEqual({
+      x: 900 - (FLOATING_PANEL_SIZE.width - FLOATING_BALL_SIZE),
+      y: 380 - (FLOATING_PANEL_SIZE.height - FLOATING_BALL_SIZE),
+      width: FLOATING_PANEL_SIZE.width,
+      height: FLOATING_PANEL_SIZE.height,
+    })
+    expect(window.setPosition).not.toHaveBeenCalled()
+  })
+
+  it('moves a collapsed overlay with setPosition', async () => {
+    const window = {
+      getBounds: () => ({ x: 400, y: 300, width: FLOATING_BALL_SIZE, height: FLOATING_BALL_SIZE }),
+      setBounds: vi.fn(),
+      setPosition: vi.fn(),
+    }
+    moveFloatingBall(window as never, 20, 30)
+    expect(window.setPosition).toHaveBeenCalledWith(20, 30)
+    expect(window.setBounds).not.toHaveBeenCalled()
   })
 })
 

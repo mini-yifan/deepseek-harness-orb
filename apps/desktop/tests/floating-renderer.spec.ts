@@ -139,3 +139,92 @@ it('creates a Computer Use session on dsh_orb and sends from the overlay', async
     await expect.poll(() => document.body.classList.contains('pinned')).toBe(true)
   } finally { dom.window.close() }
 })
+
+it('collapses then moves by the ball grab offset instead of the window origin', async () => {
+  const dom = new JSDOM(readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8'), {
+    runScripts: 'outside-only',
+    url: 'dsh-app://shell/floating.html',
+  })
+  let releaseCollapse: (() => void) | undefined
+  const collapseGate = new Promise<void>((resolve) => {
+    releaseCollapse = resolve
+  })
+  const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as { rpcId: string; method: string }
+    let value: unknown = {}
+    if (body.method === 'workspace/create') value = { workspace: { workspaceId: 'ws-orb' }, created: true }
+    if (body.method === 'session/create') value = { sessionId: 'session-orb', agentPreset: 'computer-use' }
+    if (body.method === 'session/modelCatalog') value = { groups: [] }
+    if (body.method === 'session/page') value = { records: [] }
+    if (body.method === 'session/list') value = { items: [{ sessionId: 'session-orb', running: false, projections: { asOfSeq: 0 } }] }
+    return {
+      ok: true,
+      json: async () => ({
+        type: 'server-response',
+        rpcId: body.rpcId,
+        result: { ok: true, value },
+      }),
+    }
+  })
+  Object.defineProperty(dom.window, 'fetch', { value: fetchMock })
+  Object.defineProperty(dom.window, 'crypto', { value: globalThis.crypto })
+  const setSessionId = vi.fn()
+  const setExpanded = vi.fn(async (expanded: boolean) => {
+    if (!expanded) await collapseGate
+    return { expanded, horizontal: 'left', vertical: 'up' }
+  })
+  const api = {
+    locale: async () => resolveDesktopLocale('en'),
+    backend: {
+      status: async () => ({ phase: 'ready' }),
+      subscribe: vi.fn(),
+    },
+    floating: {
+      sessionId: async () => undefined,
+      setSessionId,
+      move: vi.fn(),
+      clamp: vi.fn(),
+      setExpanded,
+      orbWorkspacePath: async () => '/tmp/dsh_orb',
+    },
+  }
+  Object.defineProperty(dom.window, 'dshDesktop', { value: api })
+  const dispatchPointer = (target: EventTarget, type: string, init: Record<string, unknown>) => {
+    const event = new dom.window.Event(type, { bubbles: true })
+    Object.assign(event, init)
+    target.dispatchEvent(event)
+  }
+  try {
+    runInContext(readFileSync(new URL('../renderer/floating.js', import.meta.url), 'utf8'), dom.getInternalVMContext())
+    const document = dom.window.document
+    await expect.poll(() => setSessionId.mock.calls).toEqual([['session-orb']])
+    const ball = document.querySelector('#ball')
+    if (ball === null) throw new Error('missing ball')
+    Object.defineProperty(ball, 'setPointerCapture', { value: vi.fn() })
+    Object.defineProperty(ball, 'getBoundingClientRect', {
+      value: () => ({
+        x: 248,
+        y: 348,
+        left: 248,
+        top: 348,
+        width: 72,
+        height: 72,
+        right: 320,
+        bottom: 420,
+        toJSON() {},
+      }),
+    })
+    dispatchPointer(ball, 'pointerdown', { pointerId: 1, clientX: 268, clientY: 368, screenX: 1000, screenY: 800 })
+    dispatchPointer(ball, 'pointermove', { pointerId: 1, clientX: 268, clientY: 348, screenX: 1000, screenY: 780 })
+    await expect.poll(() => setExpanded.mock.calls.some(call => call[0] === false)).toBe(true)
+    expect(api.floating.move).not.toHaveBeenCalled()
+    releaseCollapse?.()
+    await expect.poll(() => api.floating.move.mock.calls).toEqual([[980, 760]])
+    dispatchPointer(ball, 'pointerup', { pointerId: 1, clientX: 268, clientY: 328, screenX: 1000, screenY: 760 })
+    await expect.poll(() => api.floating.clamp.mock.calls.length).toBe(1)
+    expect(document.body.classList.contains('pinned')).toBe(false)
+  } finally {
+    releaseCollapse?.()
+    dom.window.close()
+  }
+})
