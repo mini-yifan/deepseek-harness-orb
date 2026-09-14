@@ -21,6 +21,13 @@ export const DESKTOP_IPC = {
   updatesCheck: 'dsh-desktop:updates-check',
   updatesInstall: 'dsh-desktop:updates-install',
   updatesState: 'dsh-desktop:updates-state',
+  floatingMove: 'dsh-desktop:floating-move',
+  floatingDock: 'dsh-desktop:floating-dock',
+  floatingToggle: 'dsh-desktop:floating-toggle',
+  floatingSessionGet: 'dsh-desktop:floating-session-get',
+  floatingSessionSet: 'dsh-desktop:floating-session-set',
+  floatingFocusMain: 'dsh-desktop:floating-focus-main',
+  floatingQuit: 'dsh-desktop:floating-quit',
 } as const
 
 /** Desktop release update state rendered by desktop-owned UI. */
@@ -51,6 +58,15 @@ export interface DshDesktopApi {
     check(): Promise<DesktopUpdateState>
     install(): Promise<void>
     subscribe(listener: (state: DesktopUpdateState) => void): () => void
+  }
+  readonly floating: {
+    move(x: number, y: number): Promise<void>
+    dock(): Promise<void>
+    toggle(): Promise<boolean>
+    sessionId(): Promise<string | undefined>
+    setSessionId(sessionId: string): Promise<void>
+    focusMain(): Promise<void>
+    quit(): Promise<void>
   }
 }
 

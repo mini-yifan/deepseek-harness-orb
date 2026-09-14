@@ -84,6 +84,7 @@ describe('computer-use overlay and extra root', () => {
   it('discovers a computer-use preset whose composition is the slim catalog', async () => {
     const composition = await readFile(COMPOSITION, 'utf8')
     expect(composition).toContain('name: \'../../src/index.ts\'')
+    expect(composition).toContain('name: \'../../src/code-agent.ts\'')
     expect(composition).toContain('@deepseek-ai/dsh-tool-bash')
     expect(composition).toContain('@deepseek-ai/dsh-tool-web')
     expect(composition).toContain('@deepseek-ai/dsh-tool-ask-user')
@@ -128,5 +129,6 @@ describe('computer-use scoped registration', () => {
     expect(ctx.tools.schemas().map(schema => schema.name).some(tool => GUI_TOOLS.includes(tool)))
       .toBe(false)
     expect(ctx.tools.schemas(key).map(schema => schema.name).sort()).toEqual(GUI_TOOLS)
+    expect(ctx.tools.schemas(key).map(schema => schema.name)).not.toContain('code_agent')
   })
 })

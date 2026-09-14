@@ -15,9 +15,10 @@ describe('desktop locale dictionaries', () => {
       .toBe('plugin@1.2.3 {missing}')
   })
 
-  it('keeps visible plugin-manager HTML copy in the locale dictionaries', () => {
-    const html = readFileSync(new URL('../renderer/plugin-manager.html', import.meta.url), 'utf8')
-    const staticText = [...html.matchAll(/>([^<]*\p{L}[^<]*)</gu)].map(match => match[1]?.trim())
+  it('keeps visible plugin-manager and floating HTML copy in the locale dictionaries', () => {
+    const plugin = readFileSync(new URL('../renderer/plugin-manager.html', import.meta.url), 'utf8')
+    const floating = readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8')
+    const staticText = [...`${plugin}\n${floating}`.matchAll(/>([^<]*\p{L}[^<]*)</gu)].map(match => match[1]?.trim())
     expect(staticText).toEqual([])
   })
 })

@@ -45,6 +45,8 @@ Electron 根据应用 locale 选择类型化的英文或中文桌面壳文案，
 
 ## 开发
 
+日常从源码启动、主窗口与 macOS 悬浮球的用法见[使用桌面端](../../docs/user/guide/desktop.zh.md)。
+
 `dev:desktop` 会构建当前 Host、客户端 bundle、Web 前端和 Electron 壳，把已构建的 CLI 包、私有 Desktop Host 包及其 workspace 依赖投影为一次性桌面 npm 项目，然后直接启动 Electron；这条路径不下载安装包内的 Node.js，也不从 npm 解析 dsh：
 
 ```sh
@@ -200,3 +202,5 @@ pnpm run prepare:desktop
 - 发布签名、公证、更新托管和跨上一版本的已安装产物验证需要生产发布环境。
 - 依赖包含 lifecycle script 的桌面插件，只有其包名进入桌面项目经过评审的 `allowBuilds` 策略后才能安装。
 - 桌面壳与 CLI dsh 共享 `$DSH_HOME` 下的会话、设置、凭据、工作区和存储，但可执行包、插件激活、锁文件与包管理器状态彼此隔离。
+- macOS 悬浮球是同一 Desktop Host 上的第二扇 Electron overlay。它锁死 Computer Use 会话；委派出的 standard 会话出现在主窗口侧栏。Windows 仍是单主窗口。
+- Computer Use 作为签名 runtime extra 放在 `extraResources/dsh` 下，而不是 Desktop Host 的 npm 依赖。Electron `contentProtection` 会把 Desktop chrome 从截屏中藏起；没有 ScreenCaptureKit 窗口排除。

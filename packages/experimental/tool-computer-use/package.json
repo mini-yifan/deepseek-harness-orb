@@ -16,14 +16,19 @@
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
+    "./code-agent": {
+      "types": "./lib/types/code-agent.d.ts",
+      "default": "./lib/code-agent.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "files": [
     "lib/index.js",
     "lib/preset-root.js",
-    "lib/types/**/*.d.ts",
-    "presets"
+    "lib/code-agent.js",
+    "presets",
+    "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
   "dependencies": {
@@ -35,6 +40,9 @@
     "@deepseek-ai/dsh-llm": "workspace:^",
     "@deepseek-ai/dsh-system-prompt": "workspace:^",
     "@deepseek-ai/dsh-tools": "workspace:^",
+    "@deepseek-ai/dsh-session": "workspace:^",
+    "@deepseek-ai/dsh-brand": "workspace:^",
+    "@deepseek-ai/dsh-api-session-controller": "workspace:^",
     "@deepseek-ai/cordis": "workspace:^"
   },
   "devDependencies": {
@@ -48,6 +56,8 @@
     "@deepseek-ai/dsh-attachment-local": "workspace:^",
     "@deepseek-ai/dsh-llm": "workspace:^",
     "@deepseek-ai/dsh-scope": "workspace:^",
+    "@deepseek-ai/dsh-api-session-controller": "workspace:^",
+    "@deepseek-ai/dsh-brand": "workspace:^",
     "@deepseek-ai/dsh-session": "workspace:^",
     "@deepseek-ai/dsh-session-projection": "workspace:^",
     "@deepseek-ai/dsh-system-prompt": "workspace:^",

@@ -22,6 +22,12 @@ import { claimDesktopSingleInstance } from './single-instance.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
 import { desktopErrorState } from './startup-error.ts'
 import { startupFailureDocument } from './startup-document.ts'
+import { createFloatingWindow, dockFloatingWindow, setFloatingExpanded } from './floating-window.ts'
+import {
+  hiddenSessionBroadcast,
+  readFloatingSessionId,
+  writeFloatingSessionId,
+} from './floating-session.ts'
 
 const SCHEME = 'dsh-app'
 let focusPrimaryWindow = (): void => {}
@@ -48,7 +54,7 @@ protocol.registerSchemesAsPrivileged([{
     standard: true,
     secure: true,
     supportFetchAPI: true,
-    corsEnabled: false,
+    corsEnabled: true,
     stream: true,
     codeCache: true,
   },
@@ -102,6 +108,7 @@ function createWindow(preload: string, show = false): BrowserWindow {
       webSecurity: true,
     },
   })
+  window.setContentProtection(true)
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-navigate', (event, url) => {
     if (new URL(url).protocol !== `${SCHEME}:`) event.preventDefault()
@@ -159,6 +166,8 @@ async function main(): Promise<void> {
   let startup: Promise<void> | undefined
   let mainWindow: BrowserWindow | undefined
   let pluginWindow: BrowserWindow | undefined
+  let floatingWindow: BrowserWindow | undefined
+  let floatingExpanded = false
   let shellInstallerOwnsQuit = false
   let updateState: DesktopUpdateState = { phase: 'idle' }
   const locale = resolveDesktopLocale(app.getLocale())
@@ -200,6 +209,32 @@ async function main(): Promise<void> {
       window.webContents.send(DESKTOP_IPC.backendState, state)
     }
   }
+  const broadcastHiddenSession = (sessionId: string): void => {
+    const script = hiddenSessionBroadcast(sessionId)
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (window === floatingWindow || window === pluginWindow) continue
+      void window.webContents.executeJavaScript(script).catch(() => undefined)
+    }
+  }
+  const ensureFloating = (): void => {
+    if (process.platform !== 'darwin' || quitting) return
+    if (floatingWindow !== undefined && !floatingWindow.isDestroyed()) return
+    floatingWindow = createFloatingWindow(managementPreload, messages, () => {
+      focusPrimaryWindow()
+    }, () => { app.quit() })
+    app.setActivationPolicy('regular')
+    app.dock?.show()
+    floatingWindow.once('closed', () => { floatingWindow = undefined })
+    void floatingWindow.loadURL(`${SCHEME}://shell/floating.html`)
+  }
+  const requireFloatingWindow = (event: IpcMainInvokeEvent): BrowserWindow => {
+    assertDesktopSender(event, ['shell'])
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (window === null || window !== floatingWindow) {
+      throw new Error('dsh desktop: rejected floating IPC from an unowned renderer')
+    }
+    return window
+  }
   const backend = new DesktopBackendController((onFailure) => {
     if (development === undefined) manager.assertProfileRuntime(activeProject)
     const hostInspectPort = developmentHostInspectPort(development !== undefined)
@@ -213,6 +248,7 @@ async function main(): Promise<void> {
   }, (state) => {
     if (state.phase === 'starting' && !emergencyDocument) pageError = undefined
     publishBackend(backendState())
+    if (state.phase === 'ready') ensureFloating()
     if (state.phase === 'error') void navigateMain(startupUrl).catch((error: unknown) => { console.error(error) })
   })
 
@@ -378,6 +414,42 @@ async function main(): Promise<void> {
     assertDesktopSender(event, ['shell'])
     await updates.install()
   })
+  ipcMain.handle(DESKTOP_IPC.floatingMove, (event, x: unknown, y: unknown) => {
+    const window = requireFloatingWindow(event)
+    if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) {
+      throw new Error('dsh desktop: floating move requires finite coordinates')
+    }
+    window.setPosition(Math.round(x), Math.round(y))
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingDock, (event) => {
+    dockFloatingWindow(requireFloatingWindow(event))
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingToggle, (event) => {
+    requireFloatingWindow(event)
+    floatingExpanded = !floatingExpanded
+    if (floatingWindow !== undefined) setFloatingExpanded(floatingWindow, floatingExpanded)
+    return floatingExpanded
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingSessionGet, (event) => {
+    requireFloatingWindow(event)
+    return readFloatingSessionId(activeProject)
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingSessionSet, (event, sessionId: unknown) => {
+    requireFloatingWindow(event)
+    if (typeof sessionId !== 'string' || sessionId === '') {
+      throw new Error('dsh desktop: floating session id must be a non-empty string')
+    }
+    writeFloatingSessionId(activeProject, sessionId)
+    broadcastHiddenSession(sessionId)
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingFocusMain, (event) => {
+    requireFloatingWindow(event)
+    focusPrimaryWindow()
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingQuit, (event) => {
+    requireFloatingWindow(event)
+    app.quit()
+  })
 
   const checkAndPrompt = async (manual: boolean): Promise<void> => {
     const state = await updates.check()
@@ -434,20 +506,24 @@ async function main(): Promise<void> {
     void pluginWindow.loadURL(`${SCHEME}://shell/plugin-manager.html`)
   }
 
-  Menu.setApplicationMenu(Menu.buildFromTemplate([{
-    label: process.platform === 'darwin' ? app.name : messages.application,
-    submenu: [
-      {
-        label: development === undefined ? messages.pluginsMenu : messages.pluginsMenuPackagedOnly,
-        accelerator: 'CmdOrCtrl+,',
-        enabled: development === undefined,
-        click: openPluginWindow,
-      },
-      { label: messages.checkUpdatesMenu, click: () => { void checkAndPrompt(true) } },
-      { type: 'separator' },
-      { role: 'quit' },
-    ],
-  }]))
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    {
+      label: process.platform === 'darwin' ? app.name : messages.application,
+      submenu: [
+        {
+          label: development === undefined ? messages.pluginsMenu : messages.pluginsMenuPackagedOnly,
+          accelerator: 'CmdOrCtrl+,',
+          enabled: development === undefined,
+          click: openPluginWindow,
+        },
+        { label: messages.checkUpdatesMenu, click: () => { void checkAndPrompt(true) } },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
+    { role: 'editMenu' },
+    { role: 'windowMenu' },
+  ]))
 
   const createMainWindow = (): BrowserWindow => {
     const window = createWindow(appPreload, true)
@@ -477,9 +553,7 @@ async function main(): Promise<void> {
     window.focus()
   }
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) focusPrimaryWindow()
-  })
+  app.on('activate', () => { focusPrimaryWindow() })
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()
   })
@@ -493,9 +567,7 @@ async function main(): Promise<void> {
   mainWindow = createMainWindow()
   await reconcileBackend().catch(() => undefined)
   // Window lifecycle callbacks run while backend startup is pending.
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (quitting) return
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
   if (mainWindow !== undefined && development !== undefined && process.env.DSH_DESKTOP_OPEN_DEVTOOLS !== '0') {
     mainWindow.webContents.openDevTools({ mode: 'detach' })
   }

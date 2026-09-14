@@ -26,6 +26,7 @@ import {
 } from './macos-runtime.ts'
 import { resolveDesktopBuildTarget, resolveDesktopTargetBuildPaths } from './desktop-build-paths.mjs'
 import { desktopRuntimeFileExclusion } from './runtime-file-policy.ts'
+import { copyComputerUseRuntimeExtra } from './computer-use-runtime-extra.ts'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
 const BUILD_PATHS = resolveDesktopTargetBuildPaths()
@@ -133,6 +134,10 @@ async function main(): Promise<void> {
         throw new Error(`desktop runtime: missing private Host file ${file}`)
       }
     }
+    copyComputerUseRuntimeExtra(
+      resolve(APP_ROOT, '..', '..', 'packages', 'experimental', 'tool-computer-use'),
+      DSH_OUTPUT_ROOT,
+    )
     if (process.platform === 'darwin') {
       await signMacOSRuntime(DSH_OUTPUT_ROOT, resolveDesktopAppId(process.env), resolveMacOSSigningEnvironment(process.env))
     }

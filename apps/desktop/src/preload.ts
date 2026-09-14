@@ -33,6 +33,15 @@ const api: DshDesktopApi = {
       return () => { ipcRenderer.off(DESKTOP_IPC.updatesState, handle) }
     },
   },
+  floating: {
+    move: (x, y) => ipcRenderer.invoke(DESKTOP_IPC.floatingMove, x, y) as Promise<void>,
+    dock: () => ipcRenderer.invoke(DESKTOP_IPC.floatingDock) as Promise<void>,
+    toggle: () => ipcRenderer.invoke(DESKTOP_IPC.floatingToggle) as Promise<boolean>,
+    sessionId: () => ipcRenderer.invoke(DESKTOP_IPC.floatingSessionGet) as Promise<string | undefined>,
+    setSessionId: sessionId => ipcRenderer.invoke(DESKTOP_IPC.floatingSessionSet, sessionId) as Promise<void>,
+    focusMain: () => ipcRenderer.invoke(DESKTOP_IPC.floatingFocusMain) as Promise<void>,
+    quit: () => ipcRenderer.invoke(DESKTOP_IPC.floatingQuit) as Promise<void>,
+  },
 }
 
 contextBridge.exposeInMainWorld('dshDesktop', api)

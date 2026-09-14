@@ -5,7 +5,7 @@ import type { SessionPendingInteractionBase } from '@deepseek-ai/dsh-client-ui-s
 import type { ScheduleId, ScheduleRecord } from '@deepseek-ai/dsh-schedule/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
-  deriveFlat, deriveGroups, deriveSearchResults, owningGroupKey, workspaceLabel,
+  deriveFlat, deriveGroups, deriveSearchResults, desktopHiddenSessionIds, owningGroupKey, workspaceLabel,
   UNGROUPED_KEY,
 } from '../src/client/tree.ts'
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
@@ -338,6 +338,26 @@ describe('deriveFlat', () => {
     const gone = summary('gone', 2)
     expect(deriveFlat(list(kept, gone), archived('gone'), noAttention).map(row => row.id)).toEqual([kept.id])
   })
+
+  it('omits a Desktop floating-ball session and keeps a delegated standard session', () => {
+    const orb = summary('orb-cu', 3)
+    const delegated = summary('word-doc', 2)
+    const other = summary('other', 1)
+    const sessions = list(orb, delegated, other)
+    const hidden = [orb.id]
+    expect(deriveFlat(sessions, noArchive, noAttention, hidden).map(row => row.id))
+      .toEqual([delegated.id, other.id])
+    const groups = deriveGroups(
+      sessions, [workspace('desk', ['orb-cu', 'word-doc', 'other'])], noArchive, noAttention, {
+        expandedGroups: ['desk'],
+        hiddenSessionIds: hidden,
+      },
+    )
+    expect(groups[0]!.sessions.map(session => session.id)).toEqual([delegated.id, other.id])
+    expect(deriveSearchResults(
+      sessions, [], 'word', noArchive, noAttention, { items: [], hasMore: false }, 10, hidden,
+    ).items.map(item => item.id)).toEqual([delegated.id])
+  })
 })
 
 describe('deriveSearchResults archive filtering', () => {
@@ -532,5 +552,25 @@ describe('workspaceLabel', () => {
     expect(workspaceLabel('/projects/demo/')).toBe('demo')
     expect(workspaceLabel('C:\\projects\\demo\\')).toBe('demo')
     expect(workspaceLabel('/')).toBe('/')
+  })
+})
+
+describe('desktopHiddenSessionIds', () => {
+  it('reads string ids from the Desktop inject and ignores other values', () => {
+    const previous = (globalThis as { __DSH_HIDDEN_SESSION_IDS__?: unknown }).__DSH_HIDDEN_SESSION_IDS__
+    try {
+      delete (globalThis as { __DSH_HIDDEN_SESSION_IDS__?: unknown }).__DSH_HIDDEN_SESSION_IDS__
+      expect(desktopHiddenSessionIds()).toEqual([])
+      ;(globalThis as { __DSH_HIDDEN_SESSION_IDS__?: unknown }).__DSH_HIDDEN_SESSION_IDS__ = 'orb'
+      expect(desktopHiddenSessionIds()).toEqual([])
+      ;(globalThis as { __DSH_HIDDEN_SESSION_IDS__?: unknown }).__DSH_HIDDEN_SESSION_IDS__ = ['orb', 1, 'delegated']
+      expect(desktopHiddenSessionIds()).toEqual(['orb', 'delegated'])
+    } finally {
+      if (previous === undefined) {
+        delete (globalThis as { __DSH_HIDDEN_SESSION_IDS__?: unknown }).__DSH_HIDDEN_SESSION_IDS__
+      } else {
+        (globalThis as { __DSH_HIDDEN_SESSION_IDS__?: unknown }).__DSH_HIDDEN_SESSION_IDS__ = previous
+      }
+    }
   })
 })

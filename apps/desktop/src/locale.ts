@@ -49,6 +49,13 @@ export const en = {
   refreshing: 'Refreshing…',
   refreshed: 'Plugin list refreshed.',
   loadingPlugins: 'Reading Desktop plugins…',
+  floatingOpenMain: 'Open Main Window',
+  floatingQuit: 'Quit DeepSeek Harness',
+  floatingPlaceholder: 'Ask the desktop agent…',
+  floatingStop: 'Stop',
+  floatingSend: 'Send',
+  floatingDisconnected: 'Waiting for Desktop Host…',
+  floatingTitle: 'Desktop agent',
 } as const
 
 /** Every Desktop locale supplies the complete English key set. */
@@ -103,6 +110,13 @@ export const zh = {
   refreshing: '正在刷新…',
   refreshed: '插件列表已刷新。',
   loadingPlugins: '正在读取桌面插件…',
+  floatingOpenMain: '打开主窗口',
+  floatingQuit: '退出 DeepSeek Harness',
+  floatingPlaceholder: '向桌面 agent 发送消息…',
+  floatingStop: '停止',
+  floatingSend: '发送',
+  floatingDisconnected: '正在等待 Desktop Host…',
+  floatingTitle: '桌面 agent',
 } as const satisfies DesktopMessages
 
 /** Locale payload exposed to the Desktop-owned renderer. */
