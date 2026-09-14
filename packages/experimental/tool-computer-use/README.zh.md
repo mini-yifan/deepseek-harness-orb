@@ -105,7 +105,9 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 | [`src/preset-root.ts`](src/preset-root.ts) | 仅 overlay 使用的插件：发布额外的 agent-presets 根目录 |
 | [`src/plugin.ts`](src/plugin.ts) | 共享的 `applyComputerUse`：策略、五个 GUI 工具、首帧 pre-step |
 | [`src/code-agent.ts`](src/code-agent.ts) | 仅 Computer Use 的 `code_agent`：`session.create` / `session.prompt` |
-| [`src/macos.ts`](src/macos.ts) | Darwin 通过 `screencapture` 捕获；click、scroll 与 hotkey 走 JXA `CGEvent`；`input_text` 通过 NSPasteboard 粘贴 |
+| [`src/macos.ts`](src/macos.ts) | Darwin 通过 `screencapture` 捕获，或在设置了 overlay 窗口 id 时走 ScreenCaptureKit `excludingWindows`；click、scroll 与 hotkey 走 JXA `CGEvent`；`input_text` 通过 NSPasteboard 粘贴 |
+| [`src/macos-sck-capture.swift`](src/macos-sck-capture.swift) | Darwin helper：省略 overlay CGWindowID 的显示捕获 |
+| [`src/overlay-guard.ts`](src/overlay-guard.ts) | 可选的 Desktop overlay 遮蔽：把 capture 与 HID 包进 `wrapDesktopBackend` |
 | [`presets/computer-use/`](presets/computer-use/) | Computer Use agent preset：Shell、网页、GUI 工具、`code_agent`、`ask_user_question`、压缩 |
 | — | 不发布运行时不变式伴生入口，因为本插件不引入新的会话事件；观察结果走现有的 `user/message` 与 `tool/result`。 |
 
@@ -121,6 +123,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 - [添加工具](../../../docs/cookbook/adding-a-tool.zh.md) — UI 呈现意图（`generic`）与内容中的图片块。
 - [Computer Use Agent Note](../../../.agents/notes/implemented/feature/2026-09-13-experimental-computer-use.zh.md) — 插件 vs Skill vs loop、Computer Use agent preset、结果内观察，以及同意门槛。
 - [桌面悬浮球](../../../.agents/notes/implemented/feature/2026-09-14-desktop-floating-orb.zh.md) — macOS overlay、runtime extra，以及一等 `code_agent` 会话。
+- [桌面 overlay-guard](../../../.agents/notes/implemented/architecture/2026-09-14-desktop-overlay-guard.zh.md) — 悬浮球的截屏排除与 HID 点击穿透。
 - [Headless computer-use snapshot](../../../snapshots/session/computer-use/snapshot.yml) — 在假桌面与视觉模型上人工编写的点击循环。
 
 -----
@@ -189,7 +192,7 @@ Route the user's request yourself:
 - **仅 macOS** — 捕获与 HID 输入在 Darwin 上实现；其他平台在执行时抛错。
 - **屏幕录制与辅助功能 TCC** — 捕获需要屏幕录制；点击、输入、滚动与热键需要辅助功能。插件不会提示授予这些权限。
 - **没有逐次点击批准** — 安装或 patch 插件就是同意门槛；视觉循环不能在每个动作上询问。
-- **宿主 chrome 会出现在截屏中** — Web 窗口会出现在捕获中。Desktop 会在 Electron 主窗口和 macOS overlay 上设置 `contentProtection`；没有 ScreenCaptureKit 窗口排除。
+- **宿主 chrome 会出现在截屏中** — Web 窗口会出现在捕获中。Desktop 主窗口始终可被截到。macOS overlay 由 ScreenCaptureKit `excludingWindows` 从 Computer Use 截图中省略（整扇 overlay 窗，含展开面板），并只在对应的 HID 突发期间通过带确认的 overlay-guard IPC 点击穿透。
 - **输入会使用字符串剪贴板** — `input_text` 通过 Cmd+V 粘贴，并在之后恢复先前的字符串剪贴板。其他剪贴板类型不会被恢复。
 - **Retina 与附件尺寸** — backing scale 可能与附件栅格不同；使用 0–1000 空间以及信封中的倍率。
 - **固定等待** — 动作后延迟只有 `postActionWaitMs`；没有像素差 stall。

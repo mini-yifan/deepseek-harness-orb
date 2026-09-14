@@ -65,6 +65,7 @@ describe('desktop package-set selection', () => {
     const files = [
       'package/lib/index.js',
       'package/lib/computer-use-preset-root.js',
+      'package/lib/computer-use-overlay-guard.js',
       'package/config/desktop.cordis.patch.yml',
     ]
     expect(() => {

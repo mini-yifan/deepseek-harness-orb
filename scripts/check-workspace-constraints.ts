@@ -65,6 +65,7 @@ const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
   '@deepseek-ai/dsh-desktop-host': [
     'lib/index.js',
     'lib/computer-use-preset-root.js',
+    'lib/computer-use-overlay-guard.js',
     'config/desktop.cordis.patch.yml',
   ],
   // Sourcemaps stay out by payload policy; the worker-preview surface
@@ -191,6 +192,7 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
     'lib/preset-root.js',
     'lib/code-agent.js',
     'presets',
+    'lib/macos-sck-capture',
   ],
 }
 

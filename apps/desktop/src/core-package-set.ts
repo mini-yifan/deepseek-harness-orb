@@ -17,6 +17,7 @@ export const DESKTOP_HOST_PACKAGE = '@deepseek-ai/dsh-desktop-host'
 export const DESKTOP_HOST_RUNTIME_FILES = [
   'lib/index.js',
   'lib/computer-use-preset-root.js',
+  'lib/computer-use-overlay-guard.js',
   'config/desktop.cordis.patch.yml',
 ] as const
 

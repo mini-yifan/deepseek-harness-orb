@@ -36,6 +36,9 @@
     - id: computer-use-preset-root
       name: '../lib/computer-use-preset-root.js'
 
+    - id: computer-use-overlay-guard
+      name: '../lib/computer-use-overlay-guard.js'
+
 - id: agent-presets
   inject: [computerUsePresetRoot]
   config:

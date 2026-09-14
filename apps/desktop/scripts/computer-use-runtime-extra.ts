@@ -36,6 +36,12 @@ export function copyComputerUseRuntimeExtra(sourceDir: string, runtimeDir: strin
       throw new Error(`desktop runtime: Computer Use extra is missing built ${entry}`)
     }
   }
+  const indexJs = readFileSync(join(sourceDir, 'lib/index.js'), 'utf8')
+  if (!indexJs.includes('wrapDesktopBackend') || !indexJs.includes('computerUseOverlayGuard')) {
+    throw new Error(
+      'desktop runtime: Computer Use extra is missing overlay-guard wrap; rebuild @deepseek-ai/dsh-experimental-tool-computer-use',
+    )
+  }
   rmSync(destDir, { recursive: true, force: true })
   mkdirSync(destDir, { recursive: true })
   cpSync(join(sourceDir, 'package.json'), join(destDir, 'package.json'))

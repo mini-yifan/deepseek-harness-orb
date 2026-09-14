@@ -40,10 +40,10 @@ Web overlay 只插入 `computer-use-preset-root`，由它提供本包旁的额�
 
 ## 影响
 
-在 Computer Use preset 中、具备图片能力的路由上挂载该插件，会在每次请求中增加策略 token、五个互斥 GUI schema 以及 `code_agent`，再加上首帧通知与每次 GUI 结果的图片 token，直到压缩。纯文本路由仍能用于编码会话：跳过首帧附件，GUI 工具以路由诊断失败。macOS 需要屏幕录制与辅助功能；缺少权限时，捕获或输入会失败，并指出对应的 TCC。`input_text` 在粘贴期间覆盖字符串剪贴板，并在之后恢复。Web chrome 会出现在截屏中。Desktop 会在窗口上设置 Electron `contentProtection`；没有 ScreenCaptureKit 窗口排除。没有逐次点击批准、像素差 settle、拖拽，也没有 `dsh-base` 默认项。
+在 Computer Use preset 中、具备图片能力的路由上挂载该插件，会在每次请求中增加策略 token、五个互斥 GUI schema 以及 `code_agent`，再加上首帧通知与每次 GUI 结果的图片 token，直到压缩。纯文本路由仍能用于编码会话：跳过首帧附件，GUI 工具以路由诊断失败。macOS 需要屏幕录制与辅助功能；缺少权限时，捕获或输入会失败，并指出对应的 TCC。`input_text` 在粘贴期间覆盖字符串剪贴板，并在之后恢复。Web chrome 会出现在截屏中。Desktop 主窗口始终可被截到；macOS overlay 由 ScreenCaptureKit 窗口排除从 Computer Use 截图中省略，并只在对应的 HID 突发期间点击穿透。没有逐次点击批准、像素差 settle、拖拽，也没有 `dsh-base` 默认项。
 
 ## 测试
 
-包测试只使用假桌面。它们覆盖坐标映射、热键拒绝、工具 execute/render、首帧 pre-step、纯文本拒绝、HMR、通过仅测试 `cordis.yml` 的 Loader 组合，一次进程内 agent-loop 点击把图片块放到 `user/message` 与 `tool/result` 上，仅 overlay 使用的 preset-root locator、overlay YAML（不在 Host 插入 GUI 工具，`agent-presets` 注入 `computerUsePresetRoot`）、该 inject 之后对 `!!js ctx.computerUsePresetRoot` 的 Loader 插值、额外 preset 的 `scanRoot`、Host `schemas()` 中不出现的作用域 GUI 工具，以及 `code_agent` 创建/续写/拒绝路径（追加与侧栏会话相同的 `user/message` 事件）。注入的 macOS `CommandRunner` 测试断言生成的 JXA 含有 `clickAt`、`pasteText`、`chord` 与 `CGEventCreateScrollWheelEvent2`。
+包测试只使用假桌面。它们覆盖坐标映射、热键拒绝、工具 execute/render、首帧 pre-step、纯文本拒绝、HMR、通过仅测试 `cordis.yml` 的 Loader 组合，一次进程内 agent-loop 点击把图片块放到 `user/message` 与 `tool/result` 上，仅 overlay 使用的 preset-root locator、overlay YAML（不在 Host 插入 GUI 工具，`agent-presets` 注入 `computerUsePresetRoot`）、该 inject 之后对 `!!js ctx.computerUsePresetRoot` 的 Loader 插值、额外 preset 的 `scanRoot`、Host `schemas()` 中不出现的作用域 GUI 工具，以及 `code_agent` 创建/续写/拒绝路径（追加与侧栏会话相同的 `user/message` 事件）。注入的 macOS `CommandRunner` 测试断言生成的 JXA 含有 `clickAt`、`pasteText`、`chord` 与 `CGEventCreateScrollWheelEvent2`，设置 overlay 窗口 id 时的 helper argv，以及不回退到 `screencapture`。
 
 人工编写的 headless overlay [`snapshots/session/computer-use/`](../../../../snapshots/session/computer-use/) 挂载场景本地的假桌面插件，以及视觉模型 `deepseek-v4-flash-vision-exp`，并把 `postActionWaitMs` 设为 `0`。回放使用固定 PNG，绝不驱动真实桌面。该 overlay 会桩掉 `sessionController` 并注册 `code_agent`，以便 header pin 含有该 schema；headless 没有 Session Remote。该插件不在已发布的 `dsh-base` 中。

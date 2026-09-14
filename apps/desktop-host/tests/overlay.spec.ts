@@ -23,6 +23,8 @@ describe('desktop Computer Use overlay', () => {
     const overlay = readFileSync(OVERLAY, 'utf8')
     expect(overlay).toContain('id: computer-use-preset-root')
     expect(overlay).toContain("name: '../lib/computer-use-preset-root.js'")
+    expect(overlay).toContain('id: computer-use-overlay-guard')
+    expect(overlay).toContain("name: '../lib/computer-use-overlay-guard.js'")
     expect(overlay).toContain('inject: [computerUsePresetRoot]')
     expect(overlay).toContain('default: standard')
     expect(overlay).not.toContain('default: computer-use')

@@ -6,10 +6,12 @@ import { FAKE_DESKTOP_PNG } from '../src/fake.ts'
 import {
   createMacosDesktopBackend,
   LIST_SCREENS_SCRIPT,
+  macosSckCaptureHelperPath,
   runCommand,
   writeCaptureFile,
   type CommandRunner,
 } from '../src/macos.ts'
+import { runWithCaptureExcludeWindowIds } from '../src/capture-exclude.ts'
 
 const SCREEN: Record<string, number> = {
   index: 0, x: 0, y: 0, width: 100, height: 50, scale: 2,
@@ -24,9 +26,15 @@ function runner(options: {
   capture?: Uint8Array | Error
   osascript?: Error
   scripts?: string[]
+  files?: string[]
+  args?: string[][]
 }): CommandRunner {
   const scripts = options.scripts ?? []
+  const files = options.files ?? []
+  const capturedArgs = options.args
   return async (file, args) => {
+    files.push(file)
+    capturedArgs?.push([...args])
     if (file === '/usr/bin/osascript') {
       const script = args[2] === '-e' ? (args[3] ?? '') : await readFile(String(args[2]), 'utf8')
       scripts.push(script)
@@ -36,9 +44,11 @@ function runner(options: {
       }
       return { stdout: '', stderr: '' }
     }
-    if (file === '/usr/sbin/screencapture') {
+    if (file === '/usr/sbin/screencapture' || file === macosSckCaptureHelperPath()) {
       if (options.capture instanceof Error) throw options.capture
-      const output = args.at(-1)
+      const output = file === macosSckCaptureHelperPath()
+        ? args.find(arg => arg.startsWith('--out='))?.slice('--out='.length)
+        : args.at(-1)
       if (typeof output !== 'string') throw new Error('missing capture path')
       await writeCaptureFile(output, options.capture ?? FAKE_DESKTOP_PNG)
       return { stdout: '', stderr: '' }
@@ -103,6 +113,36 @@ describe('macOS backend with an injected runner', () => {
     const [screen] = await backend.listScreens()
     const captured = await backend.capture(screen!)
     expect(captured.mediaType).toBe('image/jpeg')
+  })
+
+  it('uses the ScreenCaptureKit helper when overlay window ids are active', async () => {
+    const files: string[] = []
+    const args: string[][] = []
+    const backend = createMacosDesktopBackend(runner({ files, args }))
+    const [screen] = await backend.listScreens()
+    files.length = 0
+    args.length = 0
+    const captured = await runWithCaptureExcludeWindowIds([4242], () => backend.capture(screen!))
+    expect(captured.mediaType).toBe('image/png')
+    expect(files).toEqual([macosSckCaptureHelperPath()])
+    expect(args[0]).toEqual([
+      '--rect=0,0,100,50',
+      '--exclude=4242',
+      expect.stringMatching(/^--out=/u),
+    ])
+  })
+
+  it('does not fall back to screencapture when overlay-exclude capture fails', async () => {
+    const files: string[] = []
+    const backend = createMacosDesktopBackend(runner({
+      files,
+      capture: new Error('window missing'),
+    }))
+    const [screen] = await backend.listScreens()
+    files.length = 0
+    await expect(runWithCaptureExcludeWindowIds([7], () => backend.capture(screen!)))
+      .rejects.toThrow(/overlay-exclude capture failed/u)
+    expect(files).toEqual([macosSckCaptureHelperPath()])
   })
 
 

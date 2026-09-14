@@ -38,6 +38,12 @@ import {
   type DesktopHostRequestFrame,
 } from './wire.ts'
 import { computerUsePresetRoot } from './computer-use-preset-root.ts'
+import {
+  clearOverlayGuardTransport,
+  completeOverlayGuardAck,
+  setOverlayGuardTransport,
+  type OverlayGuardIpcEvent,
+} from './computer-use-overlay-guard.ts'
 
 export { DESKTOP_HOST_PROTOCOL_VERSION } from './wire.ts'
 export { computerUsePresetRoot, COMPUTER_USE_PACKAGE } from './computer-use-preset-root.ts'
@@ -55,6 +61,10 @@ export interface DesktopHostFetchCommand {
 /** Commands accepted by the desktop child process. */
 export type DesktopHostCommand = {
   readonly type: 'shutdown'
+} | {
+  readonly type: 'overlay-guard-ack'
+  readonly requestId: number
+  readonly excludeWindowIds: readonly number[]
 }
 
 /** Events emitted by the desktop child process. */
@@ -65,7 +75,7 @@ export type DesktopHostEvent = {
 } | {
   readonly type: 'fatal'
   readonly message: string
-}
+} | OverlayGuardIpcEvent
 
 /** Controller returned to tests and the self-executing process entry. */
 export interface DesktopHostController {
@@ -83,9 +93,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
+function isExcludeWindowIds(value: unknown): value is readonly number[] {
+  return Array.isArray(value) && value.every(id => typeof id === 'number' && Number.isInteger(id) && id >= 1)
+}
+
 function isDesktopHostCommand(message: unknown): message is DesktopHostCommand {
-  return typeof message === 'object' && message !== null && 'type' in message
-    && (message as Record<string, unknown>).type === 'shutdown'
+  if (typeof message !== 'object' || message === null || !('type' in message)) return false
+  const candidate = message as Record<string, unknown>
+  switch (candidate.type) {
+    case 'shutdown':
+      return true
+    case 'overlay-guard-ack':
+      return typeof candidate.requestId === 'number' && Number.isInteger(candidate.requestId)
+        && candidate.requestId >= 1 && isExcludeWindowIds(candidate.excludeWindowIds)
+    default:
+      return false
+  }
 }
 
 interface PackageManifest {
@@ -418,6 +441,7 @@ async function main(): Promise<void> {
       if ((error as NodeJS.ErrnoException).code !== 'ERR_IPC_CHANNEL_CLOSED') throw error
     }
   }
+  setOverlayGuardTransport(send)
   const controller = await runDesktopHost(runtimeDir, projectDir, writeResponse, { allowLinkedPackages: option !== undefined })
   send({
     type: 'ready',
@@ -440,6 +464,7 @@ async function main(): Promise<void> {
   const stop = (exitCode = 0): Promise<void> => {
     requestedExitCode = Math.max(requestedExitCode, exitCode)
     stopping ??= (async () => {
+      clearOverlayGuardTransport(new Error('dsh desktop: Host is stopping'))
       requestPipe.pause()
       requestPipe.removeAllListeners('data')
       const stopped = new Error('dsh desktop: Host is stopping')
@@ -585,7 +610,16 @@ async function main(): Promise<void> {
       void stop(1)
       return
     }
-    void stop()
+    switch (message.type) {
+      case 'shutdown':
+        void stop()
+        return
+      case 'overlay-guard-ack':
+        completeOverlayGuardAck(message.requestId, message.excludeWindowIds)
+        return
+      default:
+        message satisfies never
+    }
   })
   process.once('disconnect', () => { void stop() })
   process.once('SIGTERM', () => { void stop() })

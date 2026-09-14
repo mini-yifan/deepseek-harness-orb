@@ -22,7 +22,16 @@ import { claimDesktopSingleInstance } from './single-instance.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
 import { desktopErrorState } from './startup-error.ts'
 import { startupFailureDocument } from './startup-document.ts'
-import { clampFloatingWindow, createFloatingWindow, moveFloatingBall, setFloatingExpanded } from './floating-window.ts'
+import {
+  applyFloatingOverlayGuard,
+  clampFloatingWindow,
+  createFloatingWindow,
+  moveFloatingBall,
+  OVERLAY_GUARD_INPUT_APPLY_MS,
+  overlayWindowExcludeIds,
+  resetFloatingOverlayGuard,
+  setFloatingExpanded,
+} from './floating-window.ts'
 import {
   ensureOrbWorkspaceDir,
   readFloatingSessionId,
@@ -34,6 +43,14 @@ let focusPrimaryWindow = (): void => {}
 type RecoveryAction = 'restart' | 'plugins' | 'reset'
 let profileRecoveryAvailable = (): boolean => false
 const emergencyPages = new WeakMap<BrowserWindow, { url: string; message: string; busy: boolean }>()
+
+function overlayGuardInputApplyDelay(): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, OVERLAY_GUARD_INPUT_APPLY_MS)
+    timer.unref()
+  })
+}
+
 let recoverApplication = (action: RecoveryAction): Promise<void> => {
   if (action !== 'restart') return Promise.reject(new Error('Desktop recovery could not initialize; reinstall the application'))
   app.relaunch()
@@ -109,7 +126,6 @@ function createWindow(preload: string, show = false): BrowserWindow {
       webSecurity: true,
     },
   })
-  window.setContentProtection(true)
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('will-navigate', (event, url) => {
     if (new URL(url).protocol !== `${SCHEME}:`) event.preventDefault()
@@ -228,14 +244,42 @@ async function main(): Promise<void> {
     }
     return window
   }
+  const restoreOverlayGuard = (): void => {
+    if (floatingWindow === undefined || floatingWindow.isDestroyed()) return
+    resetFloatingOverlayGuard(floatingWindow)
+  }
   const backend = new DesktopBackendController((onFailure) => {
     if (development === undefined) manager.assertProfileRuntime(activeProject)
     const hostInspectPort = developmentHostInspectPort(development !== undefined)
-    const host = new DesktopHostProcess(resources.node, development ?? resources.dsh, activeProject,
-      hostInspectPort, process.env, onFailure)
+    const host = new DesktopHostProcess(
+      resources.node,
+      development ?? resources.dsh,
+      activeProject,
+      hostInspectPort,
+      process.env,
+      (error) => {
+        restoreOverlayGuard()
+        onFailure(error)
+      },
+      (event) => {
+        if (floatingWindow === undefined || floatingWindow.isDestroyed()) return []
+        applyFloatingOverlayGuard(floatingWindow, event.mode, event.action)
+        const ids = overlayWindowExcludeIds(floatingWindow)
+        if (event.mode === 'input' && event.action === 'begin') {
+          return overlayGuardInputApplyDelay().then(() => ids)
+        }
+        return ids
+      },
+    )
     return {
       start: () => host.start(),
-      stop: () => host.stop(),
+      stop: async () => {
+        try {
+          await host.stop()
+        } finally {
+          restoreOverlayGuard()
+        }
+      },
       fetch: (request: Request) => host.fetch(request),
     }
   }, (state) => {

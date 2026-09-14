@@ -4,7 +4,8 @@
  * so mouse/hotkey/scroll use numeric event types with a retained event source
  * and intra-event sleeps, and `input_text` pastes via NSPasteboard + Cmd+V.
  * Tests inject a {@link CommandRunner}; production uses `/usr/bin/osascript`
- * and `/usr/sbin/screencapture`.
+ * and `/usr/sbin/screencapture`, or the ScreenCaptureKit helper when overlay
+ * window ids are active.
  * @module @deepseek-ai/dsh-experimental-tool-computer-use/src/macos
  */
 
@@ -12,7 +13,9 @@ import { execFile } from 'node:child_process'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
+import { activeCaptureExcludeWindowIds } from './capture-exclude.ts'
 import type {
   CapturedScreen,
   ClickInput,
@@ -46,6 +49,15 @@ export type CommandRunner = (
 
 const SCREENCAPTURE = '/usr/sbin/screencapture'
 const OSASCRIPT = '/usr/bin/osascript'
+
+/**
+ * Absolute path of the Darwin ScreenCaptureKit overlay-exclude helper.
+ * The binary sits in `lib/` next to the bundled plugin; source tests resolve the same file.
+ * @returns the helper executable path.
+ */
+export function macosSckCaptureHelperPath(): string {
+  return fileURLToPath(new URL('../lib/macos-sck-capture', import.meta.url))
+}
 
 /** JXA that lists NSScreen frames converted to top-left Quartz coordinates. */
 export const LIST_SCREENS_SCRIPT = `ObjC.import('AppKit')
@@ -340,16 +352,29 @@ export function createMacosDesktopBackend(run: CommandRunner = runCommand): Desk
     async capture(screen, signal) {
       const dir = await mkdtemp(join(tmpdir(), 'dsh-computer-use-'))
       const file = join(dir, 'screen.jpg')
+      const excludeWindowIds = activeCaptureExcludeWindowIds()
       try {
         const { x, y, width, height } = screen.bounds
-        await run(SCREENCAPTURE, [
-          '-x', '-C', '-t', 'jpg',
-          '-R', `${Math.round(x)},${Math.round(y)},${Math.round(width)},${Math.round(height)}`,
-          file,
-        ], { signal })
+        const rect = `${Math.round(x)},${Math.round(y)},${Math.round(width)},${Math.round(height)}`
+        if (excludeWindowIds.length === 0) {
+          await run(SCREENCAPTURE, ['-x', '-C', '-t', 'jpg', '-R', rect, file], { signal })
+        } else {
+          try {
+            await run(macosSckCaptureHelperPath(), [
+              `--rect=${rect}`,
+              `--exclude=${excludeWindowIds.join(',')}`,
+              `--out=${file}`,
+            ], { signal })
+          } catch (error: unknown) {
+            throw new Error(`computer-use: overlay-exclude capture failed: ${errorDetail(error)}`)
+          }
+        }
         const data = await readFile(file)
         return { data, mediaType: mediaTypeOf(data) }
       } catch (error: unknown) {
+        if (error instanceof Error && error.message.startsWith('computer-use: overlay-exclude capture failed:')) {
+          throw error
+        }
         throw new Error(
           `computer-use: screen capture failed (Screen Recording permission is required): ${errorDetail(error)}`,
         )

@@ -29,6 +29,10 @@ interface PendingResponse {
   removeAbort?: () => void
 }
 
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1
+}
+
 function isDesktopHostEvent(message: unknown): message is DesktopHostEvent {
   if (typeof message !== 'object' || message === null || !('type' in message)) return false
   const candidate = message as Record<string, unknown>
@@ -37,9 +41,23 @@ function isDesktopHostEvent(message: unknown): message is DesktopHostEvent {
       return candidate.protocolVersion === DESKTOP_HOST_PROTOCOL_VERSION && typeof candidate.dshVersion === 'string'
     case 'fatal':
       return typeof candidate.message === 'string'
+    case 'overlay-guard':
+      return isPositiveInteger(candidate.requestId)
+        && (candidate.action === 'begin' || candidate.action === 'end')
+        && (candidate.mode === 'capture' || candidate.mode === 'input')
     default:
       return false
   }
+}
+
+function invalidDesktopHostEventMessage(message: unknown): string {
+  if (typeof message === 'object' && message !== null && 'type' in message) {
+    const candidate = message as Record<string, unknown>
+    if (candidate.type === 'ready' && candidate.protocolVersion !== DESKTOP_HOST_PROTOCOL_VERSION) {
+      return `dsh desktop host protocol ${String(candidate.protocolVersion)} does not match Electron protocol ${String(DESKTOP_HOST_PROTOCOL_VERSION)}`
+    }
+  }
+  return 'dsh desktop host sent an invalid IPC event'
 }
 
 function errorOf(reason: unknown, fallback: string): Error {
@@ -92,6 +110,8 @@ export class DesktopHostProcess {
    * @param inspectPort - optional loopback inspector port for workspace development.
    * @param environment - Child environment; runtime and package-manager overrides are removed.
    * @param onFailure - Receives the first fatal child or transport failure, including after readiness.
+   * @param onOverlayGuard - Apply overlay chrome and return overlay CGWindowIDs to exclude from capture.
+   * May be async so input begin can settle click-through before the ack; omitted when no overlay exists.
    */
   constructor(
     private readonly node: string,
@@ -100,6 +120,9 @@ export class DesktopHostProcess {
     private readonly inspectPort?: number,
     private readonly environment: NodeJS.ProcessEnv = process.env,
     private readonly onFailure?: (error: Error) => void,
+    private readonly onOverlayGuard?: (
+      event: Extract<DesktopHostEvent, { type: 'overlay-guard' }>,
+    ) => readonly number[] | void | Promise<readonly number[] | void>,
   ) {}
 
   /** Start the child once and resolve only after its complete composition is active. */
@@ -144,7 +167,7 @@ export class DesktopHostProcess {
     responsePipe.once('error', (error) => { this.fail(error) })
     child.on('message', (message: unknown) => {
       if (!isDesktopHostEvent(message)) {
-        this.fail(new Error('dsh desktop host sent an invalid IPC event'))
+        this.fail(new Error(invalidDesktopHostEventMessage(message)))
         child.kill('SIGTERM')
         return
       }
@@ -401,9 +424,37 @@ export class DesktopHostProcess {
       case 'fatal':
         this.fail(new Error(message.message))
         return
+      case 'overlay-guard':
+        void this.dispatchOverlayGuard(message)
+        return
       default:
         message satisfies never
     }
+  }
+
+  private async dispatchOverlayGuard(
+    message: Extract<DesktopHostEvent, { type: 'overlay-guard' }>,
+  ): Promise<void> {
+    let excludeWindowIds: readonly number[] = []
+    try {
+      excludeWindowIds = await this.onOverlayGuard?.(message) ?? []
+    } catch (error) {
+      this.fail(errorOf(error, 'dsh desktop overlay-guard failed'))
+      return
+    }
+    this.ackOverlayGuard(message.requestId, excludeWindowIds)
+  }
+
+  private ackOverlayGuard(requestId: number, excludeWindowIds: readonly number[]): void {
+    const child = this.child
+    if (child === undefined || !child.connected) return
+    child.send({
+      type: 'overlay-guard-ack',
+      requestId,
+      excludeWindowIds,
+    } satisfies DesktopHostCommand, (error) => {
+      if (error !== null) this.fail(error)
+    })
   }
 
   private fail(error: Error): void {

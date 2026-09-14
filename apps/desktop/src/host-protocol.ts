@@ -1,7 +1,7 @@
 /** Versioned control messages and framed byte transport for the Desktop Host child. */
 
 /** Protocol version implemented by the Electron shell and installed dsh Host. */
-export const DESKTOP_HOST_PROTOCOL_VERSION = 3 as const
+export const DESKTOP_HOST_PROTOCOL_VERSION = 5 as const
 
 /** Child descriptor Electron writes request frames to. */
 export const DESKTOP_REQUEST_PIPE_FD = 3
@@ -39,12 +39,22 @@ export interface DesktopHostRequestStart {
   readonly hasBody: boolean
 }
 
+/** Overlay chrome mode for one Computer Use capture or HID burst. */
+export type DesktopOverlayGuardMode = 'capture' | 'input'
+
+/** Begin or end one overlay-guard interval. */
+export type DesktopOverlayGuardAction = 'begin' | 'end'
+
 /** Commands retained on Node IPC because they do not carry Fetch payload bytes. */
 export type DesktopHostCommand = {
   readonly type: 'shutdown'
+} | {
+  readonly type: 'overlay-guard-ack'
+  readonly requestId: number
+  readonly excludeWindowIds: readonly number[]
 }
 
-/** Lifecycle events retained on Node IPC. */
+/** Lifecycle and overlay-guard events retained on Node IPC. */
 export type DesktopHostEvent = {
   readonly type: 'ready'
   readonly protocolVersion: typeof DESKTOP_HOST_PROTOCOL_VERSION
@@ -52,6 +62,11 @@ export type DesktopHostEvent = {
 } | {
   readonly type: 'fatal'
   readonly message: string
+} | {
+  readonly type: 'overlay-guard'
+  readonly requestId: number
+  readonly action: DesktopOverlayGuardAction
+  readonly mode: DesktopOverlayGuardMode
 }
 
 /** One decoded response-pipe frame. */
