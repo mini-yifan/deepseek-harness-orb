@@ -25,7 +25,7 @@ it('creates a Computer Use session on dsh_orb and sends from the overlay', async
     if (body.method === 'session/create') value = { sessionId: 'session-orb', agentPreset: 'computer-use' }
     if (body.method === 'session/modelCatalog') {
       value = {
-        groups: [{ id: 'deepseek', models: [{ id: 'deepseek-v4-flash-vision-exp' }] }],
+        groups: [{ id: 'deepseek-official', models: [{ id: 'deepseek-flash' }] }],
       }
     }
     if (body.method === 'session/page') {
@@ -108,7 +108,9 @@ it('creates a Computer Use session on dsh_orb and sends from the overlay', async
     expect(calls.find(call => call.method === 'session/selectModel')?.payload).toMatchObject({
       request: {
         sessionId: 'session-orb',
-        model: 'deepseek-v4-flash-vision-exp',
+        provider: 'deepseek-official',
+        model: 'deepseek-flash',
+        reasoningEffort: 'max',
       },
     })
     await expect.poll(() => document.querySelector('.bubble.user')?.textContent).toBe('Open WeChat')
