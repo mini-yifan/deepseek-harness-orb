@@ -97,7 +97,15 @@ describe('computer-use agent loop', () => {
       throw new Error('expected a first-frame user notice')
     }
     expect(notice.data.content.some(block => block.type === 'image')).toBe(true)
+    expect(notice.data.content.some(block =>
+      block.type === 'text' && 'text' in block && block.text.includes('<frontmost_app>Pages</frontmost_app>'),
+    )).toBe(true)
     const results = events.filter(event => event.type === 'tool/result')
+    expect(results.some(event => event.data.message.content.some(block =>
+      block.type === 'tool-result' && block.content.some(part =>
+        part.type === 'text' && 'text' in part && part.text.includes('<frontmost_app>Pages</frontmost_app>'),
+      ),
+    ))).toBe(true)
     expect(results.some(event => event.data.message.content.some(block =>
       block.type === 'tool-result' && block.content.some(part => part.type === 'image'),
     ))).toBe(true)

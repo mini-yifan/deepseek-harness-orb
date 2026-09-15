@@ -7,7 +7,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
-import type { DesktopBackend, ScreenInfo } from './backend.ts'
+import type { DesktopBackend, DesktopForeground, ScreenInfo } from './backend.ts'
+import { FOCUS_FALLBACK_FOREGROUND } from './backend.ts'
 import type { ResolvedComputerUseConfig } from './config.ts'
 
 /** Canonical image metadata stored beside one captured screen. */
@@ -36,10 +37,16 @@ export interface ObservedScreen {
 /** Capture outcome used by first-frame notices and GUI tool results. */
 export interface DesktopObservation {
   readonly screens: readonly ObservedScreen[]
+  readonly foreground: DesktopForeground
   readonly blocks: ContentBlock[]
 }
 
 const IMAGE_NAME_PREFIX = 'desktop-screen'
+
+function isObservationAbort(error: unknown, signal: AbortSignal): boolean {
+  if (signal.aborted) return true
+  return error instanceof Error && error.name === 'AbortError'
+}
 
 function optionalImageFields(image: {
   name?: string
@@ -66,6 +73,44 @@ export function imageRefFromObserved(image: ObservedImage): ImageAttachmentRef {
     width: image.width,
     height: image.height,
     ...optionalImageFields(image),
+  }
+}
+
+function envelopeValue(value: string): string {
+  return value.replace(/[\r\n]+/g, ' ').trim()
+}
+
+/**
+ * Format OS foreground metadata as one observation-level envelope.
+ * Empty folder and note fields are omitted. Screenshot filesystem paths are never included.
+ * @param foreground - inspect result after overlay-window skip.
+ * @returns model-facing tags for app name, optional Finder folder, or focus fallback.
+ */
+export function formatForegroundEnvelope(foreground: DesktopForeground): string {
+  const appName = envelopeValue(foreground.appName) || 'none'
+  const lines = [`<frontmost_app>${appName}</frontmost_app>`]
+  if (foreground.focusNote !== undefined) {
+    const note = envelopeValue(foreground.focusNote)
+    if (note !== '') lines.push(`<focus_note>${note}</focus_note>`)
+    return lines.join('\n')
+  }
+  if (foreground.finderFolder !== undefined) {
+    const folder = envelopeValue(foreground.finderFolder)
+    if (folder !== '') lines.push(`<frontmost_folder>${folder}</frontmost_folder>`)
+  }
+  return lines.join('\n')
+}
+
+/**
+ * Copy foreground fields that schema validation accepts (`undefined` keys omitted).
+ * @param foreground - inspect result stored on the observation.
+ * @returns a tool-output object with only defined optional fields.
+ */
+export function compactForeground(foreground: DesktopForeground): DesktopForeground {
+  return {
+    appName: foreground.appName,
+    ...foreground.finderFolder === undefined ? {} : { finderFolder: foreground.finderFolder },
+    ...foreground.focusNote === undefined ? {} : { focusNote: foreground.focusNote },
   }
 }
 
@@ -108,12 +153,28 @@ export function observationBlocks(screens: readonly ObservedScreen[]): ContentBl
 }
 
 /**
+ * Observation content: one foreground block, then per-screen envelopes and images.
+ * @param screens - captured displays in index order.
+ * @param foreground - OS metadata from {@link DesktopBackend.inspectForeground}.
+ * @returns model-facing content with no screenshot filesystem path.
+ */
+export function observationContent(
+  screens: readonly ObservedScreen[],
+  foreground: DesktopForeground,
+): ContentBlock[] {
+  return [
+    { type: 'text', text: formatForegroundEnvelope(foreground) },
+    ...observationBlocks(screens),
+  ]
+}
+
+/**
  * Capture up to `config.maxScreens` displays, persist each image, and build content blocks.
  * @param ctx - plugin context with `attachments`.
  * @param backend - desktop capture implementation.
  * @param config - resolved wait and screen limits.
  * @param signal - cooperative cancellation.
- * @returns canonical screens and model-facing blocks.
+ * @returns canonical screens, foreground metadata, and model-facing blocks.
  */
 export async function observeDesktop(
   ctx: Context,
@@ -125,6 +186,12 @@ export async function observeDesktop(
   const listed = await backend.listScreens(signal)
   const selected = listed.slice(0, config.maxScreens)
   if (selected.length === 0) throw new Error('computer-use: no displays available')
+  let foreground = FOCUS_FALLBACK_FOREGROUND
+  try {
+    foreground = await backend.inspectForeground(signal)
+  } catch (error: unknown) {
+    if (isObservationAbort(error, signal)) throw error
+  }
   const screens: ObservedScreen[] = []
   for (const screen of selected) {
     signal.throwIfAborted()
@@ -149,7 +216,11 @@ export async function observeDesktop(
       },
     })
   }
-  return { screens, blocks: observationBlocks(screens) }
+  return {
+    screens,
+    foreground,
+    blocks: observationContent(screens, foreground),
+  }
 }
 
 /**

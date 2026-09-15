@@ -28,6 +28,27 @@ export interface CapturedScreen {
   readonly mediaType: ImageMediaType
 }
 
+/**
+ * OS metadata attached once per observation, after skipping overlay window ids.
+ * `finderFolder` is present only when the remaining frontmost app is Finder.
+ * `focusNote` is present only when no remaining window has an owner name.
+ */
+export interface DesktopForeground {
+  readonly appName: string
+  readonly finderFolder?: string
+  readonly focusNote?: string
+}
+
+/** Model-facing copy when inspect finds no remaining window after overlay skip. */
+export const FOCUS_NOTE =
+  'Keyboard focus is not on an operable app. Click the target window first if the next step needs focus.'
+
+/** Observation payload for {@link FOCUS_NOTE}. */
+export const FOCUS_FALLBACK_FOREGROUND: DesktopForeground = {
+  appName: 'none',
+  focusNote: FOCUS_NOTE,
+}
+
 /** Mouse button accepted by `click`. */
 export type ClickButton = 'left' | 'right'
 
@@ -79,6 +100,13 @@ export interface DesktopBackend {
    * @returns encoded image bytes and media type.
    */
   capture(screen: ScreenInfo, signal?: AbortSignal): Promise<CapturedScreen>
+  /**
+   * Report the frontmost app after skipping overlay CGWindowIDs, plus Finder's
+   * folder when that app is Finder. Query failures return {@link FOCUS_FALLBACK_FOREGROUND}.
+   * @param signal - cooperative cancellation.
+   * @returns structured foreground metadata for the observation envelope.
+   */
+  inspectForeground(signal?: AbortSignal): Promise<DesktopForeground>
   /**
    * Click at a 0–1000 position on `input.screen`.
    * @param input - screen, position, button, and click count.

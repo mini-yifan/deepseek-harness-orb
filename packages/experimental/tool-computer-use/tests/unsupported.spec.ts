@@ -29,6 +29,7 @@ describe('unsupported desktop', () => {
       scrollLevel: 1,
     })).rejects.toThrow(UNSUPPORTED_DESKTOP_MESSAGE)
     await expect(backend.hotkey({ keys: ['c'] })).rejects.toThrow(UNSUPPORTED_DESKTOP_MESSAGE)
+    await expect(backend.inspectForeground()).rejects.toThrow(UNSUPPORTED_DESKTOP_MESSAGE)
   })
 
   it('selects the unsupported backend off Darwin without capturing', async () => {

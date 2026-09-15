@@ -18,6 +18,7 @@ import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
 import { createFakeDesktopBackend } from '../src/fake.ts'
 import { wrapDesktopBackend, type ComputerUseOverlayGuard } from '../src/overlay-guard.ts'
 import { activeCaptureExcludeWindowIds } from '../src/capture-exclude.ts'
+import type { DesktopBackend } from '../src/backend.ts'
 
 const platformBackend = vi.hoisted(() => {
   const png = Buffer.from(
@@ -28,6 +29,7 @@ const platformBackend = vi.hoisted(() => {
   return {
     listScreens: vi.fn(() => Promise.resolve([screen])),
     capture: vi.fn(() => Promise.resolve({ data: new Uint8Array(png), mediaType: 'image/png' as const })),
+    inspectForeground: vi.fn(() => Promise.resolve({ appName: 'Pages' })),
     click: vi.fn(() => Promise.resolve()),
     typeText: vi.fn(() => Promise.resolve()),
     scroll: vi.fn(() => Promise.resolve()),
@@ -97,18 +99,33 @@ function text(result: { content: { type: string; text?: string }[] }): string {
   return result.content.filter(block => block.type === 'text').map(block => block.text).join('\n')
 }
 
+function stubBackend(overrides: Partial<DesktopBackend> = {}): DesktopBackend {
+  return {
+    listScreens: () => Promise.resolve([screen]),
+    capture: () => Promise.resolve({ data: new Uint8Array(), mediaType: 'image/png' as const }),
+    inspectForeground: () => Promise.resolve({ appName: 'Pages' }),
+    click: () => Promise.resolve(),
+    typeText: () => Promise.resolve(),
+    scroll: () => Promise.resolve(),
+    hotkey: () => Promise.resolve(),
+    ...overrides,
+  }
+}
+
 describe('wrapDesktopBackend', () => {
-  it('cloaks capture and HID but leaves listScreens unwrapped', async () => {
+  it('cloaks capture, inspect, and HID but leaves listScreens unwrapped', async () => {
     const inner = createFakeDesktopBackend({ screens: [screen] })
     const guard = recordingGuard()
     const backend = wrapDesktopBackend(inner, guard)
     await backend.listScreens()
     await backend.capture(screen)
+    await backend.inspectForeground()
     await backend.click({ screen, position: [1, 2], button: 'left', count: 1 })
     await backend.typeText({ screen, position: [1, 2], text: 'a', replace: false, submit: false })
     await backend.scroll({ screen, position: [1, 2], direction: 'down', scrollLevel: 1 })
     await backend.hotkey({ keys: ['c'] })
     expect(guard.calls).toEqual([
+      'capture', 'capture-end',
       'capture', 'capture-end',
       'input', 'input-end',
       'input', 'input-end',
@@ -120,17 +137,12 @@ describe('wrapDesktopBackend', () => {
 
   it('forwards overlay window ids into the capture interval', async () => {
     const seen: (readonly number[])[] = []
-    const inner = {
-      listScreens: () => Promise.resolve([screen]),
+    const inner = stubBackend({
       capture: () => {
         seen.push(activeCaptureExcludeWindowIds())
         return Promise.resolve({ data: new Uint8Array(), mediaType: 'image/png' as const })
       },
-      click: () => Promise.resolve(),
-      typeText: () => Promise.resolve(),
-      scroll: () => Promise.resolve(),
-      hotkey: () => Promise.resolve(),
-    }
+    })
     const backend = wrapDesktopBackend(inner, {
       withCapture: run => run({ excludeWindowIds: [11, 22] }),
       withInput: run => run(),
@@ -140,19 +152,31 @@ describe('wrapDesktopBackend', () => {
     expect(activeCaptureExcludeWindowIds()).toEqual([])
   })
 
+  it('forwards overlay window ids into inspectForeground', async () => {
+    const seen: (readonly number[])[] = []
+    const inner = stubBackend({
+      inspectForeground: () => {
+        seen.push(activeCaptureExcludeWindowIds())
+        return Promise.resolve({ appName: 'Pages' })
+      },
+    })
+    const backend = wrapDesktopBackend(inner, {
+      withCapture: run => run({ excludeWindowIds: [11, 22] }),
+      withInput: run => run(),
+    })
+    await expect(backend.inspectForeground()).resolves.toEqual({ appName: 'Pages' })
+    expect(seen).toEqual([[11, 22]])
+    expect(activeCaptureExcludeWindowIds()).toEqual([])
+  })
+
   it('captures with no overlay ids when withCapture omits the session', async () => {
     const seen: (readonly number[])[] = []
-    const inner = {
-      listScreens: () => Promise.resolve([screen]),
+    const inner = stubBackend({
       capture: () => {
         seen.push(activeCaptureExcludeWindowIds())
         return Promise.resolve({ data: new Uint8Array(), mediaType: 'image/png' as const })
       },
-      click: () => Promise.resolve(),
-      typeText: () => Promise.resolve(),
-      scroll: () => Promise.resolve(),
-      hotkey: () => Promise.resolve(),
-    }
+    })
     const backend = wrapDesktopBackend(inner, {
       withCapture: run => run(undefined as never),
       withInput: run => run(),
@@ -163,14 +187,9 @@ describe('wrapDesktopBackend', () => {
 
   it('restores the cloak when the inner call throws', async () => {
     const guard = recordingGuard()
-    const backend = wrapDesktopBackend({
-      listScreens: () => Promise.resolve([]),
+    const backend = wrapDesktopBackend(stubBackend({
       capture: () => Promise.reject(new Error('shot failed')),
-      click: () => Promise.resolve(),
-      typeText: () => Promise.resolve(),
-      scroll: () => Promise.resolve(),
-      hotkey: () => Promise.resolve(),
-    }, guard)
+    }), guard)
     await expect(backend.capture(screen)).rejects.toThrow('shot failed')
     expect(guard.calls).toEqual(['capture', 'capture-end'])
   })

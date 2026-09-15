@@ -7,6 +7,7 @@ import type {
   CapturedScreen,
   ClickInput,
   DesktopBackend,
+  DesktopForeground,
   HotkeyInput,
   ScreenInfo,
   ScrollInput,
@@ -38,6 +39,8 @@ export interface FakeDesktopOptions {
   readonly png?: Uint8Array
   /** Display list. Default: one 1000×800 logical screen. */
   readonly screens?: readonly ScreenInfo[]
+  /** Foreground metadata. Default: Pages with no Finder folder. */
+  readonly foreground?: DesktopForeground
 }
 
 const DEFAULT_SCREENS: readonly ScreenInfo[] = [
@@ -46,12 +49,13 @@ const DEFAULT_SCREENS: readonly ScreenInfo[] = [
 
 /**
  * Construct a fake desktop that records actions and returns a fixture PNG.
- * @param options - optional screens and PNG bytes.
+ * @param options - optional screens, PNG bytes, and foreground metadata.
  * @returns a test/snapshot backend.
  */
 export function createFakeDesktopBackend(options: FakeDesktopOptions = {}): FakeDesktopBackend {
   const png = options.png ?? FAKE_DESKTOP_PNG
   const screens = options.screens ?? DEFAULT_SCREENS
+  const foreground = options.foreground ?? { appName: 'Pages' }
   const actions: FakeDesktopAction[] = []
   const captured: CapturedScreen = { data: png, mediaType: 'image/png' }
   return {
@@ -60,6 +64,7 @@ export function createFakeDesktopBackend(options: FakeDesktopOptions = {}): Fake
     },
     listScreens: () => Promise.resolve(screens),
     capture: () => Promise.resolve(captured),
+    inspectForeground: () => Promise.resolve(foreground),
     click: (input) => {
       actions.push({ type: 'click', input })
       return Promise.resolve()

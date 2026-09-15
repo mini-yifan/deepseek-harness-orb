@@ -584,7 +584,7 @@ const TOOL_PACKAGES: ToolPackage[] = [
       await ctx.plugin(ToolCodeAgent)
     },
     note:
-      'Experimental opt-in GUI tools plus Computer Use-only code_agent. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no screenshot tool: the first user turn and every GUI result attach screens. code_agent is registered only with the Computer Use preset; the catalog stub satisfies inject so the schema is harvestable.',
+      'Experimental opt-in GUI tools plus Computer Use-only code_agent. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no screenshot tool: the first user turn and every GUI result attach screens plus overlay-skip foreground tags. code_agent is registered only with the Computer Use preset; the catalog stub satisfies inject so the schema is harvestable.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-todo',

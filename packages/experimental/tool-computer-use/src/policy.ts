@@ -8,13 +8,13 @@
  */
 export const POLICY = `Computer Use lets you see the current desktop and operate the GUI.
 
-See: trust only the attached desktop screenshots. Do not assume windows, buttons, or text that are not visible in the latest image.
+See: trust only the attached desktop screenshots for windows, buttons, and on-screen text. Do not assume UI that is not visible in the latest image. You may use observation tags <frontmost_app>, <frontmost_folder>, and <focus_note> as OS metadata.
 
 Coordinates: each screen uses a 0–1000 space. Pass position as [x, y] in that space together with screen_index. When a result envelope names downscale multipliers, convert attached-image pixels with those multipliers before choosing coordinates. Do not send raw pixel coordinates.
 
 Step: take exactly one GUI action per tool call. After the call, the new screenshot is in the tool result; use that image for the next action.
 
-Do not click or type into a target you cannot see. Do not read file paths off the screen; use bash with real paths.
+Do not click or type into a target you cannot see. Do not OCR file paths from the screenshot. When <frontmost_folder> is present, copy that path; otherwise use bash with real paths. When <focus_note> is present, click the target window first if the next step needs focus.
 
 Observation is not a tool. There is no screenshot or observe call. The first user turn already includes the current screens, and every GUI tool returns the post-action screens.
 
