@@ -384,7 +384,7 @@ describe('image serialization', () => {
       role: 'user',
       content: [
         { type: 'text', text: 'before' },
-        { type: 'text', text: expect.stringContaining(`Image ${ref.attachmentId}; request preview 1x1px`) as string },
+        { type: 'text', text: expect.stringContaining(`Image ${ref.attachmentId}.`) as string },
         { type: 'file', file_id: 'file-api-image' },
         { type: 'text', text: 'after' },
       ],
@@ -409,13 +409,13 @@ describe('image serialization', () => {
     expect(wire.messages).toEqual([{
       role: 'user',
       content: [
-        { type: 'text', text: expect.stringContaining(`Image ${ref.attachmentId}; request preview 1x1px`) as string },
+        { type: 'text', text: expect.stringContaining(`Image ${ref.attachmentId}.`) as string },
         { type: 'image_url', image_url: { url } },
       ],
     }])
   })
 
-  it('gives image-only input a stable handle and request dimensions', async () => {
+  it('gives image-only input a stable handle without request-preview pixels', async () => {
     const ref = imageRef()
     const wire = await serializeRequestWithImages(request({
       model: 'deepseek-v4-flash-vision-exp',
@@ -430,7 +430,7 @@ describe('image serialization', () => {
       content: [
         {
           type: 'text',
-          text: `Image ${ref.attachmentId}; request preview 1x1px. It may be resized or re-encoded; source dimensions, format, and byte size may differ.`,
+          text: `Image ${ref.attachmentId}. It may be resized or re-encoded; source dimensions, format, and byte size may differ.`,
         },
         { type: 'file', file_id: 'file-api-image' },
       ],
@@ -460,7 +460,8 @@ describe('image serialization', () => {
       }, { type: 'file' }],
     })
     expect(JSON.stringify(wire.messages[0])).toContain('/tmp/dsh/objects/aa/object')
-    expect(JSON.stringify(wire.messages[0])).toContain('request preview 1130x565px')
+    expect(JSON.stringify(wire.messages[0])).toContain('2048x1024px')
+    expect(JSON.stringify(wire.messages[0])).not.toContain('request preview')
   })
 
   it('rejects an image whose prepared request version is absent', async () => {
@@ -592,14 +593,14 @@ describe('image serialization', () => {
       {
         role: 'tool',
         tool_call_id: 'before-system',
-        content: expect.stringContaining('request preview 1x1px') as string,
+        content: expect.stringContaining(`Image ${imageRef().attachmentId}.`) as string,
       },
       expect.objectContaining({ role: 'user' }),
       { role: 'system', content: 'system history' },
       {
         role: 'tool',
         tool_call_id: 'before-assistant',
-        content: expect.stringContaining('request preview 1x1px') as string,
+        content: expect.stringContaining(`Image ${imageRef().attachmentId}.`) as string,
       },
       expect.objectContaining({ role: 'user' }),
       { role: 'assistant', content: 'assistant history' },

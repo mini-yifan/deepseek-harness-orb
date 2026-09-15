@@ -395,7 +395,7 @@ describe('DeepSeekAdapter against a mock server', () => {
         role: 'user',
         content: [
           { type: 'text', text: 'describe ' },
-          { type: 'text', text: expect.stringContaining(`Image ${imageRef.attachmentId}; request preview 1x1px.`) as string },
+          { type: 'text', text: expect.stringContaining(`Image ${imageRef.attachmentId}.`) as string },
           { type: 'file', file_id: 'file-api-1' },
         ],
       }],

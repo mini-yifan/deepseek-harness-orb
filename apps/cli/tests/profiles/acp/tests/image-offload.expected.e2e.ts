@@ -139,8 +139,8 @@ it('pins native DeepSeek Files offload and inline fallback in assembled requests
     }
     const normalizedAccess = accessText(result.cwd)
     const offloadedImage = `[image omitted to fit request image limits; ${attachmentId}.${normalizedAccess}]`
-    const imageHandle = `Image ${attachmentId}; request preview 1x1px.${normalizedAccess}`
-    const normalizedToolImageHandle = `Image "red.png" (${attachmentId}); request preview 1x1px.${normalizedAccess}`
+    const imageHandle = `Image ${attachmentId}.${normalizedAccess}`
+    const normalizedToolImageHandle = `Image "red.png" (${attachmentId}).${normalizedAccess}`
       .replaceAll(result.cwd, '{{cwd}}')
     const messages = requests[0]?.messages as { content?: unknown }[] | undefined
     const offloaded = messages?.find(message => JSON.stringify(message.content).includes('[image omitted'))
@@ -227,7 +227,7 @@ it('pins native DeepSeek Files offload and inline fallback in assembled requests
       { type: 'text', text: 'Compare the older image ' },
       { type: 'text', text: `[image omitted to fit request image limits; ${attachmentId}.${fallbackAccess}]` },
       { type: 'text', text: ' with the newer image ' },
-      { type: 'text', text: `\nImage ${attachmentId}; request preview 1x1px.${fallbackAccess}` },
+      { type: 'text', text: `\nImage ${attachmentId}.${fallbackAccess}` },
       { type: 'image_url', image_url: { url: `data:image/png;base64,${image}` } },
       { type: 'text', text: ', then use read_image on red.png and reply with DONE.' },
     ])

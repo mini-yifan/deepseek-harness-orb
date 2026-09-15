@@ -125,16 +125,15 @@ function assertSupportedImageRoles(messages: readonly Message[]): void {
   }
 }
 
-/** Describe the exact request preview and its model-callable coordinate system. */
+/** Describe the image identity and optional normalized-object path. */
 function imageHandle(
   ref: ImageAttachmentRef,
-  version: RequestImageAttachment,
   resolveAccess: ImageAttachmentAccessResolver | undefined,
   precededByContent: boolean,
 ): WireTextContentPart {
   return {
     type: 'text',
-    text: `${precededByContent ? '\n' : ''}${requestImageHandleText(ref, version, resolveAccess?.(ref))}`,
+    text: `${precededByContent ? '\n' : ''}${requestImageHandleText(ref, resolveAccess?.(ref))}`,
   }
 }
 
@@ -158,7 +157,7 @@ async function imageParts(
       type: 'image_url',
       image_url: { url: `data:${version.mediaType};base64,${Buffer.from(version.data).toString('base64')}` },
     }
-  return [imageHandle(block.attachment, version, images.resolveImageAccess, precededByContent), image]
+  return [imageHandle(block.attachment, images.resolveImageAccess, precededByContent), image]
 }
 
 /** Convert user or nested tool-result blocks into ordered wire parts. */

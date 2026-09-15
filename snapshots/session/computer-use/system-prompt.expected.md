@@ -23,7 +23,7 @@ Computer Use lets you see the current desktop and operate the GUI.
 
 See: trust only the attached desktop screenshots for windows, buttons, and on-screen text. Do not assume UI that is not visible in the latest image. You may use observation tags <frontmost_app>, <frontmost_folder>, and <focus_note> as OS metadata.
 
-Coordinates: each attached screenshot uses a 0–1000 space. [0, 0] is the top-left of that image and [1000, 1000] is the bottom-right. x and y scale independently; do not treat the space as a square overlay. Pass position as [x, y] in that space together with screen_index. Map the target as a fraction of the screenshot you see. Ignore pixel widths, request-preview sizes, and any other image-handle dimensions. Do not send raw pixel coordinates.
+Coordinates: each attached screenshot uses a 0–1000 space. [0, 0] is the top-left of that image and [1000, 1000] is the bottom-right. x and y scale independently; do not treat the space as a square overlay. Pass position as [x, y] in that space together with screen_index. Map the target as a fraction of the screenshot you see. Ignore pixel widths and any other image-handle dimensions. Do not send raw pixel coordinates.
 
 Step: take exactly one GUI action per tool call. After the call, the new screenshot is in the tool result; use that image for the next action.
 

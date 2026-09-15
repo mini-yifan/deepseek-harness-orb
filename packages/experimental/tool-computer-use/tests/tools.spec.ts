@@ -482,7 +482,7 @@ describe('computer-use tools', () => {
     expect(assembled.sections.some(section => section.text === POLICY)).toBe(true)
     expect(POLICY).toContain('Map the target as a fraction of the screenshot you see')
     expect(POLICY).toContain('Do not send raw pixel coordinates')
-    expect(POLICY).toContain('Ignore pixel widths, request-preview sizes')
+    expect(POLICY).toContain('Ignore pixel widths and any other image-handle dimensions')
     expect(POLICY).not.toContain('downscale')
     expect(POLICY).not.toContain('multiply')
     expect(POLICY).toContain('call open_in_finder with that path')

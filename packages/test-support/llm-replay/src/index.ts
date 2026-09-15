@@ -881,7 +881,7 @@ class ReplayAdapter extends LlmAdapter {
     return {
       priceImages: images => images.map(ref => ({
         visualTokens,
-        text: requestImageHandleText(ref, { width: ref.width, height: ref.height }),
+        text: requestImageHandleText(ref),
       })),
     }
   }

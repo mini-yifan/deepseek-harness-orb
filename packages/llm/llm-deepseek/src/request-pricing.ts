@@ -98,7 +98,7 @@ export function deepSeekImageRequestPricing(
         const dimensions = requestImageDimensions(ref.width, ref.height, policy.maxPixels)
         return {
           visualTokens: deepSeekImageTokens(dimensions.width, dimensions.height),
-          text: requestImageHandleText(ref, dimensions, resolveAccess?.(ref)),
+          text: requestImageHandleText(ref, resolveAccess?.(ref)),
         }
       })
     },

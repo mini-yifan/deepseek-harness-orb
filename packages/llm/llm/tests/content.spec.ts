@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AttachmentId, ImageVariantId } from '@deepseek-ai/dsh-attachment'
+import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import type { AttachmentStore, ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import {
   ToolCallId,
@@ -195,7 +195,7 @@ describe('offloadRequestImagesWithPolicy', () => {
 })
 
 describe('model-facing image access', () => {
-  it('describes the request preview, immutable normalized path, and source uncertainty', () => {
+  it('describes identity, the immutable normalized path, and source uncertainty', () => {
     const attachment = {
       attachmentId: AttachmentId(`sha256:${'b'.repeat(64)}`),
       mediaType: 'image/png' as const,
@@ -205,24 +205,13 @@ describe('model-facing image access', () => {
       name: 'source "map".png',
     }
     const access = { readonlyPath: '/tmp/.dsh/attachments/v1/objects/bb/object' }
-    const version = {
-      variantId: ImageVariantId(`sha256:${'c'.repeat(64)}`),
-      attachment,
-      data: Uint8Array.of(1),
-      mediaType: 'image/png' as const,
-      bytes: 1,
-      width: 923,
-      height: 692,
-      depth: 'uchar' as const,
-      space: 'srgb' as const,
-      hasAlpha: true,
-    }
-    expect(requestImageHandleText(attachment, version, access)).toBe(
-      `Image "source \\"map\\".png" (${attachment.attachmentId}); request preview 923x692px.`
+    expect(requestImageHandleText(attachment, access)).toBe(
+      `Image "source \\"map\\".png" (${attachment.attachmentId}).`
       + ' Normalized copy (read-only; may be resized or re-encoded): "/tmp/.dsh/attachments/v1/objects/bb/object" (2048x1536px, image/png).'
       + ' Source dimensions, format, and byte size may differ.'
       + ' Copy to a writable path ending in .png before editing.',
     )
+    expect(requestImageHandleText(attachment)).not.toMatch(/request preview|\d+x\d+px/u)
   })
 
   it('bridges a provider host object only through the mounted filesystem mapping', () => {
@@ -259,19 +248,7 @@ describe('model-facing image access', () => {
       height: 8,
       name: 'second.png',
     }
-    const version = {
-      variantId: ImageVariantId(`sha256:${'c'.repeat(64)}`),
-      attachment,
-      data: Uint8Array.of(1),
-      mediaType: 'image/png' as const,
-      bytes: 1,
-      width: 8,
-      height: 8,
-      depth: 'uchar' as const,
-      space: 'srgb' as const,
-      hasAlpha: false,
-    }
-    expect(requestImageHandleText({ ...attachment, name: 'first.png' }, version))
+    expect(requestImageHandleText({ ...attachment, name: 'first.png' }))
       .toContain('"first.png"')
   })
 
