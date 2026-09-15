@@ -148,8 +148,9 @@ async function main() {
   document.querySelector('#prompt').placeholder = messages.floatingPlaceholder
   document.querySelector('#stop').setAttribute('aria-label', messages.floatingStop)
   document.querySelector('#stop').title = messages.floatingStop
-  document.querySelector('#new-conversation').textContent = messages.floatingNewConversation
-  document.querySelector('#new-conversation').setAttribute('aria-label', messages.floatingNewConversation)
+  const newConversation = document.querySelector('#new-conversation')
+  newConversation.setAttribute('aria-label', messages.floatingNewConversation)
+  newConversation.title = messages.floatingNewConversation
   const historyButton = document.querySelector('#history')
   historyButton.setAttribute('aria-label', messages.floatingHistory)
   historyButton.title = messages.floatingHistory

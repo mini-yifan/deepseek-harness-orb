@@ -196,6 +196,8 @@ it('creates a Computer Use session on dsh_orb and sends from the overlay', async
       },
     })
     await expect.poll(() => document.querySelector('.bubble.user')?.textContent).toBe('Open WeChat')
+    expect(document.querySelector('#new-conversation')?.textContent).toBe('+')
+    expect(document.querySelector('#new-conversation')?.getAttribute('aria-label')).toBe('New')
     expect([...document.querySelectorAll('.bubble')].map(node => node.textContent)).toEqual(['Open WeChat'])
     expect(document.querySelector<HTMLButtonElement>('#stop')?.hidden).toBe(true)
     document.body.dispatchEvent(new dom.window.Event('pointerenter', { bubbles: true }))
@@ -348,6 +350,7 @@ it('places History at the top-left opposite New', () => {
   const css = readFileSync(new URL('../renderer/floating.css', import.meta.url), 'utf8')
   expect(html.indexOf('id="history"')).toBeGreaterThan(-1)
   expect(html.indexOf('id="history"')).toBeLessThan(html.indexOf('id="new-conversation"'))
+  expect(html).toContain('id="new-conversation" type="button">+</button>')
   expect(html).toContain('id="history-list"')
   expect(css).toMatch(/#history \{\s*left: 12px/u)
   expect(css).toMatch(/#new-conversation \{\s*right: 12px/u)

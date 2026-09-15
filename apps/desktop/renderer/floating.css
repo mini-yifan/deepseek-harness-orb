@@ -104,6 +104,8 @@ body.pinned #ball {
 
 #new-conversation {
   right: 12px;
+  font-size: 18px;
+  line-height: 1;
 }
 
 #history svg {
