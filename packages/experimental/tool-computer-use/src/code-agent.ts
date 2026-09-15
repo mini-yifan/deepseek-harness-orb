@@ -9,6 +9,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { SessionCreateRequest, SessionRequestId } from '@deepseek-ai/dsh-api-session-controller/types'
+import { watchCodeAgentCompletion } from './code-agent-completion.ts'
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-tools'
@@ -30,6 +31,8 @@ const DESCRIPTION = 'Delegate background coding and document work to a standard-
   + 'Pass session_id with the id returned by an earlier code_agent result when continuing the same artifact, for example making that Word document\'s font green. '
   + 'Do not pass a previous id when the new work is unrelated. '
   + 'task is the user message to enqueue. The call returns after the standard session accepts the message; it does not wait for that session to finish. '
+  + 'Tell the user the background Code agent is running, then end the turn. Do not call wait or bash sleep to poll that session. '
+  + 'A plugin notice arrives later when that session is idle and this session is idle; then tell the user what the Code agent produced. '
   + 'cwd defaults to this session\'s workspace; omit it unless the new session needs a different directory. '
   + 'session_id cannot target this Computer Use session, a subagent child, or a non-standard session.'
 
@@ -142,8 +145,8 @@ export function apply(ctx: Context): void {
       render: (_args, value) => [{
         type: 'text',
         text: value.created
-          ? `Started a new standard session ${value.session_id}. Pass this session_id to continue the same artifact.`
-          : `Queued on standard session ${value.session_id}.`,
+          ? `Started a new standard session ${value.session_id}. Tell the user the background Code agent is running, then end the turn. Pass this session_id to continue the same artifact.`
+          : `Queued on standard session ${value.session_id}. Tell the user the background Code agent is running, then end the turn.`,
       }],
     },
     isConcurrencySafe: () => true,
@@ -190,12 +193,26 @@ export function apply(ctx: Context): void {
           throw new Error(`code_agent cwd "${args.cwd}" does not match session "${sessionId}" cwd "${header.cwd}"`)
         }
       }
+      const requestId = brandString<SessionRequestId>(`code-agent-${randomUUID()}`)
       await ctx.sessionController.prompt({
-        requestId: brandString<SessionRequestId>(`code-agent-${randomUUID()}`),
+        requestId,
         sessionId,
         mode: 'queue',
         content: [{ type: 'text', text: task }],
       }, exec.signal)
+      const agents = ctx.get('agents')
+      const liveCaller = agents?.get(caller.id)
+      const code = agents?.get(sessionId)
+      if (agents !== undefined && liveCaller !== undefined && code !== undefined) {
+        watchCodeAgentCompletion({
+          caller: liveCaller,
+          code,
+          agents,
+          task,
+          sessionId,
+          requestId,
+        })
+      }
       return { accepted: true, created, session_id: sessionId }
     },
   }))
