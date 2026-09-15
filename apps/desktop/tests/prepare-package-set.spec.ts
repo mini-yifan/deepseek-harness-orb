@@ -66,6 +66,7 @@ describe('desktop package-set selection', () => {
       'package/lib/index.js',
       'package/lib/computer-use-preset-root.js',
       'package/lib/computer-use-overlay-guard.js',
+      'package/lib/computer-use-orb-permission.js',
       'package/config/desktop.cordis.patch.yml',
     ]
     expect(() => {

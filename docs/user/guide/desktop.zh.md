@@ -46,6 +46,8 @@ Host 就绪后才会创建球。悬停展开白底面板，球留在输入胶囊
 
 输入框占位符是「向桌面 agent 发送消息…」。发送后，球会话使用 Computer Use 与 DeepSeek-V41-Flash、思考模式 Max。停止按钮只取消球的 Computer Use 会话，不会停止侧栏里的标准会话。右键菜单提供「打开主窗口」和「退出 DeepSeek Harness」；只有明确退出才会结束进程。
 
+球上 Computer Use 的 bash 和文件系统默认为完全权限，因此可以写入 `dsh_orb` 以外的位置。后台 `code_agent` 会话仍是工作区内修改。
+
 ## 球如何把任务分给后台
 
 球上的 Computer Use Agent 自己判断当前这句话怎么走，运行时没有单独的分类器：

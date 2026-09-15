@@ -66,6 +66,7 @@ const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
     'lib/index.js',
     'lib/computer-use-preset-root.js',
     'lib/computer-use-overlay-guard.js',
+    'lib/computer-use-orb-permission.js',
     'config/desktop.cordis.patch.yml',
   ],
   // Sourcemaps stay out by payload policy; the worker-preview surface

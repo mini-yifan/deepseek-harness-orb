@@ -46,6 +46,8 @@ The ball is created only after Host ready. Hover it to expand a white panel; the
 
 The input placeholder is “Ask the desktop agent…”. Sends go to the Computer Use session with DeepSeek-V41-Flash at Max thinking. Stop cancels only that Computer Use session, not sidebar standard sessions. The context menu offers **Open Main Window** and **Quit DeepSeek Harness**; only an explicit Quit ends the process.
 
+The ball’s Computer Use bash and filesystem default to Full access, so they can write outside `dsh_orb`. Background `code_agent` sessions keep Workspace Write.
+
 ## How the ball routes background work
 
 The Computer Use agent on the ball decides how to handle the current sentence. There is no extra runtime classifier:

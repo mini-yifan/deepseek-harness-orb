@@ -10,6 +10,7 @@
     "lib/index.js",
     "lib/computer-use-preset-root.js",
     "lib/computer-use-overlay-guard.js",
+    "lib/computer-use-orb-permission.js",
     "config/desktop.cordis.patch.yml"
   ],
   "dependencies": {
@@ -22,9 +23,13 @@
     "@deepseek-ai/dsh-client-modules": "workspace:^",
     "@deepseek-ai/dsh-client-ui-directory-picker-native": "workspace:^",
     "@deepseek-ai/dsh-cmdline": "workspace:^",
+    "@deepseek-ai/dsh-home-paths": "workspace:^",
     "@deepseek-ai/dsh-host-directory-picker-native": "workspace:^",
     "@deepseek-ai/dsh-host-webserver": "workspace:^",
     "@deepseek-ai/dsh-launch-environment": "workspace:^",
+    "@deepseek-ai/dsh-permission-presets": "workspace:^",
+    "@deepseek-ai/dsh-session": "workspace:^",
+    "@deepseek-ai/dsh-session-projection": "workspace:^",
     "@deepseek-ai/dsh-web-frontend": "workspace:^"
   }
 }
