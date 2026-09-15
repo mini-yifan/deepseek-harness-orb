@@ -89,7 +89,7 @@
     },
     {
       "name": "code_agent",
-      "description": "Delegate background coding and document work to a standard-mode Code agent that appears in the desktop sidebar like a user-created session. Do not call this tool for visible GUI work such as opening WeChat or clicking a button in Pages — use the GUI tools instead. Omit session_id to create a new blank standard session: write a Word document, make a gobang game, or any task that is not a follow-up to a previous code_agent result. Pass session_id with the id returned by an earlier code_agent result when continuing the same artifact, for example making that Word document's font green. Do not pass a previous id when the new work is unrelated. task is the user message to enqueue. The call returns after the standard session accepts the message; it does not wait for that session to finish. Tell the user the background Code agent is running, then end the turn. Do not call wait or bash sleep to poll that session. A plugin notice arrives later when that session is idle and this session is idle; then tell the user what the Code agent produced. cwd defaults to this session's workspace; omit it unless the new session needs a different directory. session_id cannot target this Computer Use session, a subagent child, or a non-standard session.",
+      "description": "Delegate background coding and document work to a standard-mode Code agent that appears in the desktop sidebar like a user-created session. Do not call this tool for visible GUI work such as opening WeChat or clicking a button in Pages — use the GUI tools instead. Omit session_id to create a new blank standard session: write a Word document, make a gobang game, or any task that is not a follow-up to a previous code_agent result. Pass session_id with the id returned by an earlier code_agent result when continuing the same artifact, for example making that Word document's font green. Do not pass a previous id when the new work is unrelated. task is the user message to enqueue. The call returns after the standard session accepts the message; it does not wait for that session to finish. Tell the user the background Code agent is running, then end the turn. Do not call wait, long_wait, or bash sleep to poll that session. A plugin notice arrives later when that session is idle and this session is idle; then tell the user what the Code agent produced. cwd defaults to this session's workspace; omit it unless the new session needs a different directory. session_id cannot target this Computer Use session, a subagent child, or a non-standard session.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -451,6 +451,28 @@
       }
     },
     {
+      "name": "long_wait",
+      "description": "Pause 20, 30, 60, or 120 seconds, then return a fresh desktop screenshot without moving the pointer. Only for a visible long job such as a download, installer, export, or on-screen generation. Pick the smallest wait_seconds that covers remaining progress; 120 only when the screenshot already shows a minutes-long job. Ordinary loading uses wait. Do not use for code_agent. Exclusive.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "wait_seconds": {
+            "type": "integer",
+            "description": "Seconds to pause. Must be 20, 30, 60, or 120.",
+            "enum": [
+              20,
+              30,
+              60,
+              120
+            ]
+          }
+        },
+        "required": [
+          "wait_seconds"
+        ]
+      }
+    },
+    {
       "name": "open_in_browser",
       "description": "Open the default browser, or a full http(s) URL in it, then return the post-action screenshot. This is the user-visible browser. Do not use web_fetch as a substitute. Chinese in path or query must be plain text, never CJK percent-encoding such as %E5... / %E8.... Exclusive.",
       "parameters": {
@@ -748,15 +770,10 @@
     },
     {
       "name": "wait",
-      "description": "Pause, then return a fresh desktop screenshot without moving the pointer. wait_seconds defaults to 1 and is clamped by the deployment maxWaitSeconds. Exclusive.",
+      "description": "Pause 1 second, then return a fresh desktop screenshot without moving the pointer. Use for page refresh, a loader, or a control that has not appeared yet. Do not use for code_agent. Exclusive.",
       "parameters": {
         "type": "object",
-        "properties": {
-          "wait_seconds": {
-            "type": "number",
-            "description": "Seconds to pause before recapturing. Default: 1, clamped by maxWaitSeconds."
-          }
-        }
+        "properties": {}
       }
     },
     {

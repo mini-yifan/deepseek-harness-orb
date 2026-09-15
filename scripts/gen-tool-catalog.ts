@@ -569,6 +569,7 @@ const TOOL_PACKAGES: ToolPackage[] = [
       hotkey: 'packages/experimental/tool-computer-use/src/plugin.ts',
       input_text: 'packages/experimental/tool-computer-use/src/plugin.ts',
       long_press: 'packages/experimental/tool-computer-use/src/plugin.ts',
+      long_wait: 'packages/experimental/tool-computer-use/src/plugin.ts',
       open_in_browser: 'packages/experimental/tool-computer-use/src/plugin.ts',
       open_in_finder: 'packages/experimental/tool-computer-use/src/plugin.ts',
       scroll: 'packages/experimental/tool-computer-use/src/plugin.ts',

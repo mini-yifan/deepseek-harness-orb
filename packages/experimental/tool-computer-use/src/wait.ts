@@ -1,5 +1,5 @@
 /**
- * Abortable delay used after GUI actions and by the wait tool.
+ * Abortable delay used after GUI actions and by the wait and long_wait tools.
  * @module @deepseek-ai/dsh-experimental-tool-computer-use/src/wait
  */
 

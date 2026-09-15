@@ -13,10 +13,6 @@ export interface Config {
    */
   readonly postActionWaitMs?: number
   /**
-   * Maximum seconds the `wait` tool may pause. Default: 5.
-   */
-  readonly maxWaitSeconds?: number
-  /**
    * Maximum number of displays captured per observation. Default: 4.
    */
   readonly maxScreens?: number
@@ -25,14 +21,12 @@ export interface Config {
 /** Config after defaults and load-time validation. */
 export interface ResolvedComputerUseConfig {
   readonly postActionWaitMs: number
-  readonly maxWaitSeconds: number
   readonly maxScreens: number
 }
 
 /** Loader schema for the Computer Use plugin. */
 export const Config: z<Config> = z.object({
   postActionWaitMs: z.number().default(500),
-  maxWaitSeconds: z.number().default(5),
   maxScreens: z.number().default(4),
 })
 
@@ -50,10 +44,9 @@ function requireFiniteNonNegative(value: number, name: string): number {
  */
 export function resolveComputerUseConfig(config: Config = {}): ResolvedComputerUseConfig {
   const postActionWaitMs = requireFiniteNonNegative(config.postActionWaitMs ?? 500, 'postActionWaitMs')
-  const maxWaitSeconds = requireFiniteNonNegative(config.maxWaitSeconds ?? 5, 'maxWaitSeconds')
   const maxScreens = requireFiniteNonNegative(config.maxScreens ?? 4, 'maxScreens')
   if (!Number.isInteger(maxScreens) || maxScreens < 1) {
     throw new Error('maxScreens must be an integer ≥ 1')
   }
-  return { postActionWaitMs, maxWaitSeconds, maxScreens }
+  return { postActionWaitMs, maxScreens }
 }

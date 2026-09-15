@@ -747,14 +747,10 @@ export interface Config {
 /** Loader-accepted Computer Use configuration. */
 export interface Config {
   /**
-   * Milliseconds to wait after a pointer, keyboard, or hotkey action before recapturing.
+   * Milliseconds to wait after a GUI action before recapturing.
    * Default: 500.
    */
   readonly postActionWaitMs?: number
-  /**
-   * Maximum seconds the `wait` tool may pause. Default: 5.
-   */
-  readonly maxWaitSeconds?: number
   /**
    * Maximum number of displays captured per observation. Default: 4.
    */

@@ -31,7 +31,7 @@ const DESCRIPTION = 'Delegate background coding and document work to a standard-
   + 'Pass session_id with the id returned by an earlier code_agent result when continuing the same artifact, for example making that Word document\'s font green. '
   + 'Do not pass a previous id when the new work is unrelated. '
   + 'task is the user message to enqueue. The call returns after the standard session accepts the message; it does not wait for that session to finish. '
-  + 'Tell the user the background Code agent is running, then end the turn. Do not call wait or bash sleep to poll that session. '
+  + 'Tell the user the background Code agent is running, then end the turn. Do not call wait, long_wait, or bash sleep to poll that session. '
   + 'A plugin notice arrives later when that session is idle and this session is idle; then tell the user what the Code agent produced. '
   + 'cwd defaults to this session\'s workspace; omit it unless the new session needs a different directory. '
   + 'session_id cannot target this Computer Use session, a subagent child, or a non-standard session.'

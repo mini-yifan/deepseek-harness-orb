@@ -28,6 +28,7 @@ import {
 import { POLICY } from './policy.ts'
 import { assertImageCapableRoute, routeAcceptsImages } from './route.ts'
 import { delay } from './wait.ts'
+import { LONG_WAIT_SECONDS, WAIT_SECONDS, requireLongWaitSeconds } from './wait-args.ts'
 
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-attachment'
@@ -402,12 +403,53 @@ export function applyComputerUse(
   ctx.tools.register(defineTool({
     name: 'wait',
     description:
-      'Pause, then return a fresh desktop screenshot without moving the pointer. '
-      + 'wait_seconds defaults to 1 and is clamped by the deployment maxWaitSeconds. Exclusive.',
+      'Pause 1 second, then return a fresh desktop screenshot without moving the pointer. '
+      + 'Use for page refresh, a loader, or a control that has not appeared yet. '
+      + 'Do not use for code_agent. Exclusive.',
+    parameters: {},
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          waitSeconds: { type: 'number', required: true },
+          screens: SCREENS_FIELD,
+          foreground: FOREGROUND_FIELD,
+        },
+      },
+      render: (_args, value) => resultBlocks(
+        `Waited ${String(value.waitSeconds)}s. Coordinates remain 0–1000.`,
+        value.screens,
+        value.foreground,
+      ),
+    },
+    isConcurrencySafe: () => false,
+    presentCall: () => genericExecute('Wait', WAIT_SECONDS),
+    async execute(_args, exec) {
+      await assertImageCapableRoute(ctx, exec)
+      await delay(WAIT_SECONDS * 1000, exec.signal)
+      const observation = await recapture(ctx, backend, config, exec.signal)
+      return {
+        waitSeconds: WAIT_SECONDS,
+        screens: observation.screens,
+        foreground: observation.foreground,
+      }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'long_wait',
+    description:
+      'Pause 20, 30, 60, or 120 seconds, then return a fresh desktop screenshot without moving the pointer. '
+      + 'Only for a visible long job such as a download, installer, export, or on-screen generation. '
+      + 'Pick the smallest wait_seconds that covers remaining progress; 120 only when the screenshot already shows a minutes-long job. '
+      + 'Ordinary loading uses wait. Do not use for code_agent. Exclusive.',
     parameters: {
       wait_seconds: {
-        type: 'number',
-        description: 'Seconds to pause before recapturing. Default: 1, clamped by maxWaitSeconds.',
+        type: 'integer',
+        required: true,
+        enum: [...LONG_WAIT_SECONDS],
+        description: 'Seconds to pause. Must be 20, 30, 60, or 120.',
       },
     },
     output: {
@@ -427,14 +469,10 @@ export function applyComputerUse(
       ),
     },
     isConcurrencySafe: () => false,
-    presentCall: args => genericExecute('Wait', args.wait_seconds ?? 1),
+    presentCall: args => genericExecute('Long wait', args.wait_seconds),
     async execute(args, exec) {
       await assertImageCapableRoute(ctx, exec)
-      const requested = args.wait_seconds ?? 1
-      if (!Number.isFinite(requested) || requested < 0) {
-        throw new Error('wait_seconds must be a finite number ≥ 0')
-      }
-      const waitSeconds = Math.min(requested, config.maxWaitSeconds)
+      const waitSeconds = requireLongWaitSeconds(args.wait_seconds)
       await delay(waitSeconds * 1000, exec.signal)
       const observation = await recapture(ctx, backend, config, exec.signal)
       return {

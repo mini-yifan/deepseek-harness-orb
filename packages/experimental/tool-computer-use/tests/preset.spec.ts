@@ -19,7 +19,7 @@ import * as PresetRoot from '../src/preset-root.ts'
 import { apply, name, PRESET_ROOT } from '../src/preset-root.ts'
 
 const GUI_TOOLS = [
-  'click', 'drag', 'hotkey', 'input_text', 'long_press',
+  'click', 'drag', 'hotkey', 'input_text', 'long_press', 'long_wait',
   'open_in_browser', 'open_in_finder', 'scroll', 'wait',
 ]
 
@@ -126,7 +126,6 @@ describe('computer-use scoped registration', () => {
     const { scope, key } = await mintAgentScope(ctx, 'computer-use-scope')
     applyComputerUse(scope.ctx, createFakeDesktopBackend(), resolveComputerUseConfig({
       postActionWaitMs: 0,
-      maxWaitSeconds: 0,
       maxScreens: 4,
     }))
     expect(ctx.tools.schemas().map(schema => schema.name).some(tool => GUI_TOOLS.includes(tool)))
