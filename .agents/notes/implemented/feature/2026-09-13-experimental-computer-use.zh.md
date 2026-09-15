@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-`@deepseek-ai/dsh-experimental-tool-computer-use` 是私有实验性 Cordis 插件。它注册十个互斥 GUI 工具（`click`、`input_text`、`scroll`、`hotkey`、`wait`、`long_wait`、`long_press`、`drag`、`open_in_browser`、`open_in_finder`），并通过 `agent/pre-step` 在首次用户回合附上当前屏幕。每个工具执行一次桌面动作，等待 `postActionWaitMs`，重新截屏，并由 `output.render` 返回 `[文本信封, ...ImageBlock]`。信封以 `<frontmost_app>` 开头（前台是 Finder 时还有 `<frontmost_folder>`；跳过 overlay 窗口后没有剩余窗口时是 `<focus_note>`），随后是每屏的 `<screen_index>` 与 `<coordinate_space>0-1000</coordinate_space>` 标签；[Computer Use 观察前台元数据](2026-09-15-computer-use-observation-foreground.zh.md) 拥有这些前台标签，[Computer Use 0–1000 比例坐标](../bug-fix/2026-09-15-computer-use-fraction-coordinates.zh.md) 拥有点击空间。图片放在内容里，不放在 `presentationMeta`。没有截屏工具。[Computer Use 指针与打开工具](2026-09-15-computer-use-pointer-and-open-tools.zh.md) 拥有 `long_press`、`drag`、`open_in_browser` 与 `open_in_finder`。[Computer Use 的 wait 与 long_wait](2026-09-15-computer-use-wait-and-long-wait.zh.md) 拥有两个等待工具。
+`@deepseek-ai/dsh-experimental-tool-computer-use` 是私有实验性 Cordis 插件。它注册十一个互斥 GUI 工具（`click`、`input_text`、`scroll`、`hotkey`、`wait`、`long_wait`、`screenshot`、`long_press`、`drag`、`open_in_browser`、`open_in_finder`），并通过 `agent/pre-step` 在首次用户回合附上当前屏幕。每个工具执行一次桌面动作，等待 `postActionWaitMs`，重新截屏，并由 `output.render` 返回 `[文本信封, ...ImageBlock]`。信封以 `<frontmost_app>` 开头（前台是 Finder 时还有 `<frontmost_folder>`；跳过 overlay 窗口后没有剩余窗口时是 `<focus_note>`），随后是每屏的 `<screen_index>` 与 `<coordinate_space>0-1000</coordinate_space>` 标签；[Computer Use 观察前台元数据](2026-09-15-computer-use-observation-foreground.zh.md) 拥有这些前台标签，[Computer Use 0–1000 比例坐标](../bug-fix/2026-09-15-computer-use-fraction-coordinates.zh.md) 拥有点击空间。图片放在内容里，不放在 `presentationMeta`。没有 observe 工具。`screenshot` 会写入桌面文件和剪贴板；[Computer Use 截图导出](2026-09-15-computer-use-screenshot.zh.md) 拥有该导出。[Computer Use 指针与打开工具](2026-09-15-computer-use-pointer-and-open-tools.zh.md) 拥有 `long_press`、`drag`、`open_in_browser` 与 `open_in_finder`。[Computer Use 的 wait 与 long_wait](2026-09-15-computer-use-wait-and-long-wait.zh.md) 拥有两个等待工具。
 
 `applyComputerUse(ctx, backend, config)` 是共享注册助手。生产环境的 `apply` 使用宿主平台后端（macOS 捕获与 HID 输入；其他平台在执行时抛出固定的仅 macOS 错误）。测试与无密钥 snapshot 注入返回固定 PNG 并记录动作的假桌面。没有 Config `driver: fake`。macOS HID 发送由 [Computer Use macOS HID](../bug-fix/2026-09-13-computer-use-macos-hid.zh.md) 负责。
 
@@ -24,11 +24,11 @@ Web overlay 只插入 `computer-use-preset-root`，由它提供本包旁的额�
 
 **只用 Skill 做接地。** Skill 可以携带 See/Step 文案，但不能注册工具、附加持久图片，或出现在生成的工具目录中。Computer Use 是带提示词分节的 Cordis 插件，由 Computer Use agent preset 组合。
 
-**把 GUI 工具插到 Host。** Host 注册的工具会出现在每个 preset 中，包括 `standard`。overlay 改为追加一个系统 extra root，因此只有点名 `computer-use` 的会话才会收到十个 GUI 工具。
+**把 GUI 工具插到 Host。** Host 注册的工具会出现在每个 preset 中，包括 `standard`。overlay 改为追加一个系统 extra root，因此只有点名 `computer-use` 的会话才会收到十一个 GUI 工具。
 
 **改 `agent-loop`。** loop 已经会把工具结果中的图片送入下一次请求。loop 特例会让桌面控制变成核心语义，并迫使每个组合都了解屏幕。
 
-**Observe/screenshot 工具。** 专用捕获工具会增加一轮，其唯一工作是一张图片，而下一个 GUI 工具在动作后还必须再截。观察属于首次用户回合和每次 GUI 结果。
+**Observe 工具。** 专用捕获工具会增加一轮，其唯一工作是一张图片，而下一个 GUI 工具在动作后还必须再截。观察属于首次用户回合和每次 GUI 结果。保存用户可见文件是另一件事，由 [Computer Use 截图导出](2026-09-15-computer-use-screenshot.zh.md) 拥有。
 
 **每次点击都 `ask`。** 交互 seam 的 `allowed-once` 授权无法让视觉循环可用。同意门槛是安装或 patch 这个实验插件；README 写明它驱动真实的未沙箱化桌面。
 
@@ -40,7 +40,7 @@ Web overlay 只插入 `computer-use-preset-root`，由它提供本包旁的额�
 
 ## 影响
 
-在 Computer Use preset 中、具备图片能力的路由上挂载该插件，会在每次请求中增加策略 token、十个互斥 GUI schema 以及 `code_agent`，再加上首帧通知与每次 GUI 结果的图片 token，直到压缩。纯文本路由仍能用于编码会话：跳过首帧附件，GUI 工具以路由诊断失败。macOS 需要屏幕录制与辅助功能；缺少权限时，捕获或输入会失败，并指出对应的 TCC。`input_text` 在粘贴期间覆盖字符串剪贴板，并在之后恢复。Web chrome 会出现在截屏中。Desktop 主窗口始终可被截到；macOS overlay 由 ScreenCaptureKit 窗口排除从 Computer Use 截图中省略，并只在对应的 HID 突发期间点击穿透。观察文本还携带由 [Computer Use 观察前台元数据](2026-09-15-computer-use-observation-foreground.zh.md) 拥有的、跳过 overlay 后的前台标签。没有逐次点击批准、像素差 settle、套索，也没有 `dsh-base` 默认项。
+在 Computer Use preset 中、具备图片能力的路由上挂载该插件，会在每次请求中增加策略 token、十一个互斥 GUI schema 以及 `code_agent`，再加上首帧通知与每次 GUI 结果的图片 token，直到压缩。纯文本路由仍能用于编码会话：跳过首帧附件，GUI 工具以路由诊断失败。macOS 需要屏幕录制与辅助功能；缺少权限时，捕获或输入会失败，并指出对应的 TCC。`input_text` 在粘贴期间覆盖字符串剪贴板，并在之后恢复。Web chrome 会出现在截屏中。Desktop 主窗口始终可被截到；macOS overlay 由 ScreenCaptureKit 窗口排除从 Computer Use 截图中省略，并只在对应的 HID 突发期间点击穿透。观察文本还携带由 [Computer Use 观察前台元数据](2026-09-15-computer-use-observation-foreground.zh.md) 拥有的、跳过 overlay 后的前台标签。没有逐次点击批准、像素差 settle、套索，也没有 `dsh-base` 默认项。
 
 ## 测试
 

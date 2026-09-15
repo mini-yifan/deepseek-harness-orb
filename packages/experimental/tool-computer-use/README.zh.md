@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-让具备视觉能力的 agent 看到宿主桌面，并提供十个互斥 GUI 工具，以便点击、输入、滚动、拖拽、长按、打开文件与浏览器、按热键与等待，然后在同一次工具结果中看到新屏幕。仅在你确实需要这种未沙箱化的控制时挂载。纯文本路由会跳过首张截图并拒绝这些工具。生产后端是 macOS；其他宿主仍会加载插件，并在执行时失败。
+让具备视觉能力的 agent 看到宿主桌面，并提供十一个互斥 GUI 工具，以便点击、输入、滚动、拖拽、长按、打开文件与浏览器、按热键、等待，以及把截图存到桌面和剪贴板，然后在同一次工具结果中看到新屏幕。仅在你确实需要这种未沙箱化的控制时挂载。纯文本路由会跳过首张截图并拒绝这些工具。生产后端是 macOS；其他宿主仍会加载插件，并在执行时失败。
 
 ## 目录
 
@@ -29,7 +29,7 @@ kind: "package-reference"
 
 ### 何时选择
 
-当视觉模型需要驱动 bash 无法到达的可见 GUI，并且你希望工具目录仅含 Shell、网页检索与抓取、十个 GUI 工具、`code_agent` 和 `ask_user_question` 时，选择它。普通编码会话、纯文本路由，以及不得授予屏幕录制、辅助功能与访达自动化权限的宿主，都不要选择。它不是 Skill，不是能力 seam，也不属于 `dsh-base`。Desktop macOS 也会把该 overlay 作为签名 runtime extra 挂上，以便悬浮球锁死 Computer Use 会话。
+当视觉模型需要驱动 bash 无法到达的可见 GUI，并且你希望工具目录仅含 Shell、网页检索与抓取、十一个 GUI 工具、`code_agent` 和 `ask_user_question` 时，选择它。普通编码会话、纯文本路由，以及不得授予屏幕录制、辅助功能与访达自动化权限的宿主，都不要选择。它不是 Skill，不是能力 seam，也不属于 `dsh-base`。Desktop macOS 也会把该 overlay 作为签名 runtime extra 挂上，以便悬浮球锁死 Computer Use 会话。
 
 ### 最小配置
 
@@ -64,7 +64,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 
 ### 工具
 
-没有 `screenshot` 或 `observe` 工具。首次用户回合已经包含当前屏幕，每个 GUI 工具都会在工具结果中以原生图片块返回动作后的屏幕。
+没有 `observe` 工具。首次用户回合已经包含当前屏幕，每个 GUI 工具都会在工具结果中以原生图片块返回动作后的屏幕。`screenshot` 是导出：把这些栅格写到用户桌面，并把第一屏复制到剪贴板。
 
 | 工具 | 参数 | 动作之后 |
 |---|---|---|
@@ -74,13 +74,14 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 | `hotkey` | `keys: string[]` | 组合键；系统截屏快捷键会被拒绝；等待、重新截屏 |
 | `wait` | 无 | 暂停 1 秒、重新截屏 |
 | `long_wait` | 必填 `wait_seconds`：10、30、60 或 120 | 暂停、重新截屏 |
+| `screenshot` | 无 | 保存到桌面、复制第一屏到剪贴板、返回这些屏幕 |
 | `long_press` | `screen_index`、`position`、可选 `duration_seconds` 1–10（默认 3） | 左键按住、等待、重新截屏 |
 | `drag` | `start_screen_index`、`start_position`、`end_screen_index`、`end_position` | 拖拽（可跨屏）、等待、重新截屏 |
 | `open_in_browser` | 可选 `url`（http(s)；省略则启动默认浏览器） | `/usr/bin/open`、等待、重新截屏 |
 | `open_in_finder` | 可选 `path`（省略=桌面）、可选 `reveal_only` | Finder 或默认应用、等待、重新截屏 |
 | `code_agent` | `task`、可选 `session_id`、可选 `cwd` | 在一等 standard 会话上入队并返回该 `session_id`；两边都空闲后跟一条插件通知 |
 
-十个 GUI 工具都互斥运行。`presentCall` 为 generic。每次观察先给出 `<frontmost_app>`（前台是 Finder/访达时还有 `<frontmost_folder>`；跳过 overlay 后没有剩余窗口时是 `<focus_note>`）。随后每屏信封标明屏幕序号和 0–1000 坐标空间。信封不含像素尺寸、缩放倍率或截图文件路径。
+十一个 GUI 工具都互斥运行。`presentCall` 为 generic。每次观察先给出 `<frontmost_app>`（前台是 Finder/访达时还有 `<frontmost_folder>`；跳过 overlay 后没有剩余窗口时是 `<focus_note>`）。随后每屏信封标明屏幕序号和 0–1000 坐标空间。信封不含像素尺寸、缩放倍率或截图文件路径。
 
 测试通过 `applyComputerUse(ctx, backend, config)` 注入假桌面，而不是 Config 上的 `driver` 钩子。
 
@@ -96,7 +97,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 
 ### 设计理念
 
-这个实验包有意保持为单个包。现有 agent-loop 已经会把包含图片的工具结果送入下一次模型请求，因此 Computer Use 不增加截屏工具，也不改变 loop 语义。接地文案是 `systemPrompt.section`，不是 Skill。第二个后端才值得把 Service Definition 与 Provider 拆开；本轮把 macOS 捕获/输入与工具放在同一包中。
+这个实验包有意保持为单个包。现有 agent-loop 已经会把包含图片的工具结果送入下一次模型请求，因此 Computer Use 不增加 observe 工具，也不改变 loop 语义。接地文案是 `systemPrompt.section`，不是 Skill。第二个后端才值得把 Service Definition 与 Provider 拆开；本轮把 macOS 捕获/输入与工具放在同一包中。
 
 首帧附件使用 `agent/pre-step`：监听器始终 `await next()`，然后在已领取批次包含 `source.kind === 'user'` 消息且路由声明图片输入时，追加 `form: 'notice'` 的插件 `user` 通知。`agent.inject()` 只会落在下一步。
 
@@ -106,7 +107,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件入口：宿主平台后端上的 `name` / `inject` / `Config` / `apply` |
 | [`src/preset-root.ts`](src/preset-root.ts) | 仅 overlay 使用的插件：发布额外的 agent-presets 根目录 |
-| [`src/plugin.ts`](src/plugin.ts) | 共享的 `applyComputerUse`：策略、十个 GUI 工具、首帧 pre-step |
+| [`src/plugin.ts`](src/plugin.ts) | 共享的 `applyComputerUse`：策略、十一个 GUI 工具、首帧 pre-step |
 | [`src/observe.ts`](src/observe.ts) | 显示器捕获、跳过 overlay 的前台检查，以及面向模型的信封 |
 | [`src/code-agent.ts`](src/code-agent.ts) | 仅 Computer Use 的 `code_agent`：`session.create` / `session.prompt` |
 | [`src/code-agent-completion.ts`](src/code-agent-completion.ts) | Code 会话与 Computer Use 调用方都空闲后投递的插件通知 |
@@ -114,7 +115,8 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 | [`src/macos-sck-capture.swift`](src/macos-sck-capture.swift) | Darwin helper：省略 overlay CGWindowID 的显示捕获 |
 | [`src/open.ts`](src/open.ts) | `long_press` 时长、`open_in_browser` URL 与 `open_in_finder` 路径校验 |
 | [`src/wait-args.ts`](src/wait-args.ts) | 固定 1 秒的 `wait` 与 `long_wait` 的 10/30/60/120 分档 |
-| [`src/overlay-guard.ts`](src/overlay-guard.ts) | 可选的 Desktop overlay 遮蔽：把 capture、inspect 与 HID 包进 `wrapDesktopBackend`；`open_in_browser` / `open_in_finder` 不包 |
+| [`src/screenshot.ts`](src/screenshot.ts) | `screenshot` 的桌面文件名与唯一路径写入 |
+| [`src/overlay-guard.ts`](src/overlay-guard.ts) | 可选的 Desktop overlay 遮蔽：把 capture、inspect 与 HID 包进 `wrapDesktopBackend`；`open_in_browser` / `open_in_finder` / `copyImageToClipboard` 不包 |
 | [`presets/computer-use/`](presets/computer-use/) | Computer Use agent preset：Shell、网页、GUI 工具、`code_agent`、`ask_user_question`、压缩 |
 | — | 不发布运行时不变式伴生入口，因为本插件不引入新的会话事件；观察结果走现有的 `user/message` 与 `tool/result`。 |
 
@@ -126,11 +128,12 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 ## 进一步探索
 
 - [实验组](../README.zh.md) — 私有原型与公开的 Agent Teams 例外。
-- [生成的工具目录](../../../docs/tool-catalog.zh.md#deepseek-aidsh-experimental-tool-computer-use) — 十个 GUI schema 与 `code_agent`。
+- [生成的工具目录](../../../docs/tool-catalog.zh.md#deepseek-aidsh-experimental-tool-computer-use) — 十一个 GUI schema 与 `code_agent`。
 - [添加工具](../../../docs/cookbook/adding-a-tool.zh.md) — UI 呈现意图（`generic`）与内容中的图片块。
 - [Computer Use Agent Note](../../../.agents/notes/implemented/feature/2026-09-13-experimental-computer-use.zh.md) — 插件 vs Skill vs loop、Computer Use agent preset、结果内观察，以及同意门槛。
 - [Computer Use 指针与打开工具](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-pointer-and-open-tools.zh.md) — `long_press`、`drag`、`open_in_browser`、`open_in_finder`、overlay-guard 分流，以及路径/URL 拒绝。
 - [Computer Use 的 wait 与 long_wait](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-wait-and-long-wait.zh.md) — 固定 1 秒的 `wait`、`long_wait` 分档，以及为何 10 秒下限不是 Config。
+- [Computer Use 截图导出](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-screenshot.zh.md) — 桌面文件加剪贴板，不是 observe 工具。
 - [Computer Use 把 Code agent 完成通知停到空闲再投递](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-code-agent-completion.zh.md) — 两边都空闲后投递的插件通知。
 - [Computer Use 观察前台元数据](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-observation-foreground.zh.md) — overlay 窗口排除、Finder 文件夹，以及现有 `user/message` / `tool/result` 上的焦点 fallback。
 - [Computer Use 0–1000 比例坐标](../../../.agents/notes/implemented/bug-fix/2026-09-15-computer-use-fraction-coordinates.zh.md) — 模型侧 0–1000 是可见截图上的比例，不是捕获或请求预览像素。
@@ -162,7 +165,7 @@ Step: take exactly one GUI action per tool call. After the call, the new screens
 
 Do not click or type into a target you cannot see. Do not OCR file paths from the screenshot. When a file or folder path is known, call open_in_finder with that path; do not click Desktop icons to open it. When <frontmost_folder> is present, copy that path; otherwise use bash with real paths. When <focus_note> is present, click the target window first if the next step needs focus.
 
-Observation is not a tool. There is no screenshot or observe call. The first user turn already includes the current screens, and every GUI tool returns the post-action screens.
+Observation is not a tool. Do not call screenshot merely to see the desktop — the first user turn and every GUI result already attach screens. Call screenshot when the user asked for a screenshot file or needs the image on the clipboard to paste.
 
 This session drives the real unsandboxed desktop. Use bash only for short commands inside a GUI loop. Do not use bash to write long reports or a whole project — send that work to code_agent. Do not use bash open as a substitute for open_in_finder or open_in_browser.
 
@@ -195,7 +198,7 @@ When a plugin notice reports that a Code agent session finished, tell the user w
 
 #### 模型看到什么
 
-模型看到生成的 [`click`、`input_text`、`scroll`、`hotkey`、`wait`、`long_wait`、`long_press`、`drag`、`open_in_browser`、`open_in_finder` 与 `code_agent` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-experimental-tool-computer-use)。没有截屏工具。纯文本路由仍会收到 GUI schema，并在执行时被拒绝。`code_agent` 只注册在 Computer Use preset 中。
+模型看到生成的 [`click`、`input_text`、`scroll`、`hotkey`、`wait`、`long_wait`、`screenshot`、`long_press`、`drag`、`open_in_browser`、`open_in_finder` 与 `code_agent` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-experimental-tool-computer-use)。没有 observe 工具。纯文本路由仍会收到 GUI schema，并在执行时被拒绝。`code_agent` 只注册在 Computer Use preset 中。
 
 #### Token 影响
 
@@ -203,7 +206,7 @@ When a plugin notice reports that a Code agent session finished, tell the user w
 
 #### KV Cache 影响
 
-十一个定义及其顺序不变时前缀稳定。注册生命周期可能从第一个变化的 schema token 起使复用失效。
+十二个定义及其顺序不变时前缀稳定。注册生命周期可能从第一个变化的 schema token 起使复用失效。
 
 ## 已知限制与延期工作
 
@@ -215,10 +218,10 @@ When a plugin notice reports that a Code agent session finished, tell the user w
 - **屏幕录制、辅助功能与自动化 TCC** — 捕获需要屏幕录制；点击、输入、滚动、热键、长按与拖拽需要辅助功能；Finder 当前文件夹查询需要访达的自动化权限。插件不会提示授予这些权限。
 - **没有逐次点击批准** — 安装或 patch 插件就是同意门槛；视觉循环不能在每个动作上询问。
 - **宿主 chrome 会出现在截屏中** — Web 窗口会出现在捕获中。Desktop 主窗口始终可被截到。macOS overlay 由 ScreenCaptureKit `excludingWindows` 从 Computer Use 截图中省略（整扇 overlay 窗，含展开面板），并只在对应的 HID 突发期间通过带确认的 overlay-guard IPC 点击穿透。前台检查只跳过这些 overlay 窗口 id，因此主窗口可以出现在 `<frontmost_app>` 里。
-- **输入会使用字符串剪贴板** — `input_text` 通过 Cmd+V 粘贴，并在之后恢复先前的字符串剪贴板。其他剪贴板类型不会被恢复。
+- **输入会使用字符串剪贴板** — `input_text` 通过 Cmd+V 粘贴，并在之后恢复先前的字符串剪贴板。其他剪贴板类型不会被恢复。`screenshot` 会用捕获的图片替换剪贴板，不恢复先前内容。
 - **Retina 与附件尺寸** — backing scale 与请求预览像素可能和捕获栅格不同；对可见截图使用 0–1000 比例坐标。
 - **固定等待** — 动作后延迟只有 `postActionWaitMs`；没有像素差 stall。
-- **没有套索、`launch_app` 或 `manage_files`** — GUI 覆盖是 click、type、scroll、hotkey、wait、long_wait、长按、拖拽、open-in-browser 与 open-in-finder。后台文档与代码走 `code_agent`。
+- **没有套索、`launch_app` 或 `manage_files`** — GUI 覆盖是 click、type、scroll、hotkey、wait、long_wait、screenshot、长按、拖拽、open-in-browser 与 open-in-finder。后台文档与代码走 `code_agent`。
 - **`code_agent` 通知需要活的 Agent** — execute 仍在入队接受后返回。找不到活的 Code agent、Computer Use 调用方已销毁、或 Code 会话再也不回到空闲，都会丢掉通知。策略拦不住仍然调用 `wait` 或 `long_wait` 的模型。
 - **桌面 overlay 仅 macOS** — Windows Desktop 仍是单主窗口。实验包是签名 runtime extra，不是 Desktop Host 的 npm 依赖。
 - **实验性原型，不提供稳定性承诺** — 本包为私有；schema 与后端可以自由变更。

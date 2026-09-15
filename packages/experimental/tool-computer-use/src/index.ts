@@ -1,6 +1,6 @@
 /**
  * Experimental Computer Use plugin: exclusive GUI tools plus a first-turn screenshot.
- * Observation rides existing `user/message` and `tool/result` events; there is no screenshot tool.
+ * Observation rides existing `user/message` and `tool/result` events; `screenshot` writes Desktop files and the clipboard.
  * @module @deepseek-ai/dsh-experimental-tool-computer-use
  */
 
@@ -21,6 +21,7 @@ export type {
   CapturedScreen,
   ClickButton,
   ClickInput,
+  CopyImageToClipboardInput,
   DesktopBackend,
   DesktopForeground,
   DragInput,

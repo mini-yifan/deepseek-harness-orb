@@ -110,7 +110,7 @@ describe('computer-use real Loader composition', () => {
 
     expect(ctx.tools.schemas().map(schema => schema.name).sort()).toEqual([
       'click', 'drag', 'hotkey', 'input_text', 'long_press', 'long_wait',
-      'open_in_browser', 'open_in_finder', 'scroll', 'wait',
+      'open_in_browser', 'open_in_finder', 'screenshot', 'scroll', 'wait',
     ])
     const owner = agent(ctx)
     const result = await ctx.tools.execute({

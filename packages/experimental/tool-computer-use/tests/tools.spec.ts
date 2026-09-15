@@ -8,7 +8,7 @@ import type { GenerateOptions, LlmModelInfo, LlmResolvedModelInfo, StreamChunk }
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
-import { FOCUS_FALLBACK_FOREGROUND, type DesktopForeground } from '../src/backend.ts'
+import { FOCUS_FALLBACK_FOREGROUND, type DesktopForeground, type ScreenInfo } from '../src/backend.ts'
 import { resolveComputerUseConfig } from '../src/config.ts'
 import { createFakeDesktopBackend } from '../src/fake.ts'
 import { applyComputerUse } from '../src/plugin.ts'
@@ -18,6 +18,7 @@ import { POLICY } from '../src/policy.ts'
 import { formatScreenEnvelope } from '../src/observe.ts'
 import { UNSUPPORTED_DESKTOP_MESSAGE } from '../src/unsupported.ts'
 import * as waitModule from '../src/wait.ts'
+import * as screenshotModule from '../src/screenshot.ts'
 
 const SIGNAL = new AbortController().signal
 
@@ -83,6 +84,7 @@ async function setup(options: {
   llm?: boolean
   model?: LlmModelInfo
   foreground?: DesktopForeground
+  screens?: readonly ScreenInfo[]
 } = {}) {
   const home = await mkdtemp(join(tmpdir(), 'dsh-cu-'))
   homes.push(home)
@@ -101,9 +103,10 @@ async function setup(options: {
       { provider: 'visual', id: 'plain-model', name: 'Plain' },
     ]))
   }
-  const backend = createFakeDesktopBackend(
-    options.foreground === undefined ? {} : { foreground: options.foreground },
-  )
+  const backend = createFakeDesktopBackend({
+    ...options.foreground === undefined ? {} : { foreground: options.foreground },
+    ...options.screens === undefined ? {} : { screens: options.screens },
+  })
   applyComputerUse(ctx, backend, resolveComputerUseConfig({ postActionWaitMs: 0, maxScreens: 4 }))
   return { ctx, backend }
 }
@@ -165,6 +168,9 @@ describe('computer-use tools', () => {
     })).toEqual({ kind: 'exclusive' })
     expect(ctx.tools.executionMode({
       signal: SIGNAL, callId: ToolCallId('mode-long-wait'), name: 'long_wait', arguments: { wait_seconds: 10 },
+    })).toEqual({ kind: 'exclusive' })
+    expect(ctx.tools.executionMode({
+      signal: SIGNAL, callId: ToolCallId('mode-screenshot'), name: 'screenshot', arguments: {},
     })).toEqual({ kind: 'exclusive' })
     expect(ctx.tools.executionMode({
       signal: SIGNAL, callId: ToolCallId('mode-long-press'), name: 'long_press',
@@ -232,6 +238,80 @@ describe('computer-use tools', () => {
       .toMatchObject({ card: 'generic', title: 'Hotkey' })
     expect(ctx.tools.get('wait')?.presentCall?.({}))
       .toMatchObject({ card: 'generic', title: 'Wait' })
+  })
+
+  it('saves a desktop screenshot and copies it to the clipboard', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-cu-shot-home-'))
+    homes.push(home)
+    const originalWrite = screenshotModule.writeDesktopScreenshots
+    const write = vi.spyOn(screenshotModule, 'writeDesktopScreenshots').mockImplementation(
+      (files, options) => originalWrite(files, {
+        ...options,
+        home,
+        now: new Date(2026, 8, 15, 20, 10, 0),
+      }),
+    )
+    try {
+      const { ctx, backend } = await setup()
+      const result = await execute(ctx, 'screenshot', {})
+      expect(result.isError).toBe(false)
+      const saved = join(home, 'Desktop', 'Screenshot 2026-09-15 at 20.10.00.png')
+      expect(text(result)).toContain(`Saved screenshot to ${saved}`)
+      expect(text(result)).toContain('copied it to the clipboard')
+      expect(backend.actions.at(-1)).toMatchObject({
+        type: 'copyImageToClipboard',
+        input: { path: saved, mediaType: 'image/png' },
+      })
+      expect(ctx.tools.get('screenshot')?.presentCall?.({}))
+        .toMatchObject({ card: 'generic', title: 'Screenshot' })
+      const textRoute = await execute(ctx, 'screenshot', {}, 'text-model')
+      expect(textRoute.isError).toBe(true)
+      expect(text(textRoute)).toContain('does not declare image input')
+    } finally {
+      write.mockRestore()
+    }
+  })
+
+  it('saves one file per display and copies screen 0', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-cu-shot-multi-'))
+    homes.push(home)
+    const originalWrite = screenshotModule.writeDesktopScreenshots
+    const write = vi.spyOn(screenshotModule, 'writeDesktopScreenshots').mockImplementation(
+      (files, options) => originalWrite(files, {
+        ...options,
+        home,
+        now: new Date(2026, 8, 15, 20, 10, 0),
+      }),
+    )
+    try {
+      const { ctx, backend } = await setup({
+        screens: [
+          { index: 0, bounds: { x: 0, y: 0, width: 100, height: 80 }, scale: 1 },
+          { index: 1, bounds: { x: 100, y: 0, width: 50, height: 80 }, scale: 1 },
+        ],
+      })
+      const result = await execute(ctx, 'screenshot', {})
+      expect(result.isError).toBe(false)
+      expect(text(result)).toContain('Saved screenshots:')
+      expect(text(result)).toContain('(screen 0).png')
+      expect(text(result)).toContain('(screen 1).png')
+      expect(text(result)).toContain('Copied screen 0 to the clipboard')
+      expect(backend.actions.at(-1)?.type).toBe('copyImageToClipboard')
+    } finally {
+      write.mockRestore()
+    }
+  })
+
+  it('fails loud when screenshot writing returns no paths', async () => {
+    const write = vi.spyOn(screenshotModule, 'writeDesktopScreenshots').mockResolvedValue([])
+    try {
+      const { ctx } = await setup()
+      const result = await execute(ctx, 'screenshot', {})
+      expect(result.isError).toBe(true)
+      expect(text(result)).toContain('produced no files')
+    } finally {
+      write.mockRestore()
+    }
   })
 
   it('long-waits only the 10/30/60/120 buckets', async () => {
@@ -413,6 +493,8 @@ describe('computer-use tools', () => {
     expect(POLICY).toContain('call wait')
     expect(POLICY).toContain('call long_wait with the smallest of 10, 30, 60, or 120')
     expect(POLICY).toContain('Do not use long_wait for ordinary page load')
+    expect(POLICY).toContain('Do not call screenshot merely to see the desktop')
+    expect(POLICY).toContain('Call screenshot when the user asked for a screenshot file')
     expect(POLICY).toContain('Do not call wait, long_wait, or bash sleep')
   })
 
@@ -433,7 +515,7 @@ describe('computer-use tools', () => {
     const fiber = await ctx.plugin(computerUse)
     expect(ctx.tools.schemas().map(schema => schema.name).sort()).toEqual([
       'click', 'drag', 'hotkey', 'input_text', 'long_press', 'long_wait',
-      'open_in_browser', 'open_in_finder', 'scroll', 'wait',
+      'open_in_browser', 'open_in_finder', 'screenshot', 'scroll', 'wait',
     ])
     expect(ctx.tools.schemas().map(schema => schema.name)).not.toContain('code_agent')
     await fiber.dispose()
@@ -464,7 +546,7 @@ describe('computer-use tools', () => {
     apply(host, { postActionWaitMs: 0 })
     expect(host.tools.schemas().map(schema => schema.name).sort()).toEqual([
       'click', 'drag', 'hotkey', 'input_text', 'long_press', 'long_wait',
-      'open_in_browser', 'open_in_finder', 'scroll', 'wait',
+      'open_in_browser', 'open_in_finder', 'screenshot', 'scroll', 'wait',
     ])
     expect(host.tools.schemas().map(schema => schema.name)).not.toContain('code_agent')
     if (process.platform === 'darwin') return

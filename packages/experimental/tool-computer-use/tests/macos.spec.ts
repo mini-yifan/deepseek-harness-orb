@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -378,6 +378,25 @@ describe('macOS backend with an injected runner', () => {
     args.length = 0
     await backend.openInFinder({ path: '/Users/tester/Desktop/notes.txt', revealOnly: true })
     expect(args).toEqual([['-R', '/Users/tester/Desktop/notes.txt']])
+  })
+
+  it('copies a written image file onto the pasteboard', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'dsh-cu-clip-'))
+    try {
+      const file = join(dir, 'shot.png')
+      await writeCaptureFile(file, FAKE_DESKTOP_PNG)
+      const scripts: string[] = []
+      const backend = createMacosDesktopBackend(runner({ scripts }))
+      await backend.copyImageToClipboard({ path: file, mediaType: 'image/png' })
+      expect(scripts.at(-1)).toContain('setDataForType')
+      expect(scripts.at(-1)).toContain('public.png')
+      expect(scripts.at(-1)).toContain(JSON.stringify(file))
+      const failing = createMacosDesktopBackend(runner({ osascript: new Error('denied') }))
+      await expect(failing.copyImageToClipboard({ path: file, mediaType: 'image/jpeg' }))
+        .rejects.toThrow(/clipboard copy failed/u)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 
   it('names the path or URL when open fails and refuses a missing default browser', async () => {

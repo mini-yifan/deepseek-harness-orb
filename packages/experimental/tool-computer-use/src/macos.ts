@@ -7,7 +7,8 @@
  * and `/usr/sbin/screencapture`, or the ScreenCaptureKit helper when overlay
  * window ids are active. Foreground inspect uses CGWindowList (skip overlay
  * ids only) plus Finder AppleScript for the current folder. `open_in_browser` and
- * `open_in_finder` use `/usr/bin/open`.
+ * `open_in_finder` use `/usr/bin/open`. `screenshot` writes Desktop files in Node
+ * and copies the image through NSPasteboard.
  * @module @deepseek-ai/dsh-experimental-tool-computer-use/src/macos
  */
 
@@ -22,6 +23,7 @@ import {
   FOCUS_FALLBACK_FOREGROUND,
   type CapturedScreen,
   type ClickInput,
+  type CopyImageToClipboardInput,
   type DesktopBackend,
   type DragInput,
   type HotkeyInput,
@@ -452,6 +454,23 @@ function hidScript(body: string): string {
   return `${HID_RUNTIME}\n${body}\n`
 }
 
+const PASTEBOARD_TYPE: Record<CopyImageToClipboardInput['mediaType'], string> = {
+  'image/png': 'public.png',
+  'image/jpeg': 'public.jpeg',
+  'image/gif': 'com.compuserve.gif',
+  'image/webp': 'org.webmproject.webp',
+}
+
+function copyImageScript(input: CopyImageToClipboardInput): string {
+  return `ObjC.import('AppKit')
+var pb = $.NSPasteboard.generalPasteboard
+var discarded = pb.clearContents
+var data = $.NSData.dataWithContentsOfFile($.NSString.stringWithString(${JSON.stringify(input.path)}))
+if (!data) throw new Error('clipboard image file is missing')
+pb.setDataForType(data, $.NSString.stringWithString(${JSON.stringify(PASTEBOARD_TYPE[input.mediaType])}))
+`
+}
+
 function roundedPoint(position: readonly [number, number], screen: ScreenInfo): { x: number; y: number } {
   const point = mapNormalizedToGlobal(position, screen)
   return { x: Math.round(point.x), y: Math.round(point.y) }
@@ -652,6 +671,14 @@ export function createMacosDesktopBackend(run: CommandRunner = runCommand): Desk
         await run(OPEN, input.revealOnly ? ['-R', input.path] : [input.path], { signal })
       } catch (error: unknown) {
         throw new Error(`computer-use: open failed for ${input.path}: ${errorDetail(error)}`)
+      }
+    },
+
+    async copyImageToClipboard(input: CopyImageToClipboardInput, signal) {
+      try {
+        await runHidScript(run, copyImageScript(input), signal)
+      } catch (error: unknown) {
+        throw new Error(`computer-use: clipboard copy failed: ${errorDetail(error)}`)
       }
     },
   }

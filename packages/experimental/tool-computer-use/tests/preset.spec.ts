@@ -20,7 +20,7 @@ import { apply, name, PRESET_ROOT } from '../src/preset-root.ts'
 
 const GUI_TOOLS = [
   'click', 'drag', 'hotkey', 'input_text', 'long_press', 'long_wait',
-  'open_in_browser', 'open_in_finder', 'scroll', 'wait',
+  'open_in_browser', 'open_in_finder', 'screenshot', 'scroll', 'wait',
 ]
 
 const SOURCE_OVERLAY = fileURLToPath(new URL('../cordis.source.patch.yml', import.meta.url))

@@ -45,6 +45,8 @@ describe('observeDesktop', () => {
       SIGNAL,
     )
     expect(observation.screens).toHaveLength(1)
+    expect(observation.captures).toHaveLength(1)
+    expect(observation.captures[0]?.mediaType).toBe('image/png')
     expect(observation.screens[0]?.screenIndex).toBe(0)
     expect(observation.blocks.some(block => block.type === 'image')).toBe(true)
     expect(observation.blocks.some(block =>

@@ -28,7 +28,7 @@ Computer Use `wait` took a free `wait_seconds` number defaulting to 1 and clampe
 
 ## Consequences
 
-The Computer Use catalog is ten exclusive GUI tools plus `code_agent`. Ordinary loaders cannot request 3–5 seconds. A remaining 8-second download either loops `wait` or overshoots with `long_wait` 10. Overlay-guard is unchanged: neither tool posts HID.
+The Computer Use catalog is eleven exclusive GUI tools plus `code_agent`. Ordinary loaders cannot request 3–5 seconds. A remaining 8-second download either loops `wait` or overshoots with `long_wait` 10. Overlay-guard is unchanged: neither tool posts HID.
 
 ## Testing
 

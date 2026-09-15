@@ -26,5 +26,6 @@ export function createUnsupportedDesktopBackend(): DesktopBackend {
     drag: fail,
     openInBrowser: fail,
     openInFinder: fail,
+    copyImageToClipboard: fail,
   }
 }

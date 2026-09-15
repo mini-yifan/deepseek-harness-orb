@@ -564,6 +564,14 @@
       }
     },
     {
+      "name": "screenshot",
+      "description": "Save the current desktop screenshot to the user Desktop and copy it to the clipboard. Returns the saved file path. Do not use this to see the screen — the first user turn and every GUI result already attach screens. Use when the user asked for a screenshot file or needs the image on the clipboard to paste. Exclusive.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
       "name": "scroll",
       "description": "Scroll up or down at a 0–1000 position on one desktop screen, then return the post-action screenshot. scroll_level is 1–10. Exclusive.",
       "parameters": {

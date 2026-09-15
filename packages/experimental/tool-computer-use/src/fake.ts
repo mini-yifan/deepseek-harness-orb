@@ -6,6 +6,7 @@
 import type {
   CapturedScreen,
   ClickInput,
+  CopyImageToClipboardInput,
   DesktopBackend,
   DesktopForeground,
   DragInput,
@@ -34,6 +35,7 @@ export type FakeDesktopAction =
   | { readonly type: 'drag'; readonly input: DragInput }
   | { readonly type: 'openInBrowser'; readonly input: OpenInBrowserInput }
   | { readonly type: 'openInFinder'; readonly input: OpenInFinderInput }
+  | { readonly type: 'copyImageToClipboard'; readonly input: CopyImageToClipboardInput }
 
 /** Fake backend that records HID calls and returns a fixture PNG. */
 export interface FakeDesktopBackend extends DesktopBackend {
@@ -103,6 +105,10 @@ export function createFakeDesktopBackend(options: FakeDesktopOptions = {}): Fake
     },
     openInFinder: (input) => {
       actions.push({ type: 'openInFinder', input })
+      return Promise.resolve()
+    },
+    copyImageToClipboard: (input) => {
+      actions.push({ type: 'copyImageToClipboard', input })
       return Promise.resolve()
     },
   }

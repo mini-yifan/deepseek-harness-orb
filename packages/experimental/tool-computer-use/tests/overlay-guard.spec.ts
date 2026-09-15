@@ -38,6 +38,7 @@ const platformBackend = vi.hoisted(() => {
     drag: vi.fn(() => Promise.resolve()),
     openInBrowser: vi.fn(() => Promise.resolve()),
     openInFinder: vi.fn(() => Promise.resolve()),
+    copyImageToClipboard: vi.fn(() => Promise.resolve()),
   }
 })
 
@@ -116,6 +117,7 @@ function stubBackend(overrides: Partial<DesktopBackend> = {}): DesktopBackend {
     drag: () => Promise.resolve(),
     openInBrowser: () => Promise.resolve(),
     openInFinder: () => Promise.resolve(),
+    copyImageToClipboard: () => Promise.resolve(),
     ...overrides,
   }
 }
@@ -139,6 +141,7 @@ describe('wrapDesktopBackend', () => {
     })
     await backend.openInBrowser({ url: 'https://example.com' })
     await backend.openInFinder({ path: '/tmp', revealOnly: false })
+    await backend.copyImageToClipboard({ path: '/tmp/shot.png', mediaType: 'image/png' })
     expect(guard.calls).toEqual([
       'capture', 'capture-end',
       'capture', 'capture-end',
@@ -151,6 +154,7 @@ describe('wrapDesktopBackend', () => {
     ])
     expect(inner.actions.map(action => action.type)).toEqual([
       'click', 'typeText', 'scroll', 'hotkey', 'longPress', 'drag', 'openInBrowser', 'openInFinder',
+      'copyImageToClipboard',
     ])
   })
 
