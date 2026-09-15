@@ -73,7 +73,7 @@ There is no `screenshot` or `observe` tool. The first user turn already includes
 | `scroll` | `screen_index`, `position`, `direction` (`up`/`down`), `scroll_level` 1–10 | scroll, wait, recapture |
 | `hotkey` | `keys: string[]` | key combo; system screenshot chords are rejected; wait, recapture |
 | `wait` | none | pause 1s, recapture |
-| `long_wait` | required `wait_seconds`: 20, 30, 60, or 120 | pause, recapture |
+| `long_wait` | required `wait_seconds`: 10, 30, 60, or 120 | pause, recapture |
 | `long_press` | `screen_index`, `position`, optional `duration_seconds` 1–10 (default 3) | left-button hold, wait, recapture |
 | `drag` | `start_screen_index`, `start_position`, `end_screen_index`, `end_position` | drag, including across screens, wait, recapture |
 | `open_in_browser` | optional `url` (http(s); omit launches the default browser) | `/usr/bin/open`, wait, recapture |
@@ -113,7 +113,7 @@ First-frame attachment uses `agent/pre-step`: the listener always awaits `next()
 | [`src/macos.ts`](src/macos.ts) | Darwin capture via `screencapture`, or ScreenCaptureKit `excludingWindows` when overlay window ids are set; click, scroll, hotkey, long-press, and drag via JXA `CGEvent`; `input_text` pastes via NSPasteboard; `open_in_browser` / `open_in_finder` via `/usr/bin/open`; `inspectForeground` uses CGWindowList (skip overlay ids) plus Finder AppleScript |
 | [`src/macos-sck-capture.swift`](src/macos-sck-capture.swift) | Darwin helper: display capture that omits overlay CGWindowIDs |
 | [`src/open.ts`](src/open.ts) | `long_press` duration, `open_in_browser` URL, and `open_in_finder` path validation |
-| [`src/wait-args.ts`](src/wait-args.ts) | Fixed 1s `wait` and `long_wait` 20/30/60/120 buckets |
+| [`src/wait-args.ts`](src/wait-args.ts) | Fixed 1s `wait` and `long_wait` 10/30/60/120 buckets |
 | [`src/overlay-guard.ts`](src/overlay-guard.ts) | Optional Desktop overlay cloak: `wrapDesktopBackend` around capture, inspect, and HID; `open_in_browser` / `open_in_finder` stay unwrapped |
 | [`presets/computer-use/`](presets/computer-use/) | Computer Use agent preset: Shell, web, GUI tools, `code_agent`, `ask_user_question`, compaction |
 | — | No runtime invariant companion is published because this plugin introduces no new session events; observations ride existing `user/message` and `tool/result`. |
@@ -130,7 +130,7 @@ First-frame attachment uses `agent/pre-step`: the listener always awaits `next()
 - [Adding a tool](../../../docs/cookbook/adding-a-tool.md) — UI render intent (`generic`) and image blocks in content.
 - [Computer Use Agent Note](../../../.agents/notes/implemented/feature/2026-09-13-experimental-computer-use.md) — plugin vs Skill vs loop, the Computer Use agent preset, observation-in-result, and the consent gate.
 - [Computer Use pointer and open tools](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-pointer-and-open-tools.md) — `long_press`, `drag`, `open_in_browser`, `open_in_finder`, overlay-guard split, and path/URL rejects.
-- [Computer Use wait and long_wait](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-wait-and-long-wait.md) — fixed 1s `wait`, `long_wait` buckets, and why the 20s floor is not Config.
+- [Computer Use wait and long_wait](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-wait-and-long-wait.md) — fixed 1s `wait`, `long_wait` buckets, and why the 10s floor is not Config.
 - [Computer Use parks Code agent completion](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-code-agent-completion.md) — parked plugin notice after both sessions are idle.
 - [Computer Use observation foreground](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-observation-foreground.md) — overlay-window skip, Finder folder, and focus fallback on existing `user/message` / `tool/result`.
 - [Computer Use 0–1000 fraction coordinates](../../../.agents/notes/implemented/bug-fix/2026-09-15-computer-use-fraction-coordinates.md) — model-facing 0–1000 is a fraction of the visible screenshot, not capture or request-preview pixels.
@@ -170,7 +170,7 @@ Open a site in the user's visible browser with open_in_browser. web_search and w
 
 Drag sliders, window edges, and files with drag. Press and hold with long_press.
 
-When the latest screenshot still shows a loader, spinner, or a control that has not appeared, call wait. After click or open, the tool result already has a new screenshot; do not immediately wait unless that image still shows loading. When the screenshot shows a long job still running (download, install, export, or in-window generation), call long_wait with the smallest of 20, 30, 60, or 120 that covers remaining progress. Do not use long_wait for ordinary page load.
+When the latest screenshot still shows a loader, spinner, or a control that has not appeared, call wait. After click or open, the tool result already has a new screenshot; do not immediately wait unless that image still shows loading. When the screenshot shows a long job still running (download, install, export, or in-window generation), call long_wait with the smallest of 10, 30, 60, or 120 that covers remaining progress. Do not use long_wait for ordinary page load.
 
 Route the user's request yourself:
 - Visible GUI such as opening WeChat or clicking a button in Pages → GUI tools only. Do not call code_agent.

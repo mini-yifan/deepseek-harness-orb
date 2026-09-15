@@ -2305,7 +2305,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 ### `long_wait`
 
-暂停 20、30、60 或 120 秒，然后返回新的桌面截屏，不移动指针。仅用于看得见的长任务，如下载、安装器、导出或屏幕上的生成。选能覆盖剩余进度的最小 wait_seconds；120 只在截图已经写明还要几分钟时使用。普通加载用 wait。不要用于 code_agent。互斥。
+暂停 10、30、60 或 120 秒，然后返回新的桌面截屏，不移动指针。仅用于看得见的长任务，如下载、安装器、导出或屏幕上的生成。选能覆盖剩余进度的最小 wait_seconds；120 只在截图已经写明还要几分钟时使用。普通加载用 wait。不要用于 code_agent。互斥。
 
 ```json
 {
@@ -2313,9 +2313,9 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
   "properties": {
     "wait_seconds": {
       "type": "integer",
-      "description": "Seconds to pause. Must be 20, 30, 60, or 120.",
+      "description": "Seconds to pause. Must be 10, 30, 60, or 120.",
       "enum": [
-        20,
+        10,
         30,
         60,
         120
