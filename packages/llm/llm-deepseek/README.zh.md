@@ -74,7 +74,7 @@ kind: "package-reference"
 
 ### 带 thinking 与图片的流式调用
 
-支持图片的路由会在自身像素与字节预算内把每个持久引用解析为确定性请求版本。`imagePixelBudget` 接受正整数或 `low`；省略时使用总计 640,000 像素，`low` 使用总计 512×512 像素，`imageMaxBytes` 默认为 1 MiB。带 alpha 的图片使用 effort 0 的 WebP，不透明图片使用 JPEG，并采用 85/75/60 质量阶梯；全部候选都超过目标时保留最小输出。每张保留图片前都有文本，注明完整附件 id 与实际请求尺寸。当前文件系统可以映射附件提供方的宿主对象时，该文本还携带只读执行世界路径与可写副本使用的扩展名。纯文本与未列出路由接收稳定附件占位符，而持久历史继续保留图片引用。
+支持图片的路由会在自身像素与字节预算内把每个持久引用解析为确定性请求版本。`imagePixelBudget` 接受正整数或 `low`；省略时使用总计 1,690,000 像素（1300×1300），`low` 使用总计 512×512 像素，`imageMaxBytes` 默认为 1 MiB。带 alpha 的图片使用 effort 0 的 WebP，不透明图片使用 JPEG，并采用 85/75/60 质量阶梯；全部候选都超过目标时保留最小输出。每张保留图片前都有文本，注明完整附件 id 与实际请求尺寸。当前文件系统可以映射附件提供方的宿主对象时，该文本还携带只读执行世界路径与可写副本使用的扩展名。纯文本与未列出路由接收稳定附件占位符，而持久历史继续保留图片引用。
 
 适配器通常通过 DeepSeek Files API 上传这些确切请求字节，并发送 file-id 块。文件解析失败或超时会用相同请求版本的 base64 data URL 重建整份 chat 请求；一次请求绝不混用 file id 与内联图片。缓存 id 按端点与 API key 限定作用域，在到期前刷新，根据提供方的陈旧文件错误失效，并通过带等待方局部取消的 singleflight 解析。配额失败会先删除一批配置数量的最旧 harness 文件，再重试一次上传。
 
@@ -141,6 +141,7 @@ Files 模式通过 `maxRequestFilesBytes` 与 `maxImagesPerRequest` 限制保留
 - [会话日志上传](../../session/session-log-deepseek/README.zh.md)——可选的增量 `dsh_session_log` 贡献。
 - [插件包清单](../plugin-package-inventory-deepseek/README.zh.md)——默认启用的 `dsh_plugin_packages` 贡献。
 - [孪生 LLM 适配器](../../../.agents/notes/implemented/architecture/2026-06-13-twin-llm-adapters.zh.md)——为什么 DeepSeek 交付两个结构不同的适配器。
+- [DeepSeek 请求图片像素预算](../../../.agents/notes/implemented/bug-fix/2026-09-15-deepseek-request-image-pixel-budget.zh.md)——为什么省略时的视觉路由发送 1,690,000 像素。
 - [强制应用归因标头](../../../.agents/notes/implemented/architecture/2026-06-21-mandatory-app-attribution-headers.zh.md)——每个提供方请求携带的身份。
 
 -----
@@ -189,8 +190,6 @@ loop 保留的响应块会追加到下一个请求，并保留其更早的可复
 - **跳过插件新增的内容块类型**——核心文本与受支持图片块会被序列化，空工具输出以字面量 `(no output)` 过线。
 - **图片是仅用于输入的持久附件**——不支持直接外部 URL 与 assistant 图片输出；DeepSeek 输入通常使用 Files API，仅在单次请求恢复时使用内联 base64。
 - 默认目录预注册 `deepseek-flash` 及其文本、图片和历史内更新能力，不探测网关可用性。网关开放该 ID 前，请求可能以 `INVALID_REQUEST` 失败。配置 `DEEPSEEK_API_KEY` 和支持该 ID 的网关后，设置 `DEEPSEEK_FLASH_E2E=1` 可启用[本包 e2e 测试文件](tests/adapter.e2e.ts)中的 Chat Completions 协议验证。
-
-- 默认请求图片投影限制为 640,000 总像素，低于提供方约 1300×1300 的处理预算，可能丢弃可用细节。每个模型的 `imagePixelBudget` 可以覆盖默认值。更改默认值会改变请求内容，需要单独验证快照（[决策](../../../.agents/notes/implemented/bug-fix/2026-09-10-deepseek-image-token-calculator-v41.zh.md)）。
 
 <a id="dev-note"></a>
 ### 开发备注

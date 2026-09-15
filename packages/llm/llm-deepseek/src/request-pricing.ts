@@ -20,8 +20,8 @@ import type { DeepSeekCatalogModel, DeepSeekConnectionOptions } from './adapter.
 export const DEFAULT_MAX_REQUEST_FILES_BYTES = 128 * 1024 * 1024
 /** Provider request image-count limit. */
 export const DEFAULT_MAX_IMAGES_PER_REQUEST = 600
-/** Default total-pixel budget for harness request-image projection. */
-export const DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET = 640_000
+/** Default total-pixel budget matching the provider's roughly 1300×1300 processing cap. */
+export const DEFAULT_REQUEST_IMAGE_PIXEL_BUDGET = 1_690_000
 /** Total-pixel budget matching provider low-detail image input. */
 export const DEFAULT_LOW_DETAIL_IMAGE_PIXEL_BUDGET = 512 * 512
 /** Encoded-byte target for one deterministic model-request image; the smallest quality-ladder output is used when no quality fits. */

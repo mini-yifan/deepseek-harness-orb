@@ -44,8 +44,8 @@ describe('DeepSeek request-image pricing', () => {
     const image = ref('photo', 1920, 1080)
     const prices = deepSeekImageRequestPricing(connection(), 'vision').priceImages([image])
     expect(prices).toEqual([{
-      visualTokens: 407,
-      text: requestImageHandleText(image, { width: 1066, height: 600 }),
+      visualTokens: 968,
+      text: requestImageHandleText(image, { width: 1733, height: 975 }),
     }])
   })
 
