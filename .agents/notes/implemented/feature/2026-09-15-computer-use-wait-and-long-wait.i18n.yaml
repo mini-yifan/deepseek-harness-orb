@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-15-computer-use-wait-and-long-wait.md
-2026-09-15-computer-use-wait-and-long-wait.md: 3acb511f1d68362e6311beda4199dfb2c28f31fe
-2026-09-15-computer-use-wait-and-long-wait.zh.md: 15d6bc27e65151434718df296ec633280e1748a5
+2026-09-15-computer-use-wait-and-long-wait.md: 8422b95cd0bc5619b3aea8a0399fab1ef3c27b80
+2026-09-15-computer-use-wait-and-long-wait.zh.md: 1f98eb8f58cb904166074ec5eb4d06e8a77ee9c5

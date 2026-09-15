@@ -2299,7 +2299,7 @@ Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/ex
 
 ### `long_wait`
 
-Pause 20, 30, 60, or 120 seconds, then return a fresh desktop screenshot without moving the pointer. Only for a visible long job such as a download, installer, export, or on-screen generation. Pick the smallest wait_seconds that covers remaining progress; 120 only when the screenshot already shows a minutes-long job. Ordinary loading uses wait. Do not use for code_agent. Exclusive.
+Pause 10, 30, 60, or 120 seconds, then return a fresh desktop screenshot without moving the pointer. Only for a visible long job such as a download, installer, export, or on-screen generation. Pick the smallest wait_seconds that covers remaining progress; 120 only when the screenshot already shows a minutes-long job. Ordinary loading uses wait. Do not use for code_agent. Exclusive.
 
 ```json
 {
@@ -2307,9 +2307,9 @@ Pause 20, 30, 60, or 120 seconds, then return a fresh desktop screenshot without
   "properties": {
     "wait_seconds": {
       "type": "integer",
-      "description": "Seconds to pause. Must be 20, 30, 60, or 120.",
+      "description": "Seconds to pause. Must be 10, 30, 60, or 120.",
       "enum": [
-        20,
+        10,
         30,
         60,
         120

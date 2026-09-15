@@ -73,7 +73,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 | `scroll` | `screen_index`、`position`、`direction`（`up`/`down`）、`scroll_level` 1–10 | 滚动、等待、重新截屏 |
 | `hotkey` | `keys: string[]` | 组合键；系统截屏快捷键会被拒绝；等待、重新截屏 |
 | `wait` | 无 | 暂停 1 秒、重新截屏 |
-| `long_wait` | 必填 `wait_seconds`：20、30、60 或 120 | 暂停、重新截屏 |
+| `long_wait` | 必填 `wait_seconds`：10、30、60 或 120 | 暂停、重新截屏 |
 | `long_press` | `screen_index`、`position`、可选 `duration_seconds` 1–10（默认 3） | 左键按住、等待、重新截屏 |
 | `drag` | `start_screen_index`、`start_position`、`end_screen_index`、`end_position` | 拖拽（可跨屏）、等待、重新截屏 |
 | `open_in_browser` | 可选 `url`（http(s)；省略则启动默认浏览器） | `/usr/bin/open`、等待、重新截屏 |
@@ -113,7 +113,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 | [`src/macos.ts`](src/macos.ts) | Darwin 通过 `screencapture` 捕获，或在设置了 overlay 窗口 id 时走 ScreenCaptureKit `excludingWindows`；click、scroll、hotkey、长按与拖拽走 JXA `CGEvent`；`input_text` 通过 NSPasteboard 粘贴；`open_in_browser` / `open_in_finder` 走 `/usr/bin/open`；`inspectForeground` 用 CGWindowList（跳过 overlay id）加 Finder AppleScript |
 | [`src/macos-sck-capture.swift`](src/macos-sck-capture.swift) | Darwin helper：省略 overlay CGWindowID 的显示捕获 |
 | [`src/open.ts`](src/open.ts) | `long_press` 时长、`open_in_browser` URL 与 `open_in_finder` 路径校验 |
-| [`src/wait-args.ts`](src/wait-args.ts) | 固定 1 秒的 `wait` 与 `long_wait` 的 20/30/60/120 分档 |
+| [`src/wait-args.ts`](src/wait-args.ts) | 固定 1 秒的 `wait` 与 `long_wait` 的 10/30/60/120 分档 |
 | [`src/overlay-guard.ts`](src/overlay-guard.ts) | 可选的 Desktop overlay 遮蔽：把 capture、inspect 与 HID 包进 `wrapDesktopBackend`；`open_in_browser` / `open_in_finder` 不包 |
 | [`presets/computer-use/`](presets/computer-use/) | Computer Use agent preset：Shell、网页、GUI 工具、`code_agent`、`ask_user_question`、压缩 |
 | — | 不发布运行时不变式伴生入口，因为本插件不引入新的会话事件；观察结果走现有的 `user/message` 与 `tool/result`。 |
@@ -130,7 +130,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 - [添加工具](../../../docs/cookbook/adding-a-tool.zh.md) — UI 呈现意图（`generic`）与内容中的图片块。
 - [Computer Use Agent Note](../../../.agents/notes/implemented/feature/2026-09-13-experimental-computer-use.zh.md) — 插件 vs Skill vs loop、Computer Use agent preset、结果内观察，以及同意门槛。
 - [Computer Use 指针与打开工具](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-pointer-and-open-tools.zh.md) — `long_press`、`drag`、`open_in_browser`、`open_in_finder`、overlay-guard 分流，以及路径/URL 拒绝。
-- [Computer Use 的 wait 与 long_wait](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-wait-and-long-wait.zh.md) — 固定 1 秒的 `wait`、`long_wait` 分档，以及为何 20 秒下限不是 Config。
+- [Computer Use 的 wait 与 long_wait](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-wait-and-long-wait.zh.md) — 固定 1 秒的 `wait`、`long_wait` 分档，以及为何 10 秒下限不是 Config。
 - [Computer Use 把 Code agent 完成通知停到空闲再投递](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-code-agent-completion.zh.md) — 两边都空闲后投递的插件通知。
 - [Computer Use 观察前台元数据](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-observation-foreground.zh.md) — overlay 窗口排除、Finder 文件夹，以及现有 `user/message` / `tool/result` 上的焦点 fallback。
 - [Computer Use 0–1000 比例坐标](../../../.agents/notes/implemented/bug-fix/2026-09-15-computer-use-fraction-coordinates.zh.md) — 模型侧 0–1000 是可见截图上的比例，不是捕获或请求预览像素。
@@ -170,7 +170,7 @@ Open a site in the user's visible browser with open_in_browser. web_search and w
 
 Drag sliders, window edges, and files with drag. Press and hold with long_press.
 
-When the latest screenshot still shows a loader, spinner, or a control that has not appeared, call wait. After click or open, the tool result already has a new screenshot; do not immediately wait unless that image still shows loading. When the screenshot shows a long job still running (download, install, export, or in-window generation), call long_wait with the smallest of 20, 30, 60, or 120 that covers remaining progress. Do not use long_wait for ordinary page load.
+When the latest screenshot still shows a loader, spinner, or a control that has not appeared, call wait. After click or open, the tool result already has a new screenshot; do not immediately wait unless that image still shows loading. When the screenshot shows a long job still running (download, install, export, or in-window generation), call long_wait with the smallest of 10, 30, 60, or 120 that covers remaining progress. Do not use long_wait for ordinary page load.
 
 Route the user's request yourself:
 - Visible GUI such as opening WeChat or clicking a button in Pages → GUI tools only. Do not call code_agent.

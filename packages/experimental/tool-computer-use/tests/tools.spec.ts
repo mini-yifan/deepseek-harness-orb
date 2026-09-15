@@ -164,7 +164,7 @@ describe('computer-use tools', () => {
       signal: SIGNAL, callId: ToolCallId('mode-wait'), name: 'wait', arguments: {},
     })).toEqual({ kind: 'exclusive' })
     expect(ctx.tools.executionMode({
-      signal: SIGNAL, callId: ToolCallId('mode-long-wait'), name: 'long_wait', arguments: { wait_seconds: 20 },
+      signal: SIGNAL, callId: ToolCallId('mode-long-wait'), name: 'long_wait', arguments: { wait_seconds: 10 },
     })).toEqual({ kind: 'exclusive' })
     expect(ctx.tools.executionMode({
       signal: SIGNAL, callId: ToolCallId('mode-long-press'), name: 'long_press',
@@ -234,9 +234,9 @@ describe('computer-use tools', () => {
       .toMatchObject({ card: 'generic', title: 'Wait' })
   })
 
-  it('long-waits only the 20/30/60/120 buckets', async () => {
+  it('long-waits only the 10/30/60/120 buckets', async () => {
     const { ctx } = await setup()
-    for (const seconds of [20, 30, 60, 120] as const) {
+    for (const seconds of [10, 30, 60, 120] as const) {
       vi.mocked(waitModule.delay).mockClear()
       const result = await execute(ctx, 'long_wait', { wait_seconds: seconds })
       expect(result.isError).toBe(false)
@@ -356,11 +356,11 @@ describe('computer-use tools', () => {
     const omitted = await execute(ctx, 'long_wait', {})
     expect(omitted.isError).toBe(true)
     expect(text(omitted)).toMatch(/wait_seconds/u)
-    for (const seconds of [1, 5, 19, 25]) {
+    for (const seconds of [1, 5, 9, 20, 25]) {
       const invalid = await execute(ctx, 'long_wait', { wait_seconds: seconds })
       expect(invalid.isError).toBe(true)
     }
-    const textLongWait = await execute(ctx, 'long_wait', { wait_seconds: 20 }, 'text-model')
+    const textLongWait = await execute(ctx, 'long_wait', { wait_seconds: 10 }, 'text-model')
     expect(textLongWait.isError).toBe(true)
     expect(text(textLongWait)).toContain('does not declare image input')
     const duration = await execute(ctx, 'long_press', {
@@ -411,7 +411,7 @@ describe('computer-use tools', () => {
     expect(POLICY).toContain('Drag sliders, window edges, and files with drag')
     expect(POLICY).toContain('Press and hold with long_press')
     expect(POLICY).toContain('call wait')
-    expect(POLICY).toContain('call long_wait with the smallest of 20, 30, 60, or 120')
+    expect(POLICY).toContain('call long_wait with the smallest of 10, 30, 60, or 120')
     expect(POLICY).toContain('Do not use long_wait for ordinary page load')
     expect(POLICY).toContain('Do not call wait, long_wait, or bash sleep')
   })

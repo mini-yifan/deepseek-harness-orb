@@ -12,7 +12,7 @@ Computer Use 的 `wait` 接受自由的 `wait_seconds` 数字，默认 1，并�
 
 `wait` 不接受参数，始终暂停 1 秒再重新截屏。最新截图仍显示加载、转圈或控件尚未出现时使用。click 与 open 的结果里已经有新截图，除非那张图仍在加载，否则不要紧跟着 `wait`。
 
-`long_wait` 要求 `wait_seconds` 为 `{20, 30, 60, 120}`。缺省或不在枚举内会响亮失败。只给看得见的长任务（下载、安装器、导出、窗口内生成）。选能覆盖剩余进度的最小分档；120 只在截图已经写明还要几分钟时使用。20 秒下限是产品不变量，用来把普通刷新留在 `wait`。两个工具都是互斥 GUI 回截图；`delay()` 仍尊重 abort。
+`long_wait` 要求 `wait_seconds` 为 `{10, 30, 60, 120}`。缺省或不在枚举内会响亮失败。只给看得见的长任务（下载、安装器、导出、窗口内生成）。选能覆盖剩余进度的最小分档；120 只在截图已经写明还要几分钟时使用。10 秒下限是产品不变量，用来把普通刷新留在 `wait`。两个工具都是互斥 GUI 回截图；`delay()` 仍尊重 abort。
 
 删除 `maxWaitSeconds`。1 秒暂停与四档秒数不是 cordis Config。策略与 `code_agent` 要求模型不要用 `wait`、`long_wait` 或 bash sleep 去轮询 Code 会话。
 
@@ -20,7 +20,7 @@ Computer Use 的 `wait` 接受自由的 `wait_seconds` 数字，默认 1，并�
 
 **一个可填 1–120 秒的 `wait`。** 模型会贴着连续区间的上限。4–5 秒的习惯会变成 60 和 120。
 
-**再做一个 5–15 秒的中间工具。** 那会重新打开「保险等待」。空隙用重复 `wait` 或付出 `long_wait` 20 秒来填。
+**再做一个 5–15 秒的中间工具。** 那会重新打开「保险等待」。空隙用重复 `wait` 或付出 `long_wait` 10 秒来填。
 
 **CoView `page_loading` 的像素 settle。** 本包在 HID/open 之后只保留固定的 `postActionWaitMs`，不做像素差 stall。
 
@@ -28,7 +28,7 @@ Computer Use 的 `wait` 接受自由的 `wait_seconds` 数字，默认 1，并�
 
 ## 影响
 
-Computer Use 目录是十个互斥 GUI 工具加 `code_agent`。普通加载不能再要 3–5 秒。还剩 10 秒的下载要么连调 `wait`，要么用 `long_wait` 20 多等一会。overlay-guard 不变：这两个工具都不发 HID。
+Computer Use 目录是十个互斥 GUI 工具加 `code_agent`。普通加载不能再要 3–5 秒。还剩 8 秒的下载要么连调 `wait`，要么用 `long_wait` 10 多等一会。overlay-guard 不变：这两个工具都不发 HID。
 
 ## 测试
 

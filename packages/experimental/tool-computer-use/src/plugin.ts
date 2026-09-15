@@ -440,7 +440,7 @@ export function applyComputerUse(
   ctx.tools.register(defineTool({
     name: 'long_wait',
     description:
-      'Pause 20, 30, 60, or 120 seconds, then return a fresh desktop screenshot without moving the pointer. '
+      'Pause 10, 30, 60, or 120 seconds, then return a fresh desktop screenshot without moving the pointer. '
       + 'Only for a visible long job such as a download, installer, export, or on-screen generation. '
       + 'Pick the smallest wait_seconds that covers remaining progress; 120 only when the screenshot already shows a minutes-long job. '
       + 'Ordinary loading uses wait. Do not use for code_agent. Exclusive.',
@@ -449,7 +449,7 @@ export function applyComputerUse(
         type: 'integer',
         required: true,
         enum: [...LONG_WAIT_SECONDS],
-        description: 'Seconds to pause. Must be 20, 30, 60, or 120.',
+        description: 'Seconds to pause. Must be 10, 30, 60, or 120.',
       },
     },
     output: {
