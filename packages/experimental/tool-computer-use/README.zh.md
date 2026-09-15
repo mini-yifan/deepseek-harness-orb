@@ -77,7 +77,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 | `wait` | 可选 `wait_seconds`，受 `maxWaitSeconds` 限制 | 等待、重新截屏 |
 | `code_agent` | `task`、可选 `session_id`、可选 `cwd` | 在一等 standard 会话上入队并返回该 `session_id`；两边都空闲后跟一条插件通知 |
 
-五个工具都互斥运行。`presentCall` 为 generic。每次观察先给出 `<frontmost_app>`（前台是 Finder/访达时还有 `<frontmost_folder>`；跳过 overlay 后没有剩余窗口时是 `<focus_note>`）。随后每屏信封标明屏幕序号、逻辑尺寸、0–1000 坐标空间、附件像素尺寸，以及 `saveImage` 缩放栅格时的倍率。信封不含截图文件路径。
+五个工具都互斥运行。`presentCall` 为 generic。每次观察先给出 `<frontmost_app>`（前台是 Finder/访达时还有 `<frontmost_folder>`；跳过 overlay 后没有剩余窗口时是 `<focus_note>`）。随后每屏信封标明屏幕序号和 0–1000 坐标空间。信封不含像素尺寸、缩放倍率或截图文件路径。
 
 测试通过 `applyComputerUse(ctx, backend, config)` 注入假桌面，而不是 Config 上的 `driver` 钩子。
 
@@ -126,6 +126,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 - [Computer Use Agent Note](../../../.agents/notes/implemented/feature/2026-09-13-experimental-computer-use.zh.md) — 插件 vs Skill vs loop、Computer Use agent preset、结果内观察，以及同意门槛。
 - [Computer Use 把 Code agent 完成通知停到空闲再投递](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-code-agent-completion.zh.md) — 两边都空闲后投递的插件通知。
 - [Computer Use 观察前台元数据](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-observation-foreground.zh.md) — overlay 窗口排除、Finder 文件夹，以及现有 `user/message` / `tool/result` 上的焦点 fallback。
+- [Computer Use 0–1000 比例坐标](../../../.agents/notes/implemented/bug-fix/2026-09-15-computer-use-fraction-coordinates.zh.md) — 模型侧 0–1000 是可见截图上的比例，不是捕获或请求预览像素。
 - [桌面悬浮球](../../../.agents/notes/implemented/feature/2026-09-14-desktop-floating-orb.zh.md) — macOS overlay、runtime extra，以及一等 `code_agent` 会话。
 - [桌面 overlay-guard](../../../.agents/notes/implemented/architecture/2026-09-14-desktop-overlay-guard.zh.md) — 悬浮球的截屏排除与 HID 点击穿透。
 - [Headless computer-use snapshot](../../../snapshots/session/computer-use/snapshot.yml) — 在假桌面与视觉模型上人工编写的点击循环。
@@ -148,7 +149,7 @@ Computer Use lets you see the current desktop and operate the GUI.
 
 See: trust only the attached desktop screenshots for windows, buttons, and on-screen text. Do not assume UI that is not visible in the latest image. You may use observation tags <frontmost_app>, <frontmost_folder>, and <focus_note> as OS metadata.
 
-Coordinates: each screen uses a 0–1000 space. Pass position as [x, y] in that space together with screen_index. When a result envelope names downscale multipliers, convert attached-image pixels with those multipliers before choosing coordinates. Do not send raw pixel coordinates.
+Coordinates: each attached screenshot uses a 0–1000 space. [0, 0] is the top-left of that image and [1000, 1000] is the bottom-right. x and y scale independently; do not treat the space as a square overlay. Pass position as [x, y] in that space together with screen_index. Map the target as a fraction of the screenshot you see. Ignore pixel widths, request-preview sizes, and any other image-handle dimensions. Do not send raw pixel coordinates.
 
 Step: take exactly one GUI action per tool call. After the call, the new screenshot is in the tool result; use that image for the next action.
 
@@ -202,7 +203,7 @@ When a plugin notice reports that a Code agent session finished, tell the user w
 - **没有逐次点击批准** — 安装或 patch 插件就是同意门槛；视觉循环不能在每个动作上询问。
 - **宿主 chrome 会出现在截屏中** — Web 窗口会出现在捕获中。Desktop 主窗口始终可被截到。macOS overlay 由 ScreenCaptureKit `excludingWindows` 从 Computer Use 截图中省略（整扇 overlay 窗，含展开面板），并只在对应的 HID 突发期间通过带确认的 overlay-guard IPC 点击穿透。前台检查只跳过这些 overlay 窗口 id，因此主窗口可以出现在 `<frontmost_app>` 里。
 - **输入会使用字符串剪贴板** — `input_text` 通过 Cmd+V 粘贴，并在之后恢复先前的字符串剪贴板。其他剪贴板类型不会被恢复。
-- **Retina 与附件尺寸** — backing scale 可能与附件栅格不同；使用 0–1000 空间以及信封中的倍率。
+- **Retina 与附件尺寸** — backing scale 与请求预览像素可能和捕获栅格不同；对可见截图使用 0–1000 比例坐标。
 - **固定等待** — 动作后延迟只有 `postActionWaitMs`；没有像素差 stall。
 - **没有拖拽、套索或启动应用** — GUI 覆盖是 click、type、scroll、hotkey 与 wait。后台文档与代码走 `code_agent`。
 - **`code_agent` 通知需要活的 Agent** — execute 仍在入队接受后返回。找不到活的 Code agent、Computer Use 调用方已销毁、或 Code 会话再也不回到空闲，都会丢掉通知。策略拦不住仍然调用 `wait` 的模型。

@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-`@deepseek-ai/dsh-experimental-tool-computer-use` 是私有实验性 Cordis 插件。它注册五个互斥 GUI 工具（`click`、`input_text`、`scroll`、`hotkey`、`wait`），并通过 `agent/pre-step` 在首次用户回合附上当前屏幕。每个工具执行一次桌面动作，等待 `postActionWaitMs`，重新截屏，并由 `output.render` 返回 `[文本信封, ...ImageBlock]`。信封以 `<frontmost_app>` 开头（前台是 Finder 时还有 `<frontmost_folder>`；跳过 overlay 窗口后没有剩余窗口时是 `<focus_note>`），随后是每屏元数据；[Computer Use 观察前台元数据](2026-09-15-computer-use-observation-foreground.zh.md) 拥有这些标签。图片放在内容里，不放在 `presentationMeta`。没有截屏工具。
+`@deepseek-ai/dsh-experimental-tool-computer-use` 是私有实验性 Cordis 插件。它注册五个互斥 GUI 工具（`click`、`input_text`、`scroll`、`hotkey`、`wait`），并通过 `agent/pre-step` 在首次用户回合附上当前屏幕。每个工具执行一次桌面动作，等待 `postActionWaitMs`，重新截屏，并由 `output.render` 返回 `[文本信封, ...ImageBlock]`。信封以 `<frontmost_app>` 开头（前台是 Finder 时还有 `<frontmost_folder>`；跳过 overlay 窗口后没有剩余窗口时是 `<focus_note>`），随后是每屏的 `<screen_index>` 与 `<coordinate_space>0-1000</coordinate_space>` 标签；[Computer Use 观察前台元数据](2026-09-15-computer-use-observation-foreground.zh.md) 拥有这些前台标签，[Computer Use 0–1000 比例坐标](../bug-fix/2026-09-15-computer-use-fraction-coordinates.zh.md) 拥有点击空间。图片放在内容里，不放在 `presentationMeta`。没有截屏工具。
 
 `applyComputerUse(ctx, backend, config)` 是共享注册助手。生产环境的 `apply` 使用宿主平台后端（macOS 捕获与 HID 输入；其他平台在执行时抛出固定的仅 macOS 错误）。测试与无密钥 snapshot 注入返回固定 PNG 并记录动作的假桌面。没有 Config `driver: fake`。macOS HID 发送由 [Computer Use macOS HID](../bug-fix/2026-09-13-computer-use-macos-hid.zh.md) 负责。
 
@@ -18,7 +18,7 @@ Status: implemented
 
 Web overlay 只插入 `computer-use-preset-root`，由它提供本包旁的额外 `trust: system` agent-presets 根目录。overlay 在 `agent-presets` 行上加上 `inject: [computerUsePresetRoot]`，因此 Loader 插值 `!!js ctx.computerUsePresetRoot` 会等到该服务就绪。GUI 工具注册在该 preset 的常驻作用域里。Host 目录与随附的 `standard` preset 都不会收到它们。Computer Use preset 还会注册 `code_agent`，它通过 `session.create` / `session.prompt` 创建或续写一等 standard 会话，以便桌面侧栏显示委派工作。接受之后，调用方拥有的监视会把插件通知停到两边都空闲再投递；[Computer Use 把 Code agent 完成通知停到空闲再投递](2026-09-15-computer-use-code-agent-completion.zh.md) 拥有这条投递路径。
 
-接地文案是 `systemPrompt.section`。坐标是每屏 0–1000。系统截屏组合键（Cmd/Win+Shift+3/4/5）会被拒绝。
+接地文案是 `systemPrompt.section`。坐标是可见截图上的 0–1000 比例；[Computer Use 0–1000 比例坐标](../bug-fix/2026-09-15-computer-use-fraction-coordinates.zh.md) 拥有该约定。系统截屏组合键（Cmd/Win+Shift+3/4/5）会被拒绝。
 
 ## 考虑过的替代方案
 

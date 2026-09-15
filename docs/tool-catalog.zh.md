@@ -2097,7 +2097,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
     },
     "position": {
       "type": "array",
-      "description": "[x, y] in the 0–1000 space of that screen.",
+      "description": "[x, y] as a 0–1000 fraction of that screenshot, not pixels.",
       "items": {
         "type": "number"
       }
@@ -2197,7 +2197,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
     },
     "position": {
       "type": "array",
-      "description": "[x, y] in the 0–1000 space of that screen; the click focuses the field.",
+      "description": "[x, y] as a 0–1000 fraction of that screenshot, not pixels; the click focuses the field.",
       "items": {
         "type": "number"
       }
@@ -2241,7 +2241,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
     },
     "position": {
       "type": "array",
-      "description": "[x, y] in the 0–1000 space of that screen.",
+      "description": "[x, y] as a 0–1000 fraction of that screenshot, not pixels.",
       "items": {
         "type": "number"
       }
