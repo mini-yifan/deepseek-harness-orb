@@ -5,6 +5,9 @@ const DEFAULT_REASONING = 'max'
 const GIF_SRC = 'deepseek-avatar-square.gif'
 const COLLAPSE_MS = 180
 const ANIMATION_MS = 300
+const REMOTE_STREAM_URL = 'dsh-app://app/.dsh/remote-stream'
+const USER_QUESTION_CANCELLED = 'the user cancelled ask_user_question'
+const RECOMMENDED_SUFFIX = /\s*(?:\((?:recommended|推荐)\)|（(?:recommended|推荐)）)\s*$/i
 
 function rpcId() {
   return crypto.randomUUID()
@@ -61,6 +64,82 @@ function overlayTitle(item, untitled) {
   return typeof title === 'string' && title !== '' ? title : untitled
 }
 
+function parseRecommendedLabel(label) {
+  return RECOMMENDED_SUFFIX.test(label)
+    ? { label: label.replace(RECOMMENDED_SUFFIX, ''), recommended: true }
+    : { label, recommended: false }
+}
+
+function emptyDrafts(questions) {
+  return questions.map(() => ({ selected: [], custom: '', skipped: false }))
+}
+
+function draftAnswered(draft) {
+  return draft.selected.length > 0 || draft.custom.trim() !== ''
+}
+
+function draftCompleted(draft) {
+  return draftAnswered(draft) || draft.skipped
+}
+
+function buildAnswer(questions, drafts) {
+  return {
+    answers: questions.map((item, index) => {
+      const value = drafts[index]
+      if (value.skipped) return { id: item.id, selected: [] }
+      const custom = value.custom.trim()
+      return {
+        id: item.id,
+        selected: custom === '' || item.multiSelect === true ? value.selected : [],
+        ...(custom === '' ? {} : { custom }),
+      }
+    }),
+  }
+}
+
+async function* readNdjson(response) {
+  if (!response.ok || response.body === null) {
+    throw new Error(`desktop stream transport failed: HTTP ${response.status}`)
+  }
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let pending = ''
+  for (;;) {
+    const { done, value } = await reader.read()
+    pending += decoder.decode(value, { stream: !done })
+    let newline
+    while ((newline = pending.indexOf('\n')) !== -1) {
+      const line = pending.slice(0, newline)
+      pending = pending.slice(newline + 1)
+      if (line !== '') yield JSON.parse(line)
+    }
+    if (done) break
+  }
+  if (pending !== '') yield JSON.parse(pending)
+}
+
+function delay(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason)
+      return
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(signal.reason)
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+function isComposing(event) {
+  return event.isComposing === true || event.keyCode === 229
+}
+
 async function main() {
   const locale = await api.locale()
   const messages = locale.messages
@@ -78,10 +157,33 @@ async function main() {
   const ball = document.querySelector('#ball')
   const panel = document.querySelector('#panel')
   const transcript = document.querySelector('#transcript')
+  const questionRoot = document.querySelector('#question')
+  const questionEyebrow = document.querySelector('#question-eyebrow')
+  const questionTitle = document.querySelector('#question-title')
+  const questionDetail = document.querySelector('#question-detail')
+  const questionOptions = document.querySelector('#question-options')
+  const questionCustom = document.querySelector('#question-custom')
+  const questionError = document.querySelector('#question-error')
+  const questionPager = document.querySelector('#question-pager')
+  const questionProgress = document.querySelector('#question-progress')
+  const questionPrev = document.querySelector('#question-prev')
+  const questionNextNav = document.querySelector('#question-next-nav')
+  const questionSkip = document.querySelector('#question-skip')
+  const questionContinue = document.querySelector('#question-continue')
+  const questionCancel = document.querySelector('#question-cancel')
   const historyList = document.querySelector('#history-list')
   const status = document.querySelector('#status')
   const prompt = document.querySelector('#prompt')
   const stop = document.querySelector('#stop')
+  questionCancel.textContent = '\u00d7'
+  questionCancel.setAttribute('aria-label', messages.floatingQuestionCancel)
+  questionCancel.title = messages.floatingQuestionCancel
+  questionPrev.textContent = '\u2039'
+  questionPrev.setAttribute('aria-label', messages.floatingQuestionPrev)
+  questionNextNav.textContent = '\u203a'
+  questionNextNav.setAttribute('aria-label', messages.floatingQuestionNext)
+  questionSkip.textContent = messages.floatingQuestionSkip
+  questionCustom.placeholder = messages.floatingQuestionCustomPlaceholder
   let sessionId = await api.floating.sessionId()
   let workspaceId
   let orbWorkspacePath
@@ -95,6 +197,18 @@ async function main() {
   let lastOrigin = undefined
   let collapseTimer = undefined
   let collapseFrame = undefined
+  const orbSessionIds = new Set()
+  const pendingBySession = new Map()
+  const settledEventIds = new Set()
+  let eventsAbort
+  let eventsClientId
+  let eventsBackoff = 500
+
+  if (sessionId !== undefined) orbSessionIds.add(sessionId)
+
+  function pageClosed() {
+    return globalThis.document?.body == null
+  }
 
   function freezeGif(gif) {
     const still = () => {
@@ -115,9 +229,18 @@ async function main() {
     else gif.addEventListener('load', still, { once: true })
   }
 
+  function currentPending() {
+    return sessionId === undefined ? undefined : pendingBySession.get(sessionId)
+  }
+
+  function asking() {
+    return currentPending() !== undefined
+  }
+
   function syncGif() {
+    if (pageClosed()) return
     const gif = document.querySelector('#ball-gif')
-    const play = expanded || running
+    const play = expanded || running || asking()
     if (play) {
       if (gif.dataset.mode !== 'play') {
         gif.dataset.mode = 'play'
@@ -133,6 +256,7 @@ async function main() {
 
   function setRunning(next) {
     running = next
+    if (pageClosed()) return
     document.body.classList.toggle('running', running)
     stop.hidden = !expanded || !running
     syncGif()
@@ -146,6 +270,7 @@ async function main() {
   }
 
   async function setExpanded(next, force = false) {
+    if (pageClosed()) return
     if (collapseTimer !== undefined) {
       clearTimeout(collapseTimer)
       collapseTimer = undefined
@@ -164,7 +289,7 @@ async function main() {
       syncGif()
       return
     }
-    if (!force && (pinned || running)) return
+    if (!force && (pinned || running || asking())) return
     expanded = false
     document.body.classList.remove('expanded')
     stop.hidden = true
@@ -187,7 +312,7 @@ async function main() {
   }
 
   function scheduleCollapse() {
-    if (pinned || running || dragging) return
+    if (pinned || running || asking() || dragging) return
     if (collapseTimer !== undefined) clearTimeout(collapseTimer)
     collapseTimer = setTimeout(() => {
       collapseTimer = undefined
@@ -227,8 +352,10 @@ async function main() {
 
   async function persistSession(id) {
     sessionId = id
+    orbSessionIds.add(id)
     await api.floating.setSessionId(id)
     await selectDefaultModel(id)
+    syncQuestion()
     return id
   }
 
@@ -267,9 +394,97 @@ async function main() {
 
   function setHistoryOpen(next) {
     historyOpen = next
-    transcript.hidden = historyOpen
     historyList.hidden = !historyOpen
     historyButton.setAttribute('aria-pressed', String(historyOpen))
+    syncQuestion()
+  }
+
+  function syncContinue(pending) {
+    if (pageClosed()) return
+    const draft = pending.drafts[pending.index]
+    questionContinue.textContent = pending.index === pending.questions.length - 1
+      ? messages.floatingQuestionSubmit
+      : messages.floatingQuestionNext
+    questionContinue.disabled = pending.busy || !draftAnswered(draft)
+    questionSkip.disabled = pending.busy
+    questionCancel.disabled = pending.busy
+    questionPrev.disabled = pending.busy || pending.index === 0
+    questionNextNav.disabled = pending.busy || pending.index === pending.questions.length - 1
+    questionCustom.disabled = pending.busy
+    questionCustom.hidden = false
+    questionCustom.placeholder = messages.floatingQuestionCustomPlaceholder
+    if (document.activeElement !== questionCustom) questionCustom.value = draft.custom
+  }
+
+  function renderQuestion(pending) {
+    if (pageClosed()) return
+    const item = pending.questions[pending.index]
+    const draft = pending.drafts[pending.index]
+    const hasHeader = typeof item.header === 'string' && item.header !== ''
+    questionEyebrow.hidden = !hasHeader
+    questionEyebrow.textContent = hasHeader ? item.header : ''
+    questionTitle.textContent = item.question
+    const hasDetail = typeof item.detail === 'string' && item.detail !== ''
+    questionDetail.hidden = !hasDetail
+    questionDetail.textContent = hasDetail ? item.detail : ''
+    questionOptions.replaceChildren()
+    const options = item.options ?? []
+    questionOptions.setAttribute('role', item.multiSelect === true ? 'group' : 'radiogroup')
+    for (const [optionIndex, option] of options.entries()) {
+      const selected = draft.selected.includes(option.label)
+      const display = parseRecommendedLabel(option.label)
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = selected ? 'question-option selected' : 'question-option'
+      button.setAttribute('role', item.multiSelect === true ? 'checkbox' : 'radio')
+      button.setAttribute('aria-checked', String(selected))
+      button.disabled = pending.busy
+      const mark = document.createElement('span')
+      mark.className = 'question-option-mark'
+      mark.textContent = item.multiSelect === true ? (selected ? '\u2713' : '') : String(optionIndex + 1)
+      const copy = document.createElement('span')
+      copy.className = 'question-option-copy'
+      const label = document.createElement('span')
+      label.className = 'question-option-label'
+      label.textContent = display.label
+      copy.append(label)
+      if (display.recommended) {
+        const badge = document.createElement('span')
+        badge.className = 'question-recommended'
+        badge.textContent = messages.floatingQuestionRecommended
+        copy.append(badge)
+      }
+      if (typeof option.description === 'string' && option.description !== '') {
+        const description = document.createElement('span')
+        description.className = 'question-option-description'
+        description.textContent = option.description
+        copy.append(description)
+      }
+      button.append(mark, copy)
+      button.addEventListener('click', () => { chooseOption(option.label) })
+      questionOptions.append(button)
+    }
+    questionPager.hidden = pending.questions.length <= 1
+    questionProgress.textContent = `${String(pending.index + 1)} / ${String(pending.questions.length)}`
+    const hasError = typeof pending.error === 'string' && pending.error !== ''
+    questionError.hidden = !hasError
+    questionError.textContent = hasError ? pending.error : ''
+    syncContinue(pending)
+  }
+
+  function syncQuestion() {
+    if (pageClosed()) return
+    const pending = currentPending()
+    const showCard = pending !== undefined && !historyOpen
+    document.body.classList.toggle('asking', pending !== undefined)
+    questionRoot.hidden = !showCard
+    if (historyOpen) {
+      transcript.hidden = true
+    } else {
+      transcript.hidden = showCard
+    }
+    if (showCard) renderQuestion(pending)
+    syncGif()
   }
 
   function renderTranscript(records) {
@@ -320,6 +535,7 @@ async function main() {
   }
 
   async function refreshOverlay() {
+    if (pageClosed()) return
     try {
       const list = await rpc('session/list', { _request: {} })
       const items = list.items ?? []
@@ -339,22 +555,236 @@ async function main() {
         },
       })
       renderTranscript(page.records)
+      syncQuestion()
     } catch {
       status.textContent = messages.floatingDisconnected
     }
   }
 
+  async function replyEvent(clientId, eventId, outcome) {
+    await rpc('$events/result', { clientId, eventId, outcome })
+  }
+
+  function chooseOption(label) {
+    const pending = currentPending()
+    if (pending === undefined || pending.busy) return
+    const item = pending.questions[pending.index]
+    const draft = pending.drafts[pending.index]
+    if (item.multiSelect === true) {
+      draft.selected = draft.selected.includes(label)
+        ? draft.selected.filter(entry => entry !== label)
+        : [...draft.selected, label]
+    } else {
+      draft.selected = [label]
+      draft.custom = ''
+      if (pending.index < pending.questions.length - 1) pending.index += 1
+    }
+    draft.skipped = false
+    pending.error = undefined
+    renderQuestion(pending)
+  }
+
+  function submitPending(pending) {
+    const missing = pending.drafts.findIndex(draft => !draftCompleted(draft))
+    if (missing >= 0) {
+      pending.index = missing
+      pending.error = messages.floatingQuestionIncomplete
+      renderQuestion(pending)
+      return
+    }
+    pending.busy = true
+    pending.error = undefined
+    renderQuestion(pending)
+    const answer = buildAnswer(pending.questions, pending.drafts)
+    void replyEvent(pending.clientId, pending.eventId, { kind: 'result', value: answer }).then(() => {
+      settledEventIds.add(pending.eventId)
+      pendingBySession.delete(pending.agentId)
+      syncQuestion()
+    }).catch((cause) => {
+      pending.busy = false
+      pending.error = cause instanceof Error ? cause.message : String(cause)
+      renderQuestion(pending)
+    })
+  }
+
+  function continueFlow() {
+    const pending = currentPending()
+    if (pending === undefined || pending.busy) return
+    const draft = pending.drafts[pending.index]
+    if (!draftAnswered(draft)) {
+      pending.error = messages.floatingQuestionUnanswered
+      renderQuestion(pending)
+      return
+    }
+    if (pending.index < pending.questions.length - 1) {
+      pending.index += 1
+      pending.error = undefined
+      renderQuestion(pending)
+      return
+    }
+    submitPending(pending)
+  }
+
+  function skipQuestion() {
+    const pending = currentPending()
+    if (pending === undefined || pending.busy) return
+    pending.drafts[pending.index] = { selected: [], custom: '', skipped: true }
+    pending.error = undefined
+    if (pending.index < pending.questions.length - 1) {
+      pending.index += 1
+      renderQuestion(pending)
+      return
+    }
+    submitPending(pending)
+  }
+
+  function cancelQuestion() {
+    const pending = currentPending()
+    if (pending === undefined || pending.busy) return
+    pending.busy = true
+    pending.error = undefined
+    renderQuestion(pending)
+    void replyEvent(pending.clientId, pending.eventId, {
+      kind: 'rejected',
+      error: {
+        name: 'UserQuestionError',
+        message: USER_QUESTION_CANCELLED,
+        code: 'ASK_CANCELLED',
+      },
+    }).then(() => {
+      settledEventIds.add(pending.eventId)
+      pendingBySession.delete(pending.agentId)
+      syncQuestion()
+    }).catch((cause) => {
+      pending.busy = false
+      pending.error = cause instanceof Error ? cause.message : String(cause)
+      renderQuestion(pending)
+    })
+  }
+
+  async function handleRemoteFrame(frame) {
+    if (frame?.type === 'cancel') {
+      for (const [agentId, pending] of pendingBySession) {
+        if (pending.eventId === frame.eventId) {
+          pendingBySession.delete(agentId)
+          syncQuestion()
+        }
+      }
+      return
+    }
+    if (frame?.type !== 'waterfall') return
+    if (eventsClientId === undefined || typeof frame.eventId !== 'string') return
+    if (settledEventIds.has(frame.eventId)) return
+    const agentId = frame.agentId
+    if (frame.event !== 'user-questions/request' || typeof agentId !== 'string' || !orbSessionIds.has(agentId)) {
+      try {
+        await replyEvent(eventsClientId, frame.eventId, { kind: 'next' })
+      } catch {
+        // The Host already cancelled this event or replaced the generation.
+      }
+      return
+    }
+    const existing = pendingBySession.get(agentId)
+    if (existing !== undefined && existing.eventId === frame.eventId) {
+      existing.clientId = eventsClientId
+      syncQuestion()
+      return
+    }
+    const questions = Array.isArray(frame.request?.questions) ? frame.request.questions : []
+    if (questions.length === 0) {
+      try {
+        await replyEvent(eventsClientId, frame.eventId, { kind: 'next' })
+      } catch {
+        // The Host already cancelled this event or replaced the generation.
+      }
+      return
+    }
+    pendingBySession.set(agentId, {
+      agentId,
+      clientId: eventsClientId,
+      eventId: frame.eventId,
+      questions,
+      index: 0,
+      drafts: emptyDrafts(questions),
+      busy: false,
+      error: undefined,
+    })
+    if (agentId === sessionId) {
+      setHistoryOpen(false)
+      void setExpanded(true)
+    }
+    syncQuestion()
+  }
+
+  async function pumpEvents(signal) {
+    const response = await fetch(REMOTE_STREAM_URL, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ endpoint: '$events', payload: { args: {} } }),
+      signal,
+    })
+    for await (const frame of readNdjson(response)) {
+      if (signal.aborted) return
+      if (frame?.type === 'ready' && typeof frame.clientId === 'string') {
+        eventsClientId = frame.clientId
+        eventsBackoff = 500
+        continue
+      }
+      await handleRemoteFrame(frame)
+    }
+  }
+
+  async function runEvents(signal) {
+    while (!signal.aborted) {
+      try {
+        await pumpEvents(signal)
+        if (signal.aborted) return
+      } catch {
+        // Stream loss, parse failure, or a dropped generation; reconnect unless this controller aborted.
+        if (signal.aborted) return
+      }
+      eventsClientId = undefined
+      const wait = eventsBackoff + Math.floor(eventsBackoff * Math.random())
+      eventsBackoff = Math.min(eventsBackoff * 2, 8000)
+      try {
+        await delay(wait, signal)
+      } catch {
+        // This generation was stopped.
+        return
+      }
+    }
+  }
+
+  function startRemoteEvents() {
+    if (eventsAbort !== undefined) return
+    eventsAbort = new AbortController()
+    eventsBackoff = 500
+    void runEvents(eventsAbort.signal)
+  }
+
+  function stopRemoteEvents() {
+    eventsAbort?.abort()
+    eventsAbort = undefined
+    eventsClientId = undefined
+  }
+
+  function connectWhenReady() {
+    status.textContent = ''
+    void ensureSession().then(() => {
+      void refreshOverlay()
+      startRemoteEvents()
+    })
+  }
+
   api.backend.subscribe(state => {
     status.textContent = state.phase === 'ready' ? '' : messages.floatingDisconnected
-    if (state.phase === 'ready') void ensureSession().then(refreshOverlay)
+    if (state.phase === 'ready') connectWhenReady()
+    else stopRemoteEvents()
   })
   const backend = await api.backend.status()
-  if (backend.phase === 'ready') {
-    status.textContent = ''
-    void ensureSession().then(refreshOverlay)
-  } else {
-    status.textContent = messages.floatingDisconnected
-  }
+  if (backend.phase === 'ready') connectWhenReady()
+  else status.textContent = messages.floatingDisconnected
+  window.addEventListener('unload', stopRemoteEvents)
 
   document.body.addEventListener('pointerenter', () => {
     if (dragging || collapsing) return
@@ -450,6 +880,40 @@ async function main() {
     setRunning(false)
     await createOrbSession()
     await refreshOverlay()
+  })
+  questionCancel.addEventListener('click', cancelQuestion)
+  questionSkip.addEventListener('click', skipQuestion)
+  questionContinue.addEventListener('click', continueFlow)
+  questionPrev.addEventListener('click', () => {
+    const pending = currentPending()
+    if (pending === undefined || pending.busy || pending.index === 0) return
+    pending.index -= 1
+    pending.error = undefined
+    renderQuestion(pending)
+  })
+  questionNextNav.addEventListener('click', () => {
+    const pending = currentPending()
+    if (pending === undefined || pending.busy || pending.index === pending.questions.length - 1) return
+    pending.index += 1
+    pending.error = undefined
+    renderQuestion(pending)
+  })
+  questionCustom.addEventListener('input', () => {
+    const pending = currentPending()
+    if (pending === undefined || pending.busy) return
+    const item = pending.questions[pending.index]
+    const draft = pending.drafts[pending.index]
+    draft.custom = questionCustom.value
+    draft.skipped = false
+    if (item.multiSelect !== true) draft.selected = []
+    pending.error = undefined
+    questionError.hidden = true
+    syncContinue(pending)
+  })
+  questionCustom.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || event.shiftKey || isComposing(event)) return
+    event.preventDefault()
+    continueFlow()
   })
   syncGif()
   setInterval(() => { void refreshOverlay() }, 1500)
