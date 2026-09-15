@@ -115,27 +115,14 @@ export function compactForeground(foreground: DesktopForeground): DesktopForegro
 }
 
 /**
- * Format one screen as model-facing envelope text. Paths are omitted so the model cannot hunt files.
+ * Format one screen as model-facing envelope text. Paths and pixel sizes are omitted
+ * so the model uses the 0–1000 space of the attached screenshot, not capture rasters.
  * @param screen - captured display and attached image.
- * @returns envelope text naming index, logical size, the 0–1000 space, and attached pixels.
+ * @returns envelope text naming index and the 0–1000 space.
  */
 export function formatScreenEnvelope(screen: ObservedScreen): string {
-  let scaled = ''
-  if (screen.image.originalDimensions !== undefined) {
-    const x = (screen.image.originalDimensions.width / screen.image.width).toFixed(2)
-    const y = (screen.image.originalDimensions.height / screen.image.height).toFixed(2)
-    const advice = x === y
-      ? `multiply coordinates by ${x}`
-      : `multiply x coordinates by ${x} and y coordinates by ${y}`
-    scaled = ` (downscaled from ${screen.image.originalDimensions.width}x${screen.image.originalDimensions.height} px; ${advice} to locate features on the original capture)`
-  }
   return `<screen_index>${String(screen.screenIndex)}</screen_index>
-<logical_size>${String(screen.logicalWidth)}x${String(screen.logicalHeight)}</logical_size>
-<coordinate_space>0-1000</coordinate_space>
-<attached_size>${String(screen.image.width)}x${String(screen.image.height)}</attached_size>
-<content>
-${screen.image.mediaType} image, ${String(screen.image.width)}x${String(screen.image.height)} px, ${String(screen.image.bytes)} bytes${scaled}
-</content>`
+<coordinate_space>0-1000</coordinate_space>`
 }
 
 /**

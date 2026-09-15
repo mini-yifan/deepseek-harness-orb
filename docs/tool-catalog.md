@@ -2091,7 +2091,7 @@ Click at a 0–1000 position on one desktop screen, then return the post-action 
     },
     "position": {
       "type": "array",
-      "description": "[x, y] in the 0–1000 space of that screen.",
+      "description": "[x, y] as a 0–1000 fraction of that screenshot, not pixels.",
       "items": {
         "type": "number"
       }
@@ -2191,7 +2191,7 @@ Click to focus a 0–1000 position, type text, optionally replace existing conte
     },
     "position": {
       "type": "array",
-      "description": "[x, y] in the 0–1000 space of that screen; the click focuses the field.",
+      "description": "[x, y] as a 0–1000 fraction of that screenshot, not pixels; the click focuses the field.",
       "items": {
         "type": "number"
       }
@@ -2235,7 +2235,7 @@ Scroll up or down at a 0–1000 position on one desktop screen, then return the 
     },
     "position": {
       "type": "array",
-      "description": "[x, y] in the 0–1000 space of that screen.",
+      "description": "[x, y] as a 0–1000 fraction of that screenshot, not pixels.",
       "items": {
         "type": "number"
       }

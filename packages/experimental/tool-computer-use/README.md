@@ -77,7 +77,7 @@ There is no `screenshot` or `observe` tool. The first user turn already includes
 | `wait` | optional `wait_seconds`, clamped by `maxWaitSeconds` | wait, recapture |
 | `code_agent` | `task`, optional `session_id`, optional `cwd` | enqueue on a first-class standard session and return that `session_id`; a plugin notice follows after both sessions are idle |
 
-All five run exclusive. `presentCall` is generic. Each observation starts with `<frontmost_app>` (plus `<frontmost_folder>` when Finder or 访达 is frontmost, or `<focus_note>` when no remaining window remains after skipping the overlay). Per-screen envelopes then name screen index, logical size, the 0–1000 space, attached pixel size, and downscale multipliers when `saveImage` resized the raster. They never include a screenshot filesystem path.
+All five run exclusive. `presentCall` is generic. Each observation starts with `<frontmost_app>` (plus `<frontmost_folder>` when Finder or 访达 is frontmost, or `<focus_note>` when no remaining window remains after skipping the overlay). Per-screen envelopes then name screen index and the 0–1000 space. They never include pixel sizes, downscale multipliers, or a screenshot filesystem path.
 
 Tests inject a fake desktop through `applyComputerUse(ctx, backend, config)` rather than a Config `driver` hook.
 
@@ -126,6 +126,7 @@ First-frame attachment uses `agent/pre-step`: the listener always awaits `next()
 - [Computer Use Agent Note](../../../.agents/notes/implemented/feature/2026-09-13-experimental-computer-use.md) — plugin vs Skill vs loop, the Computer Use agent preset, observation-in-result, and the consent gate.
 - [Computer Use parks Code agent completion](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-code-agent-completion.md) — parked plugin notice after both sessions are idle.
 - [Computer Use observation foreground](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-observation-foreground.md) — overlay-window skip, Finder folder, and focus fallback on existing `user/message` / `tool/result`.
+- [Computer Use 0–1000 fraction coordinates](../../../.agents/notes/implemented/bug-fix/2026-09-15-computer-use-fraction-coordinates.md) — model-facing 0–1000 is a fraction of the visible screenshot, not capture or request-preview pixels.
 - [Desktop floating orb](../../../.agents/notes/implemented/feature/2026-09-14-desktop-floating-orb.md) — macOS overlay, runtime extra, and first-class `code_agent` sessions.
 - [Desktop overlay guard](../../../.agents/notes/implemented/architecture/2026-09-14-desktop-overlay-guard.md) — capture exclusion and HID click-through for the floating ball.
 - [Headless computer-use snapshot](../../../snapshots/session/computer-use/snapshot.yml) — authored click loop over a fake desktop and a vision model.
@@ -148,7 +149,7 @@ Computer Use lets you see the current desktop and operate the GUI.
 
 See: trust only the attached desktop screenshots for windows, buttons, and on-screen text. Do not assume UI that is not visible in the latest image. You may use observation tags <frontmost_app>, <frontmost_folder>, and <focus_note> as OS metadata.
 
-Coordinates: each screen uses a 0–1000 space. Pass position as [x, y] in that space together with screen_index. When a result envelope names downscale multipliers, convert attached-image pixels with those multipliers before choosing coordinates. Do not send raw pixel coordinates.
+Coordinates: each attached screenshot uses a 0–1000 space. [0, 0] is the top-left of that image and [1000, 1000] is the bottom-right. x and y scale independently; do not treat the space as a square overlay. Pass position as [x, y] in that space together with screen_index. Map the target as a fraction of the screenshot you see. Ignore pixel widths, request-preview sizes, and any other image-handle dimensions. Do not send raw pixel coordinates.
 
 Step: take exactly one GUI action per tool call. After the call, the new screenshot is in the tool result; use that image for the next action.
 
@@ -202,7 +203,7 @@ These limits are current package constraints. The plugin drives the real unsandb
 - **No per-click approval** — installing or patching the plugin is the consent gate; a visual loop cannot ask on every action.
 - **Host chrome is in the shot** — Web windows appear in captures. Desktop's main window stays capturable. The macOS overlay is omitted from Computer Use screenshots by ScreenCaptureKit `excludingWindows` (the whole overlay window, including the expanded panel) and is click-through only for the matching HID burst via ack'd overlay-guard IPC. Foreground inspect skips those overlay window ids only, so the main window can appear as `<frontmost_app>`.
 - **Typing uses the string clipboard** — `input_text` pastes with Cmd+V and restores the previous string clipboard afterwards. Other clipboard types are not restored.
-- **Retina vs attached size** — backing scale can differ from the attached raster; use the 0–1000 space and any envelope multipliers.
+- **Retina vs attached size** — backing scale and request-preview pixels can differ from the capture raster; pass 0–1000 fractions of the visible screenshot.
 - **Fixed settle wait** — post-action delay is `postActionWaitMs` only; there is no pixel-diff stall.
 - **No drag, lasso, or app launch** — GUI coverage is click, type, scroll, hotkey, and wait. Background documents and code go through `code_agent`.
 - **`code_agent` notice needs live Agents** — execute still returns after queue accept. A missing live Code agent, a disposed Computer Use caller, or a Code session that never returns to idle drops the notice. Policy cannot stop a model that still calls `wait`.

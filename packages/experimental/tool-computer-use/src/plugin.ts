@@ -143,7 +143,7 @@ export function applyComputerUse(
         type: 'array',
         required: true,
         items: { type: 'number' },
-        description: '[x, y] in the 0–1000 space of that screen.',
+        description: '[x, y] as a 0–1000 fraction of that screenshot, not pixels.',
       },
       button: {
         type: 'string',
@@ -213,7 +213,7 @@ export function applyComputerUse(
         type: 'array',
         required: true,
         items: { type: 'number' },
-        description: '[x, y] in the 0–1000 space of that screen; the click focuses the field.',
+        description: '[x, y] as a 0–1000 fraction of that screenshot, not pixels; the click focuses the field.',
       },
       text: { type: 'string', required: true, description: 'Characters to type after the focus click.' },
       replace: {
@@ -281,7 +281,7 @@ export function applyComputerUse(
         type: 'array',
         required: true,
         items: { type: 'number' },
-        description: '[x, y] in the 0–1000 space of that screen.',
+        description: '[x, y] as a 0–1000 fraction of that screenshot, not pixels.',
       },
       direction: {
         type: 'string',
@@ -454,7 +454,7 @@ export function applyComputerUse(
       content: [
         {
           type: 'text',
-          text: 'Current desktop screens. Coordinates use a 0–1000 space per screen.',
+          text: 'Current desktop screens. Coordinates use a 0–1000 space per screenshot ([0, 0] top-left, [1000, 1000] bottom-right of that image; not pixels).',
         },
         ...observation.blocks,
       ],

@@ -136,6 +136,10 @@ describe('computer-use tools', () => {
     expect(body).toContain('<frontmost_app>Pages</frontmost_app>')
     expect(body).toContain('<screen_index>0</screen_index>')
     expect(body).toContain('<coordinate_space>0-1000</coordinate_space>')
+    expect(body).not.toContain('<logical_size>')
+    expect(body).not.toContain('<attached_size>')
+    expect(body).not.toContain('downscaled')
+    expect(body).not.toContain('multiply')
     expect(result.content.some(block => block.type === 'image')).toBe(true)
     expect(ctx.tools.executionMode({
       signal: SIGNAL, callId: ToolCallId('mode'), name: 'click', arguments: { screen_index: 0, position: [0, 0] },
@@ -249,6 +253,11 @@ describe('computer-use tools', () => {
     const { ctx } = await setup()
     const assembled = await ctx.systemPrompt.assemble()
     expect(assembled.sections.some(section => section.text === POLICY)).toBe(true)
+    expect(POLICY).toContain('Map the target as a fraction of the screenshot you see')
+    expect(POLICY).toContain('Do not send raw pixel coordinates')
+    expect(POLICY).toContain('Ignore pixel widths, request-preview sizes')
+    expect(POLICY).not.toContain('downscale')
+    expect(POLICY).not.toContain('multiply')
   })
 
   it('unregisters tools and the policy on fiber disposal', async () => {
@@ -314,7 +323,7 @@ describe('computer-use tools', () => {
 })
 
 describe('screen envelopes', () => {
-  it('names downscale multipliers when saveImage reduced the raster', () => {
+  it('names only screen index and the 0–1000 space, even when saveImage reduced the raster', () => {
     const envelope = formatScreenEnvelope({
       screenIndex: 1,
       logicalWidth: 1440,
@@ -329,29 +338,18 @@ describe('screen envelopes', () => {
         originalDimensions: { width: 1440, height: 900 },
       },
     })
-    expect(envelope).toContain('multiply coordinates by 2.00')
+    expect(envelope).toBe(
+      '<screen_index>1</screen_index>\n<coordinate_space>0-1000</coordinate_space>',
+    )
+    expect(envelope).not.toContain('<logical_size>')
+    expect(envelope).not.toContain('<attached_size>')
+    expect(envelope).not.toContain('downscaled')
+    expect(envelope).not.toContain('multiply')
+    expect(envelope).not.toContain('px')
     expect(envelope).not.toContain('<path>')
   })
 
-  it('names independent x and y multipliers', () => {
-    const envelope = formatScreenEnvelope({
-      screenIndex: 0,
-      logicalWidth: 1000,
-      logicalHeight: 800,
-      scale: 1,
-      image: {
-        attachmentId: 'sha256:y',
-        mediaType: 'image/png',
-        bytes: 4,
-        width: 500,
-        height: 200,
-        originalDimensions: { width: 1000, height: 800 },
-      },
-    })
-    expect(envelope).toContain('multiply x coordinates by 2.00 and y coordinates by 4.00')
-  })
-
-  it('omits downscale advice when the attached raster is unchanged', () => {
+  it('omits pixel sizes when the attached raster is unchanged', () => {
     const envelope = formatScreenEnvelope({
       screenIndex: 0,
       logicalWidth: 1000,
@@ -365,8 +363,9 @@ describe('screen envelopes', () => {
         height: 800,
       },
     })
-    expect(envelope).toContain('<attached_size>1000x800</attached_size>')
-    expect(envelope).not.toContain('downscaled')
+    expect(envelope).toBe(
+      '<screen_index>0</screen_index>\n<coordinate_space>0-1000</coordinate_space>',
+    )
     expect(envelope).not.toContain('<path>')
   })
 
