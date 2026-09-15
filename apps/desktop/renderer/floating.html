@@ -17,6 +17,32 @@
       </button>
       <button id="new-conversation" type="button"></button>
       <div id="transcript" role="log" aria-live="polite"></div>
+      <div id="question" hidden>
+        <div class="question-card">
+          <header class="question-heading">
+            <div class="question-heading-text">
+              <p id="question-eyebrow" hidden></p>
+              <h2 id="question-title"></h2>
+            </div>
+            <button id="question-cancel" type="button"></button>
+          </header>
+          <p id="question-detail" hidden></p>
+          <div id="question-options"></div>
+          <textarea id="question-custom" rows="1" hidden></textarea>
+          <p id="question-error" role="status" hidden></p>
+          <footer class="question-footer">
+            <div id="question-pager" class="question-pager" hidden>
+              <button id="question-prev" type="button"></button>
+              <span id="question-progress"></span>
+              <button id="question-next-nav" type="button"></button>
+            </div>
+            <div class="question-actions">
+              <button id="question-skip" type="button"></button>
+              <button id="question-continue" type="button"></button>
+            </div>
+          </footer>
+        </div>
+      </div>
       <div id="history-list" role="listbox" hidden></div>
       <p id="status" role="status"></p>
       <form id="composer">

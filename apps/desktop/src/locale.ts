@@ -59,6 +59,15 @@ export const en = {
   floatingHistoryEmpty: 'No Computer Use chats yet.',
   floatingDisconnected: 'Waiting for Desktop Host…',
   floatingTitle: 'Desktop agent',
+  floatingQuestionCancel: 'Dismiss',
+  floatingQuestionSkip: 'Skip',
+  floatingQuestionNext: 'Next',
+  floatingQuestionSubmit: 'Submit',
+  floatingQuestionPrev: 'Previous question',
+  floatingQuestionRecommended: 'Recommended',
+  floatingQuestionCustomPlaceholder: 'Type your answer',
+  floatingQuestionIncomplete: 'Please complete this question first.',
+  floatingQuestionUnanswered: 'Please select an option or enter a custom answer.',
 } as const
 
 /** Every Desktop locale supplies the complete English key set. */
@@ -123,6 +132,15 @@ export const zh = {
   floatingHistoryEmpty: '还没有 Computer Use 对话。',
   floatingDisconnected: '正在等待 Desktop Host…',
   floatingTitle: '桌面 agent',
+  floatingQuestionCancel: '放弃',
+  floatingQuestionSkip: '跳过',
+  floatingQuestionNext: '下一题',
+  floatingQuestionSubmit: '提交',
+  floatingQuestionPrev: '上一题',
+  floatingQuestionRecommended: '推荐',
+  floatingQuestionCustomPlaceholder: '输入你的答案',
+  floatingQuestionIncomplete: '请先完成这道问题。',
+  floatingQuestionUnanswered: '请选择一个选项或填写自定义答案。',
 } as const satisfies DesktopMessages
 
 /** Locale payload exposed to the Desktop-owned renderer. */

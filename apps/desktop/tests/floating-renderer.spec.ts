@@ -4,6 +4,87 @@ import { JSDOM } from 'jsdom'
 import { expect, it, vi } from 'vitest'
 import { resolveDesktopLocale } from '../src/locale.ts'
 
+function isRemoteStream(input: string | URL): boolean {
+  return String(input).includes('/.dsh/remote-stream')
+}
+
+function hangingStreamResponse(signal: AbortSignal | undefined): {
+  ok: true
+  body: { getReader(): { read(): Promise<never>; cancel(): void } }
+} {
+  return {
+    ok: true,
+    body: {
+      getReader() {
+        return {
+          read() {
+            return new Promise((_resolve, reject) => {
+              if (signal?.aborted) {
+                reject(signal.reason)
+                return
+              }
+              signal?.addEventListener('abort', () => { reject(signal.reason) }, { once: true })
+            })
+          },
+          cancel() {},
+        }
+      },
+    },
+  }
+}
+
+function createNdjsonPump() {
+  const encoder = new TextEncoder()
+  const chunks: Uint8Array[] = []
+  let wake: (() => void) | undefined
+  let aborted: unknown
+  const attach = (signal: AbortSignal | undefined): void => {
+    if (signal === undefined) return
+    const onAbort = (): void => {
+      aborted = signal.reason
+      wake?.()
+    }
+    if (signal.aborted) onAbort()
+    else signal.addEventListener('abort', onAbort, { once: true })
+  }
+  return {
+    push(frame: unknown) {
+      chunks.push(encoder.encode(`${JSON.stringify(frame)}\n`))
+      wake?.()
+    },
+    response(signal: AbortSignal | undefined) {
+      attach(signal)
+      return {
+        ok: true as const,
+        body: {
+          getReader: () => ({
+            async read() {
+              while (chunks.length === 0) {
+                if (aborted !== undefined) throw aborted
+                await new Promise<void>((resolve) => { wake = resolve })
+                if (aborted !== undefined) throw aborted
+              }
+              return { done: false as const, value: chunks.shift() }
+            },
+            cancel() {},
+          }),
+        },
+      }
+    },
+  }
+}
+
+function rpcResponse(rpcId: string, value: unknown) {
+  return {
+    ok: true,
+    json: async () => ({
+      type: 'server-response',
+      rpcId,
+      result: { ok: true, value },
+    }),
+  }
+}
+
 it('creates a Computer Use session on dsh_orb and sends from the overlay', async () => {
   const dom = new JSDOM(readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8'), {
     runScripts: 'outside-only',
@@ -12,6 +93,7 @@ it('creates a Computer Use session on dsh_orb and sends from the overlay', async
   const calls: { method: string; payload: unknown }[] = []
   let running = false
   const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+    if (isRemoteStream(_input)) return hangingStreamResponse(init?.signal)
     const body = JSON.parse(String(init?.body)) as {
       rpcId: string
       method: string
@@ -160,6 +242,7 @@ it('collapses then moves by the ball grab offset instead of the window origin', 
     releaseCollapse = resolve
   })
   const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+    if (isRemoteStream(_input)) return hangingStreamResponse(init?.signal)
     const body = JSON.parse(String(init?.body)) as { rpcId: string; method: string }
     let value: unknown = {}
     if (body.method === 'workspace/create') value = { workspace: { workspaceId: 'ws-orb' }, created: true }
@@ -281,6 +364,7 @@ it('lists orb Computer Use chats and reopens the selected session', async () => 
     'session-old': 'Click Pages',
   }
   const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+    if (isRemoteStream(_input)) return hangingStreamResponse(init?.signal)
     const body = JSON.parse(String(init?.body)) as {
       rpcId: string
       method: string
@@ -436,4 +520,330 @@ it('lists orb Computer Use chats and reopens the selected session', async () => 
       },
     })
   } finally { dom.window.close() }
+})
+
+async function mountQuestionOverlay() {
+  const pump = createNdjsonPump()
+  const calls: { method: string; payload: unknown }[] = []
+  const pages: Record<string, string> = {
+    'session-orb': 'Open WeChat',
+    'session-old': 'Click Pages',
+  }
+  const dom = new JSDOM(readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8'), {
+    runScripts: 'outside-only',
+    url: 'dsh-app://shell/floating.html',
+  })
+  const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+    if (isRemoteStream(_input)) return pump.response(init?.signal)
+    const body = JSON.parse(String(init?.body)) as {
+      rpcId: string
+      method: string
+      payload: { args: Record<string, unknown> }
+    }
+    calls.push({ method: body.method, payload: body.payload.args })
+    let value: unknown = {}
+    if (body.method === 'workspace/create') {
+      value = { workspace: { workspaceId: 'ws-orb' }, created: true }
+    }
+    if (body.method === 'session/create') {
+      const request = body.payload.args.request as { sessionId?: string }
+      value = {
+        sessionId: request.sessionId ?? 'session-orb',
+        agentPreset: 'computer-use',
+      }
+    }
+    if (body.method === 'session/modelCatalog') {
+      value = { groups: [{ id: 'deepseek-official', models: [{ id: 'deepseek-flash' }] }] }
+    }
+    if (body.method === 'session/page') {
+      const request = body.payload.args.request as { address: { sessionId: string } }
+      value = {
+        records: [{
+          type: 'event',
+          event: {
+            type: 'user/message',
+            data: { content: [{ type: 'text', text: pages[request.address.sessionId] ?? 'unknown' }] },
+          },
+        }],
+      }
+    }
+    if (body.method === 'session/list') {
+      value = {
+        items: [
+          {
+            sessionId: 'session-orb',
+            cwd: '/tmp/dsh_orb',
+            running: true,
+            projections: { asOfSeq: 0, values: { agentPreset: 'computer-use', title: 'Open WeChat' } },
+          },
+          {
+            sessionId: 'session-old',
+            cwd: '/tmp/dsh_orb',
+            running: false,
+            projections: { asOfSeq: 2, values: { agentPreset: 'computer-use', title: 'Click Pages' } },
+          },
+        ],
+      }
+    }
+    if (body.method === 'session/prompt' || body.method === '$events/result') value = {}
+    return rpcResponse(body.rpcId, value)
+  })
+  Object.defineProperty(dom.window, 'fetch', { value: fetchMock })
+  Object.defineProperty(dom.window, 'crypto', { value: globalThis.crypto })
+  const setSessionId = vi.fn()
+  const setExpanded = vi.fn(async (expanded: boolean) => ({
+    expanded,
+    horizontal: 'left',
+    vertical: 'up',
+  }))
+  Object.defineProperty(dom.window, 'dshDesktop', {
+    value: {
+      locale: async () => resolveDesktopLocale('en'),
+      backend: {
+        status: async () => ({ phase: 'ready' }),
+        subscribe: vi.fn(),
+      },
+      floating: {
+        sessionId: async () => undefined,
+        setSessionId,
+        move: vi.fn(),
+        clamp: vi.fn(),
+        setExpanded,
+        orbWorkspacePath: async () => '/tmp/dsh_orb',
+      },
+    },
+  })
+  runInContext(readFileSync(new URL('../renderer/floating.js', import.meta.url), 'utf8'), dom.getInternalVMContext())
+  await expect.poll(() => setSessionId.mock.calls).toEqual([['session-orb']])
+  pump.push({ type: 'ready', clientId: 'client-orb', host: { home: '/tmp' } })
+  return { dom, calls, pump, setExpanded }
+}
+
+function resultCalls(calls: { method: string; payload: unknown }[]) {
+  return calls.filter(call => call.method === '$events/result')
+}
+
+it('shows a Computer Use question on the overlay and submits a selected option', async () => {
+  const overlay = await mountQuestionOverlay()
+  try {
+    const document = overlay.dom.window.document
+    overlay.pump.push({
+      type: 'waterfall',
+      event: 'user-questions/request',
+      eventId: 'ev-choice',
+      agentId: 'session-orb',
+      request: {
+        questions: [{
+          id: 'q1',
+          question: 'Which app should I open?',
+          header: 'Desktop',
+          options: [
+            { label: 'WeChat (recommended)', description: 'Messages' },
+            { label: 'Pages' },
+          ],
+        }],
+      },
+    })
+    await expect.poll(() => document.querySelector('#question-title')?.textContent).toBe('Which app should I open?')
+    expect(document.querySelector('#question')?.hidden).toBe(false)
+    expect(document.querySelector('#transcript')?.hidden).toBe(true)
+    expect(document.body.classList.contains('asking')).toBe(true)
+    expect(document.querySelector('#question-eyebrow')?.textContent).toBe('Desktop')
+    expect(document.querySelector('.question-recommended')?.textContent).toBe('Recommended')
+    expect(overlay.setExpanded.mock.calls.some(call => call[0] === true)).toBe(true)
+    const wechat = [...document.querySelectorAll('.question-option')]
+      .find(node => node.textContent?.includes('WeChat'))
+    if (wechat === undefined) throw new Error('missing WeChat option')
+    wechat.dispatchEvent(new overlay.dom.window.Event('click', { bubbles: true }))
+    document.querySelector<HTMLButtonElement>('#question-continue')?.click()
+    await expect.poll(() => resultCalls(overlay.calls).length).toBe(1)
+    expect(resultCalls(overlay.calls)[0]?.payload).toEqual({
+      clientId: 'client-orb',
+      eventId: 'ev-choice',
+      outcome: {
+        kind: 'result',
+        value: {
+          answers: [{ id: 'q1', selected: ['WeChat (recommended)'] }],
+        },
+      },
+    })
+    await expect.poll(() => document.querySelector('#question')?.hidden).toBe(true)
+    expect(document.body.classList.contains('asking')).toBe(false)
+  } finally { overlay.dom.window.close() }
+})
+
+it('submits custom text, skip, and cancel through $events/result', async () => {
+  const overlay = await mountQuestionOverlay()
+  try {
+    const document = overlay.dom.window.document
+    overlay.pump.push({
+      type: 'waterfall',
+      event: 'user-questions/request',
+      eventId: 'ev-custom',
+      agentId: 'session-orb',
+      request: {
+        questions: [{ id: 'q-custom', question: 'What should I type?' }],
+      },
+    })
+    await expect.poll(() => document.querySelector('#question-title')?.textContent).toBe('What should I type?')
+    const custom = document.querySelector<HTMLTextAreaElement>('#question-custom')
+    if (custom === null) throw new Error('missing custom field')
+    custom.value = 'Open Notes'
+    custom.dispatchEvent(new overlay.dom.window.Event('input', { bubbles: true }))
+    document.querySelector<HTMLButtonElement>('#question-continue')?.click()
+    await expect.poll(() => resultCalls(overlay.calls).length).toBe(1)
+    expect(resultCalls(overlay.calls)[0]?.payload).toEqual({
+      clientId: 'client-orb',
+      eventId: 'ev-custom',
+      outcome: {
+        kind: 'result',
+        value: { answers: [{ id: 'q-custom', selected: [], custom: 'Open Notes' }] },
+      },
+    })
+  } finally { overlay.dom.window.close() }
+})
+
+it('skips a question with an empty selected list', async () => {
+  const overlay = await mountQuestionOverlay()
+  try {
+    const document = overlay.dom.window.document
+    overlay.pump.push({
+      type: 'waterfall',
+      event: 'user-questions/request',
+      eventId: 'ev-skip',
+      agentId: 'session-orb',
+      request: {
+        questions: [{
+          id: 'q-skip',
+          question: 'Skip me?',
+          options: [{ label: 'Yes' }],
+        }],
+      },
+    })
+    await expect.poll(() => document.querySelector('#question-title')?.textContent).toBe('Skip me?')
+    document.querySelector<HTMLButtonElement>('#question-skip')?.click()
+    await expect.poll(() => resultCalls(overlay.calls).length).toBe(1)
+    expect(resultCalls(overlay.calls)[0]?.payload).toEqual({
+      clientId: 'client-orb',
+      eventId: 'ev-skip',
+      outcome: {
+        kind: 'result',
+        value: { answers: [{ id: 'q-skip', selected: [] }] },
+      },
+    })
+  } finally { overlay.dom.window.close() }
+})
+
+it('cancels a question as ASK_CANCELLED', async () => {
+  const overlay = await mountQuestionOverlay()
+  try {
+    const document = overlay.dom.window.document
+    overlay.pump.push({
+      type: 'waterfall',
+      event: 'user-questions/request',
+      eventId: 'ev-cancel',
+      agentId: 'session-orb',
+      request: {
+        questions: [{ id: 'q-cancel', question: 'Dismiss me?' }],
+      },
+    })
+    await expect.poll(() => document.querySelector('#question-title')?.textContent).toBe('Dismiss me?')
+    document.querySelector<HTMLButtonElement>('#question-cancel')?.click()
+    await expect.poll(() => resultCalls(overlay.calls).length).toBe(1)
+    expect(resultCalls(overlay.calls)[0]?.payload).toEqual({
+      clientId: 'client-orb',
+      eventId: 'ev-cancel',
+      outcome: {
+        kind: 'rejected',
+        error: {
+          name: 'UserQuestionError',
+          message: 'the user cancelled ask_user_question',
+          code: 'ASK_CANCELLED',
+        },
+      },
+    })
+  } finally { overlay.dom.window.close() }
+})
+
+it('delegates questions from other agents with next()', async () => {
+  const overlay = await mountQuestionOverlay()
+  try {
+    overlay.pump.push({
+      type: 'waterfall',
+      event: 'user-questions/request',
+      eventId: 'ev-other',
+      agentId: 'session-main',
+      request: {
+        questions: [{ id: 'q-other', question: 'Main window only' }],
+      },
+    })
+    await expect.poll(() => resultCalls(overlay.calls).length).toBe(1)
+    expect(resultCalls(overlay.calls)[0]?.payload).toEqual({
+      clientId: 'client-orb',
+      eventId: 'ev-other',
+      outcome: { kind: 'next' },
+    })
+    expect(overlay.dom.window.document.querySelector('#question')?.hidden).toBe(true)
+  } finally { overlay.dom.window.close() }
+})
+
+it('dismisses the card when the Host cancels the waterfall', async () => {
+  const overlay = await mountQuestionOverlay()
+  try {
+    const document = overlay.dom.window.document
+    overlay.pump.push({
+      type: 'waterfall',
+      event: 'user-questions/request',
+      eventId: 'ev-host-cancel',
+      agentId: 'session-orb',
+      request: {
+        questions: [{ id: 'q-host', question: 'Waiting elsewhere?' }],
+      },
+    })
+    await expect.poll(() => document.querySelector('#question-title')?.textContent).toBe('Waiting elsewhere?')
+    overlay.pump.push({ type: 'cancel', eventId: 'ev-host-cancel' })
+    await expect.poll(() => document.querySelector('#question')?.hidden).toBe(true)
+    expect(resultCalls(overlay.calls)).toEqual([])
+  } finally { overlay.dom.window.close() }
+})
+
+it('keeps an unanswered question while History switches away and back', async () => {
+  const overlay = await mountQuestionOverlay()
+  try {
+    const document = overlay.dom.window.document
+    overlay.pump.push({
+      type: 'waterfall',
+      event: 'user-questions/request',
+      eventId: 'ev-hold',
+      agentId: 'session-orb',
+      request: {
+        questions: [{
+          id: 'q-hold',
+          question: 'Stay with this chat?',
+          options: [{ label: 'Keep going' }],
+        }],
+      },
+    })
+    await expect.poll(() => document.querySelector('#question-title')?.textContent).toBe('Stay with this chat?')
+    document.querySelector<HTMLButtonElement>('#history')?.click()
+    await expect.poll(() => [...document.querySelectorAll('.history-row')].map(node => node.textContent)).toEqual([
+      'Open WeChat',
+      'Click Pages',
+    ])
+    expect(document.querySelector('#question')?.hidden).toBe(true)
+    const prior = [...document.querySelectorAll('.history-row')].find(node => node.textContent === 'Click Pages')
+    if (prior === undefined) throw new Error('missing prior Computer Use row')
+    prior.dispatchEvent(new overlay.dom.window.Event('click', { bubbles: true }))
+    await expect.poll(() => document.querySelector('.bubble.user')?.textContent).toBe('Click Pages')
+    expect(document.querySelector('#question')?.hidden).toBe(true)
+    expect(resultCalls(overlay.calls)).toEqual([])
+    document.querySelector<HTMLButtonElement>('#history')?.click()
+    await expect.poll(() => [...document.querySelectorAll('.history-row')].some(node => node.textContent === 'Open WeChat')).toBe(true)
+    const original = [...document.querySelectorAll('.history-row')].find(node => node.textContent === 'Open WeChat')
+    if (original === undefined) throw new Error('missing original Computer Use row')
+    original.dispatchEvent(new overlay.dom.window.Event('click', { bubbles: true }))
+    await expect.poll(() => document.querySelector('#question')?.hidden).toBe(false)
+    expect(document.querySelector('#question-title')?.textContent).toBe('Stay with this chat?')
+    expect(resultCalls(overlay.calls)).toEqual([])
+  } finally { overlay.dom.window.close() }
 })
