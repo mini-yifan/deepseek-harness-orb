@@ -8,6 +8,7 @@ import type { GenerateOptions, LlmModelInfo, LlmResolvedModelInfo, StreamChunk }
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
+import { FOCUS_FALLBACK_FOREGROUND, type DesktopForeground } from '../src/backend.ts'
 import { resolveComputerUseConfig } from '../src/config.ts'
 import { createFakeDesktopBackend } from '../src/fake.ts'
 import { applyComputerUse } from '../src/plugin.ts'
@@ -71,7 +72,12 @@ afterEach(async () => {
   for (const home of homes.splice(0)) await rm(home, { recursive: true, force: true })
 })
 
-async function setup(options: { attachments?: boolean; llm?: boolean; model?: LlmModelInfo } = {}) {
+async function setup(options: {
+  attachments?: boolean
+  llm?: boolean
+  model?: LlmModelInfo
+  foreground?: DesktopForeground
+} = {}) {
   const home = await mkdtemp(join(tmpdir(), 'dsh-cu-'))
   homes.push(home)
   const ctx = new Context()
@@ -89,7 +95,9 @@ async function setup(options: { attachments?: boolean; llm?: boolean; model?: Ll
       { provider: 'visual', id: 'plain-model', name: 'Plain' },
     ]))
   }
-  const backend = createFakeDesktopBackend()
+  const backend = createFakeDesktopBackend(
+    options.foreground === undefined ? {} : { foreground: options.foreground },
+  )
   applyComputerUse(ctx, backend, resolveComputerUseConfig({ postActionWaitMs: 0, maxWaitSeconds: 0, maxScreens: 4 }))
   return { ctx, backend }
 }
@@ -124,7 +132,8 @@ describe('computer-use tools', () => {
       },
     })
     const body = text(result)
-    expect(body).not.toMatch(/path/iu)
+    expect(body).not.toContain('<path>')
+    expect(body).toContain('<frontmost_app>Pages</frontmost_app>')
     expect(body).toContain('<screen_index>0</screen_index>')
     expect(body).toContain('<coordinate_space>0-1000</coordinate_space>')
     expect(result.content.some(block => block.type === 'image')).toBe(true)
@@ -359,5 +368,19 @@ describe('screen envelopes', () => {
     expect(envelope).toContain('<attached_size>1000x800</attached_size>')
     expect(envelope).not.toContain('downscaled')
     expect(envelope).not.toContain('<path>')
+  })
+
+  it('names Finder folder and focus fallback on GUI results', async () => {
+    const { ctx: finderCtx } = await setup({
+      foreground: { appName: 'Finder', finderFolder: '/Users/test/Documents' },
+    })
+    const finder = await execute(finderCtx, 'click', { screen_index: 0, position: [0, 0] })
+    expect(text(finder)).toContain('<frontmost_folder>/Users/test/Documents</frontmost_folder>')
+    expect(text(finder)).not.toContain('<path>')
+
+    const { ctx: fallbackCtx } = await setup({ foreground: FOCUS_FALLBACK_FOREGROUND })
+    const fallback = await execute(fallbackCtx, 'wait', { wait_seconds: 0 })
+    expect(text(fallback)).toContain('<frontmost_app>none</frontmost_app>')
+    expect(text(fallback)).toContain('<focus_note>')
   })
 })

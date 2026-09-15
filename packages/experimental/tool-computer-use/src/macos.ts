@@ -5,7 +5,8 @@
  * and intra-event sleeps, and `input_text` pastes via NSPasteboard + Cmd+V.
  * Tests inject a {@link CommandRunner}; production uses `/usr/bin/osascript`
  * and `/usr/sbin/screencapture`, or the ScreenCaptureKit helper when overlay
- * window ids are active.
+ * window ids are active. Foreground inspect uses CGWindowList (skip overlay
+ * ids only) plus Finder AppleScript for the current folder.
  * @module @deepseek-ai/dsh-experimental-tool-computer-use/src/macos
  */
 
@@ -16,14 +17,15 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { activeCaptureExcludeWindowIds } from './capture-exclude.ts'
-import type {
-  CapturedScreen,
-  ClickInput,
-  DesktopBackend,
-  HotkeyInput,
-  ScreenInfo,
-  ScrollInput,
-  TypeInput,
+import {
+  FOCUS_FALLBACK_FOREGROUND,
+  type CapturedScreen,
+  type ClickInput,
+  type DesktopBackend,
+  type HotkeyInput,
+  type ScreenInfo,
+  type ScrollInput,
+  type TypeInput,
 } from './backend.ts'
 import { mapNormalizedToGlobal } from './coordinates.ts'
 
@@ -80,6 +82,64 @@ for (let i = 0; i < screens.length; i++) {
 JSON.stringify(result)
 `
 
+/** AppleScript that returns Finder's front-window folder POSIX path, or empty. */
+export const FINDER_FOLDER_SCRIPT = `tell application "Finder"
+    try
+        return POSIX path of (target of front window as alias)
+    on error
+        return ""
+    end try
+end tell
+`
+
+/**
+ * Keep only positive integers so interpolated JXA cannot carry hostile tokens.
+ * @param excludeWindowIds - overlay CGWindowIDs from the active capture cloak.
+ * @returns ids safe to embed as JXA object keys.
+ */
+export function sanitizeExcludeWindowIds(excludeWindowIds: readonly number[]): number[] {
+  return excludeWindowIds.filter(id => Number.isInteger(id) && id > 0)
+}
+
+/**
+ * JXA that reports the first on-screen layer-0 window owner after skipping overlay ids.
+ * @param excludeWindowIds - overlay CGWindowIDs omitted from the remaining z-order.
+ * @returns a script that prints `{ appName }` JSON or `null`.
+ */
+export function inspectForegroundScript(excludeWindowIds: readonly number[]): string {
+  const ids = sanitizeExcludeWindowIds(excludeWindowIds)
+  const excludeLiteral = ids.length === 0 ? '{}' : `{ ${ids.map(id => `${String(id)}: true`).join(', ')} }`
+  return `ObjC.import('CoreGraphics')
+const exclude = ${excludeLiteral}
+const list = $.CGWindowListCopyWindowInfo(1, 0)
+const windows = ObjC.deepUnwrap(list) || []
+var appName = ''
+for (var i = 0; i < windows.length; i++) {
+  var w = windows[i]
+  if (!w) continue
+  var id = w.kCGWindowNumber
+  if (exclude[id]) continue
+  var layer = w.kCGWindowLayer
+  if (layer !== 0) continue
+  var name = w.kCGWindowOwnerName
+  if (typeof name !== 'string' || name.length === 0) continue
+  appName = name
+  break
+}
+JSON.stringify(appName ? { appName: appName } : null)
+`
+}
+
+/**
+ * Whether a CGWindow owner name is Finder (English or 访达).
+ * @param appName - `kCGWindowOwnerName` after overlay skip.
+ * @returns true when Finder folder lookup should run.
+ */
+export function isFinderApp(appName: string): boolean {
+  const name = appName.trim()
+  return name === 'Finder' || name === '访达'
+}
+
 const KEY_CODES: Readonly<Record<string, number>> = {
   a: 0, s: 1, d: 2, f: 3, h: 4, g: 5, z: 6, x: 7, c: 8, v: 9, b: 11,
   q: 12, w: 13, e: 14, r: 15, y: 16, t: 17, '1': 18, '2': 19, '3': 20,
@@ -133,6 +193,32 @@ function mediaTypeOf(data: Uint8Array): CapturedScreen['mediaType'] {
     return 'image/jpeg'
   }
   throw new Error('computer-use: capture produced an unsupported image')
+}
+
+function parseForegroundAppName(stdout: string): string | undefined {
+  const trimmed = stdout.trim()
+  if (trimmed === '') return undefined
+  try {
+    const parsed: unknown = JSON.parse(trimmed)
+    if (typeof parsed !== 'object' || parsed === null) return undefined
+    const name = (parsed as { appName?: unknown }).appName
+    if (typeof name !== 'string') return undefined
+    const appName = name.trim()
+    return appName === '' ? undefined : appName
+  } catch {
+    return undefined
+  }
+}
+
+function parseFinderFolder(stdout: string): string | undefined {
+  const path = stdout.trim()
+  if (path === '' || !path.startsWith('/')) return undefined
+  return path
+}
+
+function isAbortError(error: unknown, signal?: AbortSignal): boolean {
+  if (signal?.aborted) return true
+  return error instanceof Error && error.name === 'AbortError'
 }
 
 function parseScreens(stdout: string): ScreenInfo[] {
@@ -380,6 +466,30 @@ export function createMacosDesktopBackend(run: CommandRunner = runCommand): Desk
         )
       } finally {
         await rm(dir, { recursive: true, force: true })
+      }
+    },
+
+    async inspectForeground(signal) {
+      try {
+        const result = await run(
+          OSASCRIPT,
+          jxa(inspectForegroundScript(activeCaptureExcludeWindowIds())),
+          { signal },
+        )
+        const appName = parseForegroundAppName(result.stdout)
+        if (appName === undefined) return FOCUS_FALLBACK_FOREGROUND
+        if (!isFinderApp(appName)) return { appName }
+        try {
+          const folder = await run(OSASCRIPT, ['-e', FINDER_FOLDER_SCRIPT], { signal })
+          const finderFolder = parseFinderFolder(folder.stdout)
+          return finderFolder === undefined ? { appName } : { appName, finderFolder }
+        } catch (error: unknown) {
+          if (isAbortError(error, signal)) throw error
+          return { appName }
+        }
+      } catch (error: unknown) {
+        if (isAbortError(error, signal)) throw error
+        return FOCUS_FALLBACK_FOREGROUND
       }
     },
 

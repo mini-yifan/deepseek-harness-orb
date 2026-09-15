@@ -29,7 +29,7 @@ kind: "package-reference"
 
 ### 何时选择
 
-当视觉模型需要驱动 bash 无法到达的可见 GUI，并且你希望工具目录仅含 Shell、网页检索与抓取、五个 GUI 工具、`code_agent` 和 `ask_user_question` 时，选择它。普通编码会话、纯文本路由，以及不得授予屏幕录制加辅助功能权限的宿主，都不要选择。它不是 Skill，不是能力 seam，也不属于 `dsh-base`。Desktop macOS 也会把该 overlay 作为签名 runtime extra 挂上，以便悬浮球锁死 Computer Use 会话。
+当视觉模型需要驱动 bash 无法到达的可见 GUI，并且你希望工具目录仅含 Shell、网页检索与抓取、五个 GUI 工具、`code_agent` 和 `ask_user_question` 时，选择它。普通编码会话、纯文本路由，以及不得授予屏幕录制、辅助功能与访达自动化权限的宿主，都不要选择。它不是 Skill，不是能力 seam，也不属于 `dsh-base`。Desktop macOS 也会把该 overlay 作为签名 runtime extra 挂上，以便悬浮球锁死 Computer Use 会话。
 
 ### 最小配置
 
@@ -62,7 +62,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-experimental-tool-computer-use)是每个受支持字段及其 JSDoc 的穷尽式真源。
 
-在 macOS 上，截屏需要屏幕录制权限，发送点击与按键需要辅助功能权限。缺少权限时，捕获或输入会失败，并在消息中指出对应的 TCC 权限。Windows 与 Linux 仍会加载；随后每个后端方法都会抛出 `computer-use: desktop control is implemented only on macOS`。
+在 macOS 上，截屏需要屏幕录制权限，发送点击与按键需要辅助功能权限，Finder 当前文件夹查询需要访达的自动化权限。缺少屏幕录制或辅助功能时，捕获或输入会失败，并在消息中指出对应的 TCC 权限。Windows 与 Linux 仍会加载；随后每个后端方法都会抛出 `computer-use: desktop control is implemented only on macOS`。
 
 ### 工具
 
@@ -77,7 +77,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 | `wait` | 可选 `wait_seconds`，受 `maxWaitSeconds` 限制 | 等待、重新截屏 |
 | `code_agent` | `task`、可选 `session_id`、可选 `cwd` | 在一等 standard 会话上入队并返回该 `session_id`；两边都空闲后跟一条插件通知 |
 
-五个工具都互斥运行。`presentCall` 为 generic。文本信封标明屏幕序号、逻辑尺寸、0–1000 坐标空间、附件像素尺寸，以及 `saveImage` 缩放栅格时的倍率。它从不包含文件系统路径。
+五个工具都互斥运行。`presentCall` 为 generic。每次观察先给出 `<frontmost_app>`（前台是 Finder/访达时还有 `<frontmost_folder>`；跳过 overlay 后没有剩余窗口时是 `<focus_note>`）。随后每屏信封标明屏幕序号、逻辑尺寸、0–1000 坐标空间、附件像素尺寸，以及 `saveImage` 缩放栅格时的倍率。信封不含截图文件路径。
 
 测试通过 `applyComputerUse(ctx, backend, config)` 注入假桌面，而不是 Config 上的 `driver` 钩子。
 
@@ -104,11 +104,12 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 | [`src/index.ts`](src/index.ts) | 插件入口：宿主平台后端上的 `name` / `inject` / `Config` / `apply` |
 | [`src/preset-root.ts`](src/preset-root.ts) | 仅 overlay 使用的插件：发布额外的 agent-presets 根目录 |
 | [`src/plugin.ts`](src/plugin.ts) | 共享的 `applyComputerUse`：策略、五个 GUI 工具、首帧 pre-step |
+| [`src/observe.ts`](src/observe.ts) | 显示器捕获、跳过 overlay 的前台检查，以及面向模型的信封 |
 | [`src/code-agent.ts`](src/code-agent.ts) | 仅 Computer Use 的 `code_agent`：`session.create` / `session.prompt` |
 | [`src/code-agent-completion.ts`](src/code-agent-completion.ts) | Code 会话与 Computer Use 调用方都空闲后投递的插件通知 |
-| [`src/macos.ts`](src/macos.ts) | Darwin 通过 `screencapture` 捕获，或在设置了 overlay 窗口 id 时走 ScreenCaptureKit `excludingWindows`；click、scroll 与 hotkey 走 JXA `CGEvent`；`input_text` 通过 NSPasteboard 粘贴 |
+| [`src/macos.ts`](src/macos.ts) | Darwin 通过 `screencapture` 捕获，或在设置了 overlay 窗口 id 时走 ScreenCaptureKit `excludingWindows`；click、scroll 与 hotkey 走 JXA `CGEvent`；`input_text` 通过 NSPasteboard 粘贴；`inspectForeground` 用 CGWindowList（跳过 overlay id）加 Finder AppleScript |
 | [`src/macos-sck-capture.swift`](src/macos-sck-capture.swift) | Darwin helper：省略 overlay CGWindowID 的显示捕获 |
-| [`src/overlay-guard.ts`](src/overlay-guard.ts) | 可选的 Desktop overlay 遮蔽：把 capture 与 HID 包进 `wrapDesktopBackend` |
+| [`src/overlay-guard.ts`](src/overlay-guard.ts) | 可选的 Desktop overlay 遮蔽：把 capture、inspect 与 HID 包进 `wrapDesktopBackend` |
 | [`presets/computer-use/`](presets/computer-use/) | Computer Use agent preset：Shell、网页、GUI 工具、`code_agent`、`ask_user_question`、压缩 |
 | — | 不发布运行时不变式伴生入口，因为本插件不引入新的会话事件；观察结果走现有的 `user/message` 与 `tool/result`。 |
 
@@ -124,6 +125,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 - [添加工具](../../../docs/cookbook/adding-a-tool.zh.md) — UI 呈现意图（`generic`）与内容中的图片块。
 - [Computer Use Agent Note](../../../.agents/notes/implemented/feature/2026-09-13-experimental-computer-use.zh.md) — 插件 vs Skill vs loop、Computer Use agent preset、结果内观察，以及同意门槛。
 - [Computer Use 把 Code agent 完成通知停到空闲再投递](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-code-agent-completion.zh.md) — 两边都空闲后投递的插件通知。
+- [Computer Use 观察前台元数据](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-observation-foreground.zh.md) — overlay 窗口排除、Finder 文件夹，以及现有 `user/message` / `tool/result` 上的焦点 fallback。
 - [桌面悬浮球](../../../.agents/notes/implemented/feature/2026-09-14-desktop-floating-orb.zh.md) — macOS overlay、runtime extra，以及一等 `code_agent` 会话。
 - [桌面 overlay-guard](../../../.agents/notes/implemented/architecture/2026-09-14-desktop-overlay-guard.zh.md) — 悬浮球的截屏排除与 HID 点击穿透。
 - [Headless computer-use snapshot](../../../snapshots/session/computer-use/snapshot.yml) — 在假桌面与视觉模型上人工编写的点击循环。
@@ -144,13 +146,13 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 ```markdown
 Computer Use lets you see the current desktop and operate the GUI.
 
-See: trust only the attached desktop screenshots. Do not assume windows, buttons, or text that are not visible in the latest image.
+See: trust only the attached desktop screenshots for windows, buttons, and on-screen text. Do not assume UI that is not visible in the latest image. You may use observation tags <frontmost_app>, <frontmost_folder>, and <focus_note> as OS metadata.
 
 Coordinates: each screen uses a 0–1000 space. Pass position as [x, y] in that space together with screen_index. When a result envelope names downscale multipliers, convert attached-image pixels with those multipliers before choosing coordinates. Do not send raw pixel coordinates.
 
 Step: take exactly one GUI action per tool call. After the call, the new screenshot is in the tool result; use that image for the next action.
 
-Do not click or type into a target you cannot see. Do not read file paths off the screen; use bash with real paths.
+Do not click or type into a target you cannot see. Do not OCR file paths from the screenshot. When <frontmost_folder> is present, copy that path; otherwise use bash with real paths. When <focus_note> is present, click the target window first if the next step needs focus.
 
 Observation is not a tool. There is no screenshot or observe call. The first user turn already includes the current screens, and every GUI tool returns the post-action screens.
 
@@ -196,9 +198,9 @@ When a plugin notice reports that a Code agent session finished, tell the user w
 这些限制是当前的包约束。该插件驱动真实的未沙箱化桌面。
 
 - **仅 macOS** — 捕获与 HID 输入在 Darwin 上实现；其他平台在执行时抛错。
-- **屏幕录制与辅助功能 TCC** — 捕获需要屏幕录制；点击、输入、滚动与热键需要辅助功能。插件不会提示授予这些权限。
+- **屏幕录制、辅助功能与自动化 TCC** — 捕获需要屏幕录制；点击、输入、滚动与热键需要辅助功能；Finder 当前文件夹查询需要访达的自动化权限。插件不会提示授予这些权限。
 - **没有逐次点击批准** — 安装或 patch 插件就是同意门槛；视觉循环不能在每个动作上询问。
-- **宿主 chrome 会出现在截屏中** — Web 窗口会出现在捕获中。Desktop 主窗口始终可被截到。macOS overlay 由 ScreenCaptureKit `excludingWindows` 从 Computer Use 截图中省略（整扇 overlay 窗，含展开面板），并只在对应的 HID 突发期间通过带确认的 overlay-guard IPC 点击穿透。
+- **宿主 chrome 会出现在截屏中** — Web 窗口会出现在捕获中。Desktop 主窗口始终可被截到。macOS overlay 由 ScreenCaptureKit `excludingWindows` 从 Computer Use 截图中省略（整扇 overlay 窗，含展开面板），并只在对应的 HID 突发期间通过带确认的 overlay-guard IPC 点击穿透。前台检查只跳过这些 overlay 窗口 id，因此主窗口可以出现在 `<frontmost_app>` 里。
 - **输入会使用字符串剪贴板** — `input_text` 通过 Cmd+V 粘贴，并在之后恢复先前的字符串剪贴板。其他剪贴板类型不会被恢复。
 - **Retina 与附件尺寸** — backing scale 可能与附件栅格不同；使用 0–1000 空间以及信封中的倍率。
 - **固定等待** — 动作后延迟只有 `postActionWaitMs`；没有像素差 stall。

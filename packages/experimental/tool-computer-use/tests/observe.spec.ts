@@ -4,9 +4,11 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
+import { FOCUS_FALLBACK_FOREGROUND } from '../src/backend.ts'
 import { resolveComputerUseConfig } from '../src/config.ts'
 import { createFakeDesktopBackend } from '../src/fake.ts'
 import {
+  formatForegroundEnvelope,
   imageRefFromObserved,
   observeDesktop,
   requireScreen,
@@ -45,6 +47,9 @@ describe('observeDesktop', () => {
     expect(observation.screens).toHaveLength(1)
     expect(observation.screens[0]?.screenIndex).toBe(0)
     expect(observation.blocks.some(block => block.type === 'image')).toBe(true)
+    expect(observation.blocks.some(block =>
+      block.type === 'text' && 'text' in block && block.text.includes('<frontmost_app>Pages</frontmost_app>'),
+    )).toBe(true)
     expect(observation.blocks.some(block =>
       block.type === 'text' && 'text' in block && block.text.includes('<path>'),
     )).toBe(false)
@@ -98,6 +103,99 @@ describe('observeDesktop', () => {
       resolveComputerUseConfig({}),
       abort.signal,
     )).rejects.toThrow('stopped')
+  })
+
+  it('uses fallback when inspectForeground throws', async () => {
+    home = await mkdtemp(join(tmpdir(), 'dsh-cu-obs-fg-'))
+    const ctx = new Context()
+    context = ctx
+    await ctx.plugin(LocalAttachmentStore, { dshHome: home })
+    const fake = createFakeDesktopBackend()
+    const observation = await observeDesktop(
+      ctx,
+      {
+        listScreens: fake.listScreens,
+        capture: fake.capture,
+        inspectForeground: () => Promise.reject(new Error('ax failed')),
+        click: fake.click,
+        typeText: fake.typeText,
+        scroll: fake.scroll,
+        hotkey: fake.hotkey,
+      },
+      resolveComputerUseConfig({}),
+      SIGNAL,
+    )
+    expect(observation.foreground).toEqual(FOCUS_FALLBACK_FOREGROUND)
+    expect(observation.blocks.some(block =>
+      block.type === 'text' && 'text' in block && block.text.includes('<focus_note>'),
+    )).toBe(true)
+  })
+
+  it('rethrows abort from inspectForeground', async () => {
+    home = await mkdtemp(join(tmpdir(), 'dsh-cu-obs-abort-'))
+    const ctx = new Context()
+    context = ctx
+    await ctx.plugin(LocalAttachmentStore, { dshHome: home })
+    const fake = createFakeDesktopBackend()
+    const abort = new Error('stopped')
+    abort.name = 'AbortError'
+    await expect(observeDesktop(
+      ctx,
+      {
+        listScreens: fake.listScreens,
+        capture: fake.capture,
+        inspectForeground: () => Promise.reject(abort),
+        click: fake.click,
+        typeText: fake.typeText,
+        scroll: fake.scroll,
+        hotkey: fake.hotkey,
+      },
+      resolveComputerUseConfig({}),
+      SIGNAL,
+    )).rejects.toThrow('stopped')
+
+    const controller = new AbortController()
+    await expect(observeDesktop(
+      ctx,
+      {
+        listScreens: fake.listScreens,
+        capture: fake.capture,
+        inspectForeground: () => {
+          controller.abort(new Error('stopped'))
+          return Promise.reject(new Error('ax failed'))
+        },
+        click: fake.click,
+        typeText: fake.typeText,
+        scroll: fake.scroll,
+        hotkey: fake.hotkey,
+      },
+      resolveComputerUseConfig({}),
+      controller.signal,
+    )).rejects.toThrow('ax failed')
+  })
+})
+
+describe('formatForegroundEnvelope', () => {
+  it('omits empty folder and note tags', () => {
+    expect(formatForegroundEnvelope({ appName: 'Pages' })).toBe(
+      '<frontmost_app>Pages</frontmost_app>',
+    )
+    expect(formatForegroundEnvelope({
+      appName: 'Finder',
+      finderFolder: '/Users/test/Documents',
+    })).toBe(
+      '<frontmost_app>Finder</frontmost_app>\n<frontmost_folder>/Users/test/Documents</frontmost_folder>',
+    )
+    expect(formatForegroundEnvelope(FOCUS_FALLBACK_FOREGROUND)).toContain('<frontmost_app>none</frontmost_app>')
+    expect(formatForegroundEnvelope(FOCUS_FALLBACK_FOREGROUND)).toContain('<focus_note>')
+    expect(formatForegroundEnvelope({ appName: 'Finder', finderFolder: '  ' }))
+      .toBe('<frontmost_app>Finder</frontmost_app>')
+    expect(formatForegroundEnvelope({ appName: '  ' })).toBe(
+      '<frontmost_app>none</frontmost_app>',
+    )
+    expect(formatForegroundEnvelope({ appName: 'none', focusNote: '  ' })).toBe(
+      '<frontmost_app>none</frontmost_app>',
+    )
   })
 })
 

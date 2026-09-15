@@ -9,11 +9,12 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { GenericCallView } from '@deepseek-ai/dsh-tools'
-import type { ClickButton, DesktopBackend } from './backend.ts'
+import type { ClickButton, DesktopBackend, DesktopForeground } from './backend.ts'
 import type { ResolvedComputerUseConfig } from './config.ts'
 import { assertAllowedHotkey, requireNormalizedPosition } from './coordinates.ts'
 import {
-  observationBlocks,
+  compactForeground,
+  observationContent,
   observeDesktop,
   requireScreen,
   type ObservedScreen,
@@ -78,12 +79,27 @@ const SCREENS_FIELD = {
   items: SCREEN_SCHEMA,
 } as const
 
+const FOREGROUND_FIELD = {
+  type: 'object',
+  additionalProperties: false,
+  required: true,
+  properties: {
+    appName: { type: 'string', required: true },
+    finderFolder: { type: 'string' },
+    focusNote: { type: 'string' },
+  },
+} as const
+
 function genericExecute(title: string, rawInput: unknown): GenericCallView {
   return { card: 'generic', title, kind: 'execute', rawInput }
 }
 
-function resultBlocks(intro: string, screens: readonly ObservedScreen[]): ContentBlock[] {
-  return [{ type: 'text', text: intro }, ...observationBlocks(screens)]
+function resultBlocks(
+  intro: string,
+  screens: readonly ObservedScreen[],
+  foreground: DesktopForeground,
+): ContentBlock[] {
+  return [{ type: 'text', text: intro }, ...observationContent(screens, foreground)]
 }
 
 async function recapture(
@@ -91,9 +107,12 @@ async function recapture(
   backend: DesktopBackend,
   config: ResolvedComputerUseConfig,
   signal: AbortSignal,
-): Promise<ObservedScreen[]> {
+): Promise<{ screens: ObservedScreen[]; foreground: DesktopForeground }> {
   const observation = await observeDesktop(ctx, backend, config, signal)
-  return [...observation.screens]
+  return {
+    screens: [...observation.screens],
+    foreground: compactForeground(observation.foreground),
+  }
 }
 
 /**
@@ -149,11 +168,13 @@ export function applyComputerUse(
           button: { type: 'string', required: true, enum: ['left', 'right'] },
           count: { type: 'integer', required: true },
           screens: SCREENS_FIELD,
+          foreground: FOREGROUND_FIELD,
         },
       },
       render: (_args, value) => resultBlocks(
         `Clicked screen ${String(value.screenIndex)} at [${value.position.join(', ')}] (${value.button}, count ${String(value.count)}). Coordinates remain 0–1000.`,
         value.screens,
+        value.foreground,
       ),
     },
     isConcurrencySafe: () => false,
@@ -170,12 +191,14 @@ export function applyComputerUse(
       const screen = requireScreen(screens, args.screen_index)
       await backend.click({ screen, position, button, count }, exec.signal)
       await delay(config.postActionWaitMs, exec.signal)
+      const observation = await recapture(ctx, backend, config, exec.signal)
       return {
         screenIndex: args.screen_index,
         position,
         button,
         count,
-        screens: await recapture(ctx, backend, config, exec.signal),
+        screens: observation.screens,
+        foreground: observation.foreground,
       }
     },
   }))
@@ -215,11 +238,13 @@ export function applyComputerUse(
           replace: { type: 'boolean', required: true },
           submit: { type: 'boolean', required: true },
           screens: SCREENS_FIELD,
+          foreground: FOREGROUND_FIELD,
         },
       },
       render: (_args, value) => resultBlocks(
         `Typed on screen ${String(value.screenIndex)} at [${value.position.join(', ')}] (replace=${String(value.replace)}, submit=${String(value.submit)}). Coordinates remain 0–1000.`,
         value.screens,
+        value.foreground,
       ),
     },
     isConcurrencySafe: () => false,
@@ -233,13 +258,15 @@ export function applyComputerUse(
       const screen = requireScreen(screens, args.screen_index)
       await backend.typeText({ screen, position, text: args.text, replace, submit }, exec.signal)
       await delay(config.postActionWaitMs, exec.signal)
+      const observation = await recapture(ctx, backend, config, exec.signal)
       return {
         screenIndex: args.screen_index,
         position,
         text: args.text,
         replace,
         submit,
-        screens: await recapture(ctx, backend, config, exec.signal),
+        screens: observation.screens,
+        foreground: observation.foreground,
       }
     },
   }))
@@ -278,11 +305,13 @@ export function applyComputerUse(
           direction: { type: 'string', required: true, enum: ['up', 'down'] },
           scrollLevel: { type: 'integer', required: true },
           screens: SCREENS_FIELD,
+          foreground: FOREGROUND_FIELD,
         },
       },
       render: (_args, value) => resultBlocks(
         `Scrolled ${value.direction} on screen ${String(value.screenIndex)} at [${value.position.join(', ')}] (level ${String(value.scrollLevel)}). Coordinates remain 0–1000.`,
         value.screens,
+        value.foreground,
       ),
     },
     isConcurrencySafe: () => false,
@@ -306,12 +335,14 @@ export function applyComputerUse(
         scrollLevel: args.scroll_level,
       }, exec.signal)
       await delay(config.postActionWaitMs, exec.signal)
+      const observation = await recapture(ctx, backend, config, exec.signal)
       return {
         screenIndex: args.screen_index,
         position,
         direction: args.direction,
         scrollLevel: args.scroll_level,
-        screens: await recapture(ctx, backend, config, exec.signal),
+        screens: observation.screens,
+        foreground: observation.foreground,
       }
     },
   }))
@@ -336,11 +367,13 @@ export function applyComputerUse(
         properties: {
           keys: { type: 'array', required: true, items: { type: 'string' } },
           screens: SCREENS_FIELD,
+          foreground: FOREGROUND_FIELD,
         },
       },
       render: (_args, value) => resultBlocks(
         `Pressed hotkey [${value.keys.join(', ')}]. Coordinates remain 0–1000.`,
         value.screens,
+        value.foreground,
       ),
     },
     isConcurrencySafe: () => false,
@@ -351,9 +384,11 @@ export function applyComputerUse(
       assertAllowedHotkey(args.keys)
       await backend.hotkey({ keys: args.keys }, exec.signal)
       await delay(config.postActionWaitMs, exec.signal)
+      const observation = await recapture(ctx, backend, config, exec.signal)
       return {
         keys: args.keys,
-        screens: await recapture(ctx, backend, config, exec.signal),
+        screens: observation.screens,
+        foreground: observation.foreground,
       }
     },
   }))
@@ -376,11 +411,13 @@ export function applyComputerUse(
         properties: {
           waitSeconds: { type: 'number', required: true },
           screens: SCREENS_FIELD,
+          foreground: FOREGROUND_FIELD,
         },
       },
       render: (_args, value) => resultBlocks(
         `Waited ${String(value.waitSeconds)}s. Coordinates remain 0–1000.`,
         value.screens,
+        value.foreground,
       ),
     },
     isConcurrencySafe: () => false,
@@ -393,9 +430,11 @@ export function applyComputerUse(
       }
       const waitSeconds = Math.min(requested, config.maxWaitSeconds)
       await delay(waitSeconds * 1000, exec.signal)
+      const observation = await recapture(ctx, backend, config, exec.signal)
       return {
         waitSeconds,
-        screens: await recapture(ctx, backend, config, exec.signal),
+        screens: observation.screens,
+        foreground: observation.foreground,
       }
     },
   }))

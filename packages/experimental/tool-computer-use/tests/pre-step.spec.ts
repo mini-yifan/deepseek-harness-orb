@@ -91,6 +91,9 @@ describe('computer-use first-frame pre-step', () => {
       form: 'notice',
     })
     expect(notice?.content.some(block => block.type === 'image')).toBe(true)
+    expect(notice?.content.some(block =>
+      block.type === 'text' && 'text' in block && block.text.includes('<frontmost_app>Pages</frontmost_app>'),
+    )).toBe(true)
   })
 
   it('skips first-frame attachment for rejects, empty batches, plugin injects, and text-only routes', async () => {

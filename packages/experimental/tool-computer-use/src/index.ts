@@ -22,11 +22,13 @@ export type {
   ClickButton,
   ClickInput,
   DesktopBackend,
+  DesktopForeground,
   HotkeyInput,
   ScreenInfo,
   ScrollInput,
   TypeInput,
 } from './backend.ts'
+export { FOCUS_FALLBACK_FOREGROUND, FOCUS_NOTE } from './backend.ts'
 export { Config, resolveComputerUseConfig } from './config.ts'
 export type { ResolvedComputerUseConfig } from './config.ts'
 export { createFakeDesktopBackend, FAKE_DESKTOP_PNG } from './fake.ts'
@@ -44,7 +46,7 @@ export const inject = ['tools', 'systemPrompt', 'attachments']
 
 /**
  * Mount Computer Use with the host-platform backend.
- * When Desktop Host provides `computerUseOverlayGuard`, capture and HID run inside overlay-guard intervals.
+ * When Desktop Host provides `computerUseOverlayGuard`, capture, foreground inspect, and HID run inside overlay-guard intervals.
  * @param ctx - registration scope; `inject` must already be satisfied.
  * @param config - optional tunables; omitted fields use schema defaults.
  */

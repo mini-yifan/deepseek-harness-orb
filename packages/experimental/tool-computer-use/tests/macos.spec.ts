@@ -5,12 +5,17 @@ import { describe, expect, it } from 'vitest'
 import { FAKE_DESKTOP_PNG } from '../src/fake.ts'
 import {
   createMacosDesktopBackend,
+  FINDER_FOLDER_SCRIPT,
+  inspectForegroundScript,
+  isFinderApp,
   LIST_SCREENS_SCRIPT,
   macosSckCaptureHelperPath,
   runCommand,
+  sanitizeExcludeWindowIds,
   writeCaptureFile,
   type CommandRunner,
 } from '../src/macos.ts'
+import { FOCUS_FALLBACK_FOREGROUND } from '../src/backend.ts'
 import { runWithCaptureExcludeWindowIds } from '../src/capture-exclude.ts'
 
 const SCREEN: Record<string, number> = {
@@ -25,6 +30,8 @@ function runner(options: {
   screens?: string
   capture?: Uint8Array | Error
   osascript?: Error
+  inspect?: string | Error
+  finderFolder?: string | Error
   scripts?: string[]
   files?: string[]
   args?: string[][]
@@ -36,11 +43,22 @@ function runner(options: {
     files.push(file)
     capturedArgs?.push([...args])
     if (file === '/usr/bin/osascript') {
-      const script = args[2] === '-e' ? (args[3] ?? '') : await readFile(String(args[2]), 'utf8')
+      const flag = args.indexOf('-e')
+      const script = flag >= 0
+        ? (args[flag + 1] ?? '')
+        : await readFile(String(args.at(-1)), 'utf8')
       scripts.push(script)
       if (options.osascript) throw options.osascript
       if (script === LIST_SCREENS_SCRIPT) {
         return { stdout: options.screens ?? screensJson(), stderr: '' }
+      }
+      if (script.includes('CGWindowListCopyWindowInfo')) {
+        if (options.inspect instanceof Error) throw options.inspect
+        return { stdout: options.inspect ?? JSON.stringify({ appName: 'Pages' }), stderr: '' }
+      }
+      if (script.includes('tell application "Finder"')) {
+        if (options.finderFolder instanceof Error) throw options.finderFolder
+        return { stdout: options.finderFolder ?? '', stderr: '' }
       }
       return { stdout: '', stderr: '' }
     }
@@ -145,6 +163,116 @@ describe('macOS backend with an injected runner', () => {
     expect(files).toEqual([macosSckCaptureHelperPath()])
   })
 
+  it('interpolates overlay window ids as integer JXA keys', () => {
+    expect(sanitizeExcludeWindowIds([4242, 7, 1.5, -1, 0, Number.NaN])).toEqual([4242, 7])
+    expect(inspectForegroundScript([4242, 7])).toContain('4242: true')
+    expect(inspectForegroundScript([4242, 7])).toContain('7: true')
+    expect(inspectForegroundScript([1.5, -1])).toBe(inspectForegroundScript([]))
+    expect(isFinderApp('Finder')).toBe(true)
+    expect(isFinderApp('访达')).toBe(true)
+    expect(isFinderApp('Google Chrome')).toBe(false)
+  })
+
+  it('skips overlay window ids and reports the next owner', async () => {
+    const scripts: string[] = []
+    const backend = createMacosDesktopBackend(runner({
+      scripts,
+      inspect: JSON.stringify({ appName: 'Google Chrome' }),
+    }))
+    await expect(runWithCaptureExcludeWindowIds([4242, 7], () => backend.inspectForeground()))
+      .resolves.toEqual({ appName: 'Google Chrome' })
+    expect(scripts.some(script => script.includes('4242: true') && script.includes('7: true'))).toBe(true)
+    expect(scripts.some(script => script.includes('CGWindowListCopyWindowInfo'))).toBe(true)
+    expect(scripts).not.toContain(FINDER_FOLDER_SCRIPT)
+  })
+
+  it('adds Finder folder when the remaining app is Finder', async () => {
+    const scripts: string[] = []
+    const backend = createMacosDesktopBackend(runner({
+      scripts,
+      inspect: JSON.stringify({ appName: 'Finder' }),
+      finderFolder: '/Users/tester/Documents/\n',
+    }))
+    await expect(backend.inspectForeground()).resolves.toEqual({
+      appName: 'Finder',
+      finderFolder: '/Users/tester/Documents/',
+    })
+    expect(scripts).toContain(FINDER_FOLDER_SCRIPT)
+  })
+
+  it('adds Finder folder when the remaining app is 访达', async () => {
+    const backend = createMacosDesktopBackend(runner({
+      inspect: JSON.stringify({ appName: '访达' }),
+      finderFolder: '/Users/tester/Desktop',
+    }))
+    await expect(backend.inspectForeground()).resolves.toEqual({
+      appName: '访达',
+      finderFolder: '/Users/tester/Desktop',
+    })
+  })
+
+  it('omits Finder folder when the path lookup fails', async () => {
+    const backend = createMacosDesktopBackend(runner({
+      inspect: JSON.stringify({ appName: 'Finder' }),
+      finderFolder: new Error('timeout'),
+    }))
+    await expect(backend.inspectForeground()).resolves.toEqual({ appName: 'Finder' })
+  })
+
+  it('omits Finder folder when AppleScript returns empty', async () => {
+    const backend = createMacosDesktopBackend(runner({
+      inspect: JSON.stringify({ appName: 'Finder' }),
+      finderFolder: '',
+    }))
+    await expect(backend.inspectForeground()).resolves.toEqual({ appName: 'Finder' })
+  })
+
+  it('returns focus fallback when no remaining window has an owner', async () => {
+    const backend = createMacosDesktopBackend(runner({ inspect: 'null' }))
+    await expect(backend.inspectForeground()).resolves.toEqual(FOCUS_FALLBACK_FOREGROUND)
+  })
+
+  it('returns focus fallback when inspect JSON is unusable', async () => {
+    const backend = createMacosDesktopBackend(runner({ inspect: 'not-json' }))
+    await expect(backend.inspectForeground()).resolves.toEqual(FOCUS_FALLBACK_FOREGROUND)
+    await expect(createMacosDesktopBackend(runner({ inspect: '42' })).inspectForeground())
+      .resolves.toEqual(FOCUS_FALLBACK_FOREGROUND)
+    await expect(createMacosDesktopBackend(runner({ inspect: '{"appName":1}' })).inspectForeground())
+      .resolves.toEqual(FOCUS_FALLBACK_FOREGROUND)
+    await expect(createMacosDesktopBackend(runner({ inspect: '{"appName":"  "}' })).inspectForeground())
+      .resolves.toEqual(FOCUS_FALLBACK_FOREGROUND)
+    await expect(createMacosDesktopBackend(runner({ inspect: '' })).inspectForeground())
+      .resolves.toEqual(FOCUS_FALLBACK_FOREGROUND)
+  })
+
+  it('returns focus fallback when the window-list osascript fails', async () => {
+    const backend = createMacosDesktopBackend(runner({ inspect: new Error('denied') }))
+    await expect(backend.inspectForeground()).resolves.toEqual(FOCUS_FALLBACK_FOREGROUND)
+  })
+
+  it('rethrows abort from the window-list query', async () => {
+    const abort = new Error('stopped')
+    abort.name = 'AbortError'
+    const backend = createMacosDesktopBackend(runner({ inspect: abort }))
+    await expect(backend.inspectForeground()).rejects.toThrow('stopped')
+  })
+
+  it('rethrows abort from Finder folder lookup', async () => {
+    const abort = new Error('stopped')
+    abort.name = 'AbortError'
+    const backend = createMacosDesktopBackend(runner({
+      inspect: JSON.stringify({ appName: 'Finder' }),
+      finderFolder: abort,
+    }))
+    await expect(backend.inspectForeground()).rejects.toThrow('stopped')
+  })
+
+  it('rethrows inspect errors when the signal is already aborted', async () => {
+    const controller = new AbortController()
+    controller.abort(new Error('stopped'))
+    const backend = createMacosDesktopBackend(runner({ inspect: new Error('denied') }))
+    await expect(backend.inspectForeground(controller.signal)).rejects.toThrow(/denied/u)
+  })
 
   it('names Screen Recording when capture fails', async () => {
     const backend = createMacosDesktopBackend(runner({ capture: new Error('denied') }))
