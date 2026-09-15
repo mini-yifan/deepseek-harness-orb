@@ -111,6 +111,14 @@ export interface OpenInFinderInput {
   readonly revealOnly: boolean
 }
 
+/** Copy an already-written image file onto the system pasteboard. */
+export interface CopyImageToClipboardInput {
+  /** Absolute path of the PNG/JPEG/GIF/WebP file to place on the pasteboard. */
+  readonly path: string
+  /** Encoded type of the file at `path`. */
+  readonly mediaType: ImageMediaType
+}
+
 /**
  * Capture plus HID input for one desktop. Production macOS implements this;
  * tests inject a fake; other platforms throw from each method.
@@ -184,6 +192,13 @@ export interface DesktopBackend {
    * @param signal - cooperative cancellation.
    */
   openInFinder(input: OpenInFinderInput, signal?: AbortSignal): Promise<void>
+  /**
+   * Replace the system pasteboard with the image at `input.path`.
+   * Does not restore the previous clipboard.
+   * @param input - written screenshot path and media type.
+   * @param signal - cooperative cancellation.
+   */
+  copyImageToClipboard(input: CopyImageToClipboardInput, signal?: AbortSignal): Promise<void>
 }
 
 /**

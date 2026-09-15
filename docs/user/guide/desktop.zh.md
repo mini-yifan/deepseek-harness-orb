@@ -52,7 +52,8 @@ Host 就绪后才会创建球。悬停展开白底面板，球留在输入胶囊
 
 球上的 Computer Use Agent 自己判断当前这句话怎么走，运行时没有单独的分类器：
 
-- 看得见的 GUI（打开微信、在 Pages 里点按钮）只用 GUI 工具（click、input_text、scroll、hotkey、wait、long_wait、long_press、drag、open_in_browser、open_in_finder），不调后台 Agent。
+- 看得见的 GUI（打开微信、在 Pages 里点按钮）只用 GUI 工具（click、input_text、scroll、hotkey、wait、long_wait、screenshot、long_press、drag、open_in_browser、open_in_finder），不调后台 Agent。
+- 需要截图文件时用 screenshot：把捕获写到桌面并复制到剪贴板。
 - 同一件后台产物的后续修改（刚写完 Word，再说把字体改成绿色）会在已有标准会话上再发一条消息。
 - 无关的新后台工作（做完 Word 再做一个五子棋）会新建一条空白标准会话。
 

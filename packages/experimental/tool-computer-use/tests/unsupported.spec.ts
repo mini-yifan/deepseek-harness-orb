@@ -43,6 +43,9 @@ describe('unsupported desktop', () => {
     })).rejects.toThrow(UNSUPPORTED_DESKTOP_MESSAGE)
     await expect(backend.openInBrowser({})).rejects.toThrow(UNSUPPORTED_DESKTOP_MESSAGE)
     await expect(backend.openInFinder({ path: '/tmp', revealOnly: false })).rejects.toThrow(UNSUPPORTED_DESKTOP_MESSAGE)
+    await expect(backend.copyImageToClipboard({
+      path: '/tmp/shot.png', mediaType: 'image/png',
+    })).rejects.toThrow(UNSUPPORTED_DESKTOP_MESSAGE)
   })
 
   it('selects the unsupported backend off Darwin without capturing', async () => {

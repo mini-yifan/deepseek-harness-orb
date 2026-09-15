@@ -7,7 +7,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
-import type { DesktopBackend, DesktopForeground, ScreenInfo } from './backend.ts'
+import type { CapturedScreen, DesktopBackend, DesktopForeground, ScreenInfo } from './backend.ts'
 import { FOCUS_FALLBACK_FOREGROUND } from './backend.ts'
 import type { ResolvedComputerUseConfig } from './config.ts'
 
@@ -39,6 +39,8 @@ export interface DesktopObservation {
   readonly screens: readonly ObservedScreen[]
   readonly foreground: DesktopForeground
   readonly blocks: ContentBlock[]
+  /** Encoded rasters in the same order as {@link screens}, before attachment downscale. */
+  readonly captures: readonly CapturedScreen[]
 }
 
 const IMAGE_NAME_PREFIX = 'desktop-screen'
@@ -180,9 +182,11 @@ export async function observeDesktop(
     if (isObservationAbort(error, signal)) throw error
   }
   const screens: ObservedScreen[] = []
+  const captures: CapturedScreen[] = []
   for (const screen of selected) {
     signal.throwIfAborted()
     const captured = await backend.capture(screen, signal)
+    captures.push(captured)
     const saved = await ctx.attachments.saveImage({
       data: captured.data,
       mediaType: captured.mediaType,
@@ -207,6 +211,7 @@ export async function observeDesktop(
     screens,
     foreground,
     blocks: observationContent(screens, foreground),
+    captures,
   }
 }
 

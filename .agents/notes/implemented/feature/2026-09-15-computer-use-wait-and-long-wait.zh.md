@@ -28,7 +28,7 @@ Computer Use 的 `wait` 接受自由的 `wait_seconds` 数字，默认 1，并�
 
 ## 影响
 
-Computer Use 目录是十个互斥 GUI 工具加 `code_agent`。普通加载不能再要 3–5 秒。还剩 8 秒的下载要么连调 `wait`，要么用 `long_wait` 10 多等一会。overlay-guard 不变：这两个工具都不发 HID。
+Computer Use 目录是十一个互斥 GUI 工具加 `code_agent`。普通加载不能再要 3–5 秒。还剩 8 秒的下载要么连调 `wait`，要么用 `long_wait` 10 多等一会。overlay-guard 不变：这两个工具都不发 HID。
 
 ## 测试
 

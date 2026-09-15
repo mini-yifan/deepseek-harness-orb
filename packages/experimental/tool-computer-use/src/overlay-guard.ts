@@ -57,8 +57,8 @@ function captureExcludeIds(session: OverlayCaptureSession | undefined): readonly
 
 /**
  * Wrap a desktop backend so capture, foreground inspect, and HID run inside overlay-guard intervals.
- * `listScreens`, `openInBrowser`, and `openInFinder` are unwrapped because they do not capture pixels,
- * inspect windows, or post HID.
+ * `listScreens`, `openInBrowser`, `openInFinder`, and `copyImageToClipboard` are unwrapped because
+ * they do not capture pixels, inspect windows, or post HID.
  * @param inner - platform or fake backend.
  * @param guard - host overlay cloak.
  * @returns a backend that cloaks around capture, inspect, and HID.
@@ -91,5 +91,6 @@ export function wrapDesktopBackend(
     drag: (input, signal) => guard.withInput(() => inner.drag(input, signal), signal),
     openInBrowser: (input, signal) => inner.openInBrowser(input, signal),
     openInFinder: (input, signal) => inner.openInFinder(input, signal),
+    copyImageToClipboard: (input, signal) => inner.copyImageToClipboard(input, signal),
   }
 }

@@ -38,7 +38,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-subagent-control` | `interrupt_agent`, `list_agents`, `send_message` | `ctx.tools`, `ctx.subagents`, `ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`, `tool/result`, `child session events through ctx.subagents` | - | The globally named control tools over continuable background subagents: provider-bound `tool-subagent` instances register distinct delegation tools, while this package registers `send_message` and `interrupt_agent` once, plus `list_agents` from its separately loaded `/list-agents` plugin (whose catalog rows use the sessionProjections and live Agent registries). |
 | `@deepseek-ai/dsh-tool-jobs` | `job_kill`, `job_list`, `job_output` | `ctx.tools`, `ctx.jobs`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `user/message via agent.inject() for background completion notices` | - | The kind-agnostic background-job controller: background bash commands, PTY sends, and subagents are read, listed, and killed through the same three tools. Loading the plugin attaches the controller that arms producers' `ctx.jobs.start()`. |
 | `@deepseek-ai/dsh-experimental-tool-agent-team` | `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | All nine tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
-| `@deepseek-ai/dsh-experimental-tool-computer-use` | `click`, `code_agent`, `drag`, `hotkey`, `input_text`, `long_press`, `long_wait`, `open_in_browser`, `open_in_finder`, `scroll`, `wait` | `ctx.tools`, `ctx.systemPrompt`, `ctx.attachments`, `ctx.llm + an image-capable route (execution and first-frame screenshot)`, `ctx.sessionController (code_agent)` | `tool/call`, `durable attachment (saveImage)`, `user/message first-frame notice`, `tool/result`, `session.create + session.prompt (code_agent)`, `user/message plugin notice (code_agent completion)` | - | Experimental opt-in GUI tools plus Computer Use-only code_agent. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no screenshot tool: the first user turn and every GUI result attach screens plus overlay-skip foreground tags. code_agent is registered only with the Computer Use preset; the catalog stub satisfies inject so the schema is harvestable. |
+| `@deepseek-ai/dsh-experimental-tool-computer-use` | `click`, `code_agent`, `drag`, `hotkey`, `input_text`, `long_press`, `long_wait`, `open_in_browser`, `open_in_finder`, `screenshot`, `scroll`, `wait` | `ctx.tools`, `ctx.systemPrompt`, `ctx.attachments`, `ctx.llm + an image-capable route (execution and first-frame screenshot)`, `ctx.sessionController (code_agent)` | `tool/call`, `durable attachment (saveImage)`, `user/message first-frame notice`, `tool/result`, `session.create + session.prompt (code_agent)`, `user/message plugin notice (code_agent completion)` | - | Experimental opt-in GUI tools plus Computer Use-only code_agent. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no observe tool: the first user turn and every GUI result attach screens plus overlay-skip foreground tags. screenshot writes Desktop files and the clipboard when the user asked for a file or paste. code_agent is registered only with the Computer Use preset; the catalog stub satisfies inject so the schema is harvestable. |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
@@ -2365,6 +2365,19 @@ Open a folder in Finder, open a file with its default app, or reveal a file in F
 
 Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
 
+### `screenshot`
+
+Save the current desktop screenshot to the user Desktop and copy it to the clipboard. Returns the saved file path. Do not use this to see the screen — the first user turn and every GUI result already attach screens. Use when the user asked for a screenshot file or needs the image on the clipboard to paste. Exclusive.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
 ### `scroll`
 
 Scroll up or down at a 0–1000 position on one desktop screen, then return the post-action screenshot. scroll_level is 1–10. Exclusive.
@@ -2421,7 +2434,7 @@ Pause 1 second, then return a fresh desktop screenshot without moving the pointe
 
 Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
 
-Experimental opt-in GUI tools plus Computer Use-only code_agent. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no screenshot tool: the first user turn and every GUI result attach screens plus overlay-skip foreground tags. code_agent is registered only with the Computer Use preset; the catalog stub satisfies inject so the schema is harvestable.
+Experimental opt-in GUI tools plus Computer Use-only code_agent. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no observe tool: the first user turn and every GUI result attach screens plus overlay-skip foreground tags. screenshot writes Desktop files and the clipboard when the user asked for a file or paste. code_agent is registered only with the Computer Use preset; the catalog stub satisfies inject so the schema is harvestable.
 
 <a id="deepseek-aidsh-tool-todo"></a>
 

@@ -4,13 +4,14 @@
  */
 
 import { stat } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import type { Context } from '@deepseek-ai/cordis'
 import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { GenericCallView } from '@deepseek-ai/dsh-tools'
-import type { ClickButton, DesktopBackend, DesktopForeground } from './backend.ts'
+import type { CapturedScreen, ClickButton, DesktopBackend, DesktopForeground } from './backend.ts'
 import type { ResolvedComputerUseConfig } from './config.ts'
 import { assertAllowedHotkey, requireNormalizedPosition } from './coordinates.ts'
 import {
@@ -27,6 +28,7 @@ import {
 } from './observe.ts'
 import { POLICY } from './policy.ts'
 import { assertImageCapableRoute, routeAcceptsImages } from './route.ts'
+import { pairScreenshotFiles, writeDesktopScreenshots } from './screenshot.ts'
 import { delay } from './wait.ts'
 import { LONG_WAIT_SECONDS, WAIT_SECONDS, requireLongWaitSeconds } from './wait-args.ts'
 
@@ -114,12 +116,25 @@ async function recapture(
   backend: DesktopBackend,
   config: ResolvedComputerUseConfig,
   signal: AbortSignal,
-): Promise<{ screens: ObservedScreen[]; foreground: DesktopForeground }> {
+): Promise<{
+  screens: ObservedScreen[]
+  foreground: DesktopForeground
+  captures: CapturedScreen[]
+}> {
   const observation = await observeDesktop(ctx, backend, config, signal)
   return {
     screens: [...observation.screens],
     foreground: compactForeground(observation.foreground),
+    captures: [...observation.captures],
   }
+}
+
+function screenshotIntro(paths: readonly string[]): string {
+  if (paths.length === 1) {
+    return `Saved screenshot to ${paths[0]} and copied it to the clipboard. The image is ready to paste. Coordinates remain 0–1000.`
+  }
+  const list = paths.map(path => `- ${path}`).join('\n')
+  return `Saved screenshots:\n${list}\nCopied screen 0 to the clipboard. The image is ready to paste. Coordinates remain 0–1000.`
 }
 
 /**
@@ -477,6 +492,55 @@ export function applyComputerUse(
       const observation = await recapture(ctx, backend, config, exec.signal)
       return {
         waitSeconds,
+        screens: observation.screens,
+        foreground: observation.foreground,
+      }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'screenshot',
+    description:
+      'Save the current desktop screenshot to the user Desktop and copy it to the clipboard. '
+      + 'Returns the saved file path. Do not use this to see the screen — the first user turn and every GUI result already attach screens. '
+      + 'Use when the user asked for a screenshot file or needs the image on the clipboard to paste. Exclusive.',
+    parameters: {},
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          paths: { type: 'array', required: true, items: { type: 'string' } },
+          clipboard: { type: 'boolean', required: true },
+          screens: SCREENS_FIELD,
+          foreground: FOREGROUND_FIELD,
+        },
+      },
+      render: (_args, value) => resultBlocks(
+        screenshotIntro(value.paths),
+        value.screens,
+        value.foreground,
+      ),
+    },
+    isConcurrencySafe: () => false,
+    presentCall: () => genericExecute('Screenshot', {}),
+    async execute(_args, exec) {
+      await assertImageCapableRoute(ctx, exec)
+      const observation = await recapture(ctx, backend, config, exec.signal)
+      const files = pairScreenshotFiles(observation.captures, observation.screens)
+      const paths = await writeDesktopScreenshots(files, { home: homedir() })
+      const first = files[0]
+      const firstPath = paths[0]
+      if (first === undefined || firstPath === undefined) {
+        throw new Error('computer-use: screenshot produced no files')
+      }
+      await backend.copyImageToClipboard(
+        { path: firstPath, mediaType: first.mediaType },
+        exec.signal,
+      )
+      return {
+        paths: [...paths],
+        clipboard: true,
         screens: observation.screens,
         foreground: observation.foreground,
       }

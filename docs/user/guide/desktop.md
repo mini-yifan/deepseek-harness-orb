@@ -52,7 +52,8 @@ The ball’s Computer Use bash and filesystem default to Full access, so they ca
 
 The Computer Use agent on the ball decides how to handle the current sentence. There is no extra runtime classifier:
 
-- Visible GUI (open WeChat, click a button in Pages) uses GUI tools (click, input_text, scroll, hotkey, wait, long_wait, long_press, drag, open_in_browser, open_in_finder) and does not call the background agent.
+- Visible GUI (open WeChat, click a button in Pages) uses GUI tools (click, input_text, scroll, hotkey, wait, long_wait, screenshot, long_press, drag, open_in_browser, open_in_finder) and does not call the background agent.
+- Asking for a screenshot file uses screenshot: it writes the capture onto Desktop and copies it to the clipboard.
 - A follow-up on the same artifact (after writing a Word document, make the font green) sends another message on that existing standard session.
 - Unrelated new background work (after the Word document, make a gobang game) creates a blank standard session.
 
