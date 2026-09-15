@@ -1,4 +1,4 @@
-# The `computer-use` agent preset: Shell, web, five GUI tools, and ask_user_question.
+# The `computer-use` agent preset: Shell, web, nine GUI tools, and ask_user_question.
 #
 # This file is an AGENT-PLANE composition. The roster mounts it ONCE under a
 # standing scope; every session naming it joins by scope parentage. The host

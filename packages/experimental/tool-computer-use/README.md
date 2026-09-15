@@ -1,5 +1,5 @@
 ---
-description: "Opt-in experimental GUI tools that let a vision model click, type, scroll, and hotkey the host desktop, with screenshots attached on the first user turn and after every action."
+description: "Opt-in experimental GUI tools that let a vision model click, type, scroll, drag, long-press, open files and the browser, and hotkey the host desktop, with screenshots attached on the first user turn and after every action."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Give a vision-capable agent live sight of the host desktop and five exclusive GUI tools so it can click, type, scroll, press hotkeys, and wait, then see the new screen in the same tool result. Mount it only when you want that unsandboxed control. Text-only routes skip the first screenshot and refuse the tools. macOS is the production backend; other hosts load the plugin and fail at execute.
+Give a vision-capable agent live sight of the host desktop and nine exclusive GUI tools so it can click, type, scroll, drag, long-press, open files and the browser, press hotkeys, and wait, then see the new screen in the same tool result. Mount it only when you want that unsandboxed control. Text-only routes skip the first screenshot and refuse the tools. macOS is the production backend; other hosts load the plugin and fail at execute.
 
 ## Table of Contents
 
@@ -29,7 +29,7 @@ Patch this private overlay onto a running Web composition when you want a dedica
 
 ### When to choose it
 
-Choose it when a vision model should drive visible GUI chrome that bash cannot reach, and you want a catalog limited to Shell, web search and fetch, the five GUI tools, `code_agent`, and `ask_user_question`. Avoid it for ordinary coding sessions, text-only routes, and any host that must not grant Screen Recording, Accessibility, and Automation for Finder. It is not a Skill, not a capability seam, and not part of `dsh-base`. Desktop macOS also mounts this overlay as a signed runtime extra so the floating ball can lock a Computer Use session.
+Choose it when a vision model should drive visible GUI chrome that bash cannot reach, and you want a catalog limited to Shell, web search and fetch, the nine GUI tools, `code_agent`, and `ask_user_question`. Avoid it for ordinary coding sessions, text-only routes, and any host that must not grant Screen Recording, Accessibility, and Automation for Finder. It is not a Skill, not a capability seam, and not part of `dsh-base`. Desktop macOS also mounts this overlay as a signed runtime extra so the floating ball can lock a Computer Use session.
 
 ### Minimal configuration
 
@@ -56,7 +56,7 @@ A custom Loader composition that can resolve the package name may instead mount:
 
 | Field | Default | Meaning |
 |---|---|---|
-| `postActionWaitMs` | `500` | Milliseconds to wait after click, type, scroll, or hotkey before recapturing |
+| `postActionWaitMs` | `500` | Milliseconds to wait after a GUI action before recapturing |
 | `maxWaitSeconds` | `5` | Upper bound for the `wait` tool |
 | `maxScreens` | `4` | Maximum displays captured per observation |
 
@@ -75,9 +75,13 @@ There is no `screenshot` or `observe` tool. The first user turn already includes
 | `scroll` | `screen_index`, `position`, `direction` (`up`/`down`), `scroll_level` 1–10 | scroll, wait, recapture |
 | `hotkey` | `keys: string[]` | key combo; system screenshot chords are rejected; wait, recapture |
 | `wait` | optional `wait_seconds`, clamped by `maxWaitSeconds` | wait, recapture |
+| `long_press` | `screen_index`, `position`, optional `duration_seconds` 1–10 (default 3) | left-button hold, wait, recapture |
+| `drag` | `start_screen_index`, `start_position`, `end_screen_index`, `end_position` | drag, including across screens, wait, recapture |
+| `open_in_browser` | optional `url` (http(s); omit launches the default browser) | `/usr/bin/open`, wait, recapture |
+| `open_in_finder` | optional `path` (omit = Desktop), optional `reveal_only` | Finder or default app, wait, recapture |
 | `code_agent` | `task`, optional `session_id`, optional `cwd` | enqueue on a first-class standard session and return that `session_id`; a plugin notice follows after both sessions are idle |
 
-All five run exclusive. `presentCall` is generic. Each observation starts with `<frontmost_app>` (plus `<frontmost_folder>` when Finder or 访达 is frontmost, or `<focus_note>` when no remaining window remains after skipping the overlay). Per-screen envelopes then name screen index and the 0–1000 space. They never include pixel sizes, downscale multipliers, or a screenshot filesystem path.
+The nine GUI tools run exclusive. `presentCall` is generic. Each observation starts with `<frontmost_app>` (plus `<frontmost_folder>` when Finder or 访达 is frontmost, or `<focus_note>` when no remaining window remains after skipping the overlay). Per-screen envelopes then name screen index and the 0–1000 space. They never include pixel sizes, downscale multipliers, or a screenshot filesystem path.
 
 Tests inject a fake desktop through `applyComputerUse(ctx, backend, config)` rather than a Config `driver` hook.
 
@@ -103,13 +107,14 @@ First-frame attachment uses `agent/pre-step`: the listener always awaits `next()
 |---|---|
 | [`src/index.ts`](src/index.ts) | Plugin entry: `name` / `inject` / `Config` / `apply` over the host-platform backend |
 | [`src/preset-root.ts`](src/preset-root.ts) | Overlay-only plugin: publishes the extra agent-presets root |
-| [`src/plugin.ts`](src/plugin.ts) | Shared `applyComputerUse`: policy, five GUI tools, first-frame pre-step |
+| [`src/plugin.ts`](src/plugin.ts) | Shared `applyComputerUse`: policy, nine GUI tools, first-frame pre-step |
 | [`src/observe.ts`](src/observe.ts) | Display capture, overlay-skip foreground inspect, and model-facing envelopes |
 | [`src/code-agent.ts`](src/code-agent.ts) | Computer Use-only `code_agent`: `session.create` / `session.prompt` |
 | [`src/code-agent-completion.ts`](src/code-agent-completion.ts) | Parked plugin notice after the Code session and the Computer Use caller are idle |
-| [`src/macos.ts`](src/macos.ts) | Darwin capture via `screencapture`, or ScreenCaptureKit `excludingWindows` when overlay window ids are set; click, scroll, and hotkey via JXA `CGEvent`; `input_text` pastes via NSPasteboard; `inspectForeground` uses CGWindowList (skip overlay ids) plus Finder AppleScript |
+| [`src/macos.ts`](src/macos.ts) | Darwin capture via `screencapture`, or ScreenCaptureKit `excludingWindows` when overlay window ids are set; click, scroll, hotkey, long-press, and drag via JXA `CGEvent`; `input_text` pastes via NSPasteboard; `open_in_browser` / `open_in_finder` via `/usr/bin/open`; `inspectForeground` uses CGWindowList (skip overlay ids) plus Finder AppleScript |
 | [`src/macos-sck-capture.swift`](src/macos-sck-capture.swift) | Darwin helper: display capture that omits overlay CGWindowIDs |
-| [`src/overlay-guard.ts`](src/overlay-guard.ts) | Optional Desktop overlay cloak: `wrapDesktopBackend` around capture, inspect, and HID |
+| [`src/open.ts`](src/open.ts) | `long_press` duration, `open_in_browser` URL, and `open_in_finder` path validation |
+| [`src/overlay-guard.ts`](src/overlay-guard.ts) | Optional Desktop overlay cloak: `wrapDesktopBackend` around capture, inspect, and HID; `open_in_browser` / `open_in_finder` stay unwrapped |
 | [`presets/computer-use/`](presets/computer-use/) | Computer Use agent preset: Shell, web, GUI tools, `code_agent`, `ask_user_question`, compaction |
 | — | No runtime invariant companion is published because this plugin introduces no new session events; observations ride existing `user/message` and `tool/result`. |
 
@@ -121,9 +126,10 @@ First-frame attachment uses `agent/pre-step`: the listener always awaits `next()
 ## Further Exploration
 
 - [Experimental group](../README.md) — private prototypes and the public Agent Teams exceptions.
-- [Generated tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-experimental-tool-computer-use) — the five GUI schemas and `code_agent`.
+- [Generated tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-experimental-tool-computer-use) — the nine GUI schemas and `code_agent`.
 - [Adding a tool](../../../docs/cookbook/adding-a-tool.md) — UI render intent (`generic`) and image blocks in content.
 - [Computer Use Agent Note](../../../.agents/notes/implemented/feature/2026-09-13-experimental-computer-use.md) — plugin vs Skill vs loop, the Computer Use agent preset, observation-in-result, and the consent gate.
+- [Computer Use pointer and open tools](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-pointer-and-open-tools.md) — `long_press`, `drag`, `open_in_browser`, `open_in_finder`, overlay-guard split, and path/URL rejects.
 - [Computer Use parks Code agent completion](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-code-agent-completion.md) — parked plugin notice after both sessions are idle.
 - [Computer Use observation foreground](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-observation-foreground.md) — overlay-window skip, Finder folder, and focus fallback on existing `user/message` / `tool/result`.
 - [Computer Use 0–1000 fraction coordinates](../../../.agents/notes/implemented/bug-fix/2026-09-15-computer-use-fraction-coordinates.md) — model-facing 0–1000 is a fraction of the visible screenshot, not capture or request-preview pixels.
@@ -153,11 +159,15 @@ Coordinates: each attached screenshot uses a 0–1000 space. [0, 0] is the top-l
 
 Step: take exactly one GUI action per tool call. After the call, the new screenshot is in the tool result; use that image for the next action.
 
-Do not click or type into a target you cannot see. Do not OCR file paths from the screenshot. When <frontmost_folder> is present, copy that path; otherwise use bash with real paths. When <focus_note> is present, click the target window first if the next step needs focus.
+Do not click or type into a target you cannot see. Do not OCR file paths from the screenshot. When a file or folder path is known, call open_in_finder with that path; do not click Desktop icons to open it. When <frontmost_folder> is present, copy that path; otherwise use bash with real paths. When <focus_note> is present, click the target window first if the next step needs focus.
 
 Observation is not a tool. There is no screenshot or observe call. The first user turn already includes the current screens, and every GUI tool returns the post-action screens.
 
-This session drives the real unsandboxed desktop. Use bash only for short commands inside a GUI loop. Do not use bash to write long reports or a whole project — send that work to code_agent.
+This session drives the real unsandboxed desktop. Use bash only for short commands inside a GUI loop. Do not use bash to write long reports or a whole project — send that work to code_agent. Do not use bash open as a substitute for open_in_finder or open_in_browser.
+
+Open a site in the user's visible browser with open_in_browser. web_search and web_fetch return text to you; they do not open a window the user can see.
+
+Drag sliders, window edges, and files with drag. Press and hold with long_press.
 
 Route the user's request yourself:
 - Visible GUI such as opening WeChat or clicking a button in Pages → GUI tools only. Do not call code_agent.
@@ -182,7 +192,7 @@ Prefix-stable while the policy text and tool schemas remain unchanged. First-fra
 
 #### What the model sees
 
-The model sees the generated [`click`, `input_text`, `scroll`, `hotkey`, `wait`, and `code_agent` schemas](../../../docs/tool-catalog.md#deepseek-aidsh-experimental-tool-computer-use). There is no screenshot tool. Text-only routes still receive the GUI schemas and are refused at execute. `code_agent` is registered only in the Computer Use preset.
+The model sees the generated [`click`, `input_text`, `scroll`, `hotkey`, `wait`, `long_press`, `drag`, `open_in_browser`, `open_in_finder`, and `code_agent` schemas](../../../docs/tool-catalog.md#deepseek-aidsh-experimental-tool-computer-use). There is no screenshot tool. Text-only routes still receive the GUI schemas and are refused at execute. `code_agent` is registered only in the Computer Use preset.
 
 #### Token effect
 
@@ -190,7 +200,7 @@ Fixed schema cost on every request in that tool view.
 
 #### KV Cache effect
 
-Prefix-stable while the six definitions and order are unchanged. Registration lifecycle may invalidate reuse from the first changed schema token.
+Prefix-stable while the ten definitions and order are unchanged. Registration lifecycle may invalidate reuse from the first changed schema token.
 
 ## Known Limitations and Deferred Work
 
@@ -199,13 +209,13 @@ Prefix-stable while the six definitions and order are unchanged. Registration li
 These limits are current package constraints. The plugin drives the real unsandboxed desktop.
 
 - **macOS only** — capture and HID input are implemented on Darwin; other platforms throw at execute.
-- **Screen Recording, Accessibility, and Automation TCC** — capture needs Screen Recording; clicks, typing, scroll, and hotkeys need Accessibility; Finder folder lookup needs Automation for Finder. The plugin does not prompt for those rights.
+- **Screen Recording, Accessibility, and Automation TCC** — capture needs Screen Recording; clicks, typing, scroll, hotkeys, long-press, and drag need Accessibility; Finder folder lookup needs Automation for Finder. The plugin does not prompt for those rights.
 - **No per-click approval** — installing or patching the plugin is the consent gate; a visual loop cannot ask on every action.
 - **Host chrome is in the shot** — Web windows appear in captures. Desktop's main window stays capturable. The macOS overlay is omitted from Computer Use screenshots by ScreenCaptureKit `excludingWindows` (the whole overlay window, including the expanded panel) and is click-through only for the matching HID burst via ack'd overlay-guard IPC. Foreground inspect skips those overlay window ids only, so the main window can appear as `<frontmost_app>`.
 - **Typing uses the string clipboard** — `input_text` pastes with Cmd+V and restores the previous string clipboard afterwards. Other clipboard types are not restored.
 - **Retina vs attached size** — backing scale and request-preview pixels can differ from the capture raster; pass 0–1000 fractions of the visible screenshot.
 - **Fixed settle wait** — post-action delay is `postActionWaitMs` only; there is no pixel-diff stall.
-- **No drag, lasso, or app launch** — GUI coverage is click, type, scroll, hotkey, and wait. Background documents and code go through `code_agent`.
+- **No lasso, `launch_app`, or `manage_files`** — GUI coverage is click, type, scroll, hotkey, wait, long-press, drag, open-in-browser, and open-in-finder. Background documents and code go through `code_agent`.
 - **`code_agent` notice needs live Agents** — execute still returns after queue accept. A missing live Code agent, a disposed Computer Use caller, or a Code session that never returns to idle drops the notice. Policy cannot stop a model that still calls `wait`.
 - **Desktop overlay is macOS-only** — Windows Desktop keeps a single main window. The experimental package is a signed runtime extra, not a Desktop Host npm dependency.
 - **Experimental prototype with no stability promise** — the package is private; schemas and backends can change freely.

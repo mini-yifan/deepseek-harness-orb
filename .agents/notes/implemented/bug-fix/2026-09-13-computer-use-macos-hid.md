@@ -14,7 +14,7 @@ JXA exposes CoreGraphics `kCG*` enums as strings and cannot pass a `UniChar *` i
 
 Every HID action writes one UTF-8 JXA file and runs `/usr/bin/osascript -l JavaScript` on that file. The script keeps a `CGEventSource` in HID system state, uses numeric CGEvent types and `CGPointMake`, and sleeps between move, down, and up. A double-click is two down/up cycles with click-state 1 then 2.
 
-`input_text` clicks to focus, optionally sends Cmd+A, pastes through `NSPasteboard` plus Cmd+V, optionally presses Enter, and restores the previous string clipboard. JXA invokes no-arg ObjC methods on property access, so pasteboard `clearContents` is not called as a JavaScript function. Hotkeys hold modifiers, set flags on the same event that is posted, then tap non-modifier keys. Scroll moves to the point, then posts `CGEventCreateScrollWheelEvent2` once per `scroll_level` line tick.
+`input_text` clicks to focus, optionally sends Cmd+A, pastes through `NSPasteboard` plus Cmd+V, optionally presses Enter, and restores the previous string clipboard. JXA invokes no-arg ObjC methods on property access, so pasteboard `clearContents` is not called as a JavaScript function. Hotkeys hold modifiers, set flags on the same event that is posted, then tap non-modifier keys. Scroll moves to the point, then posts `CGEventCreateScrollWheelEvent2` once per `scroll_level` line tick. `long_press` holds left-button down via `longPressAt` for `durationSeconds`. `drag` interpolates ten LeftMouseDragged (type 6) steps between mapped points via `dragFromTo`.
 
 ## Alternatives considered
 
@@ -26,10 +26,12 @@ Every HID action writes one UTF-8 JXA file and runs `/usr/bin/osascript -l JavaS
 
 **`CGEventCreateScrollWheelEvent`.** The C API is variadic. `CGEventCreateScrollWheelEvent2` is the non-variadic replacement JXA can invoke.
 
+**Interpolate the drag path with MouseMoved (type 5).** That relocates the cursor. AppKit and Electron receive `mouseMoved:`, not `mouseDragged:`, so sliders, window titles, and Finder icons do not drag.
+
 ## Consequences
 
 `input_text` overwrites the string clipboard for the duration of Cmd+V and restores only that string; other clipboard types are not restored. Intra-event sleeps are HID timing, not `postActionWaitMs`. Tests still inject a `CommandRunner` and never post to a real desktop.
 
 ## Testing
 
-`packages/experimental/tool-computer-use/tests/macos.spec.ts` captures the generated JXA and asserts `clickAt` (including right-button double-click), `pasteText` / `selectAll` / `pressEnter`, pasteboard `clearContents` as a property rather than a JS call, `chord([55,8])` for Cmd+C, and `CGEventCreateScrollWheelEvent2` with signed `scrollAt` deltas. Empty `text` does not call `pasteText`. Unknown hotkeys still throw before osascript. HID subprocess failures still name Accessibility.
+`packages/experimental/tool-computer-use/tests/macos.spec.ts` captures the generated JXA and asserts `clickAt` (including right-button double-click), `pasteText` / `selectAll` / `pressEnter`, pasteboard `clearContents` as a property rather than a JS call, `chord([55,8])` for Cmd+C, `CGEventCreateScrollWheelEvent2` with signed `scrollAt` deltas, `longPressAt`, `dragFromTo`, and `postMouse(LEFT_DRAGGED` with type 6. Empty `text` does not call `pasteText`. Unknown hotkeys still throw before osascript. HID subprocess failures still name Accessibility.

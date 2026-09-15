@@ -9,6 +9,7 @@ import {
   inspectForegroundScript,
   isFinderApp,
   LIST_SCREENS_SCRIPT,
+  DEFAULT_BROWSER_SCRIPT,
   macosSckCaptureHelperPath,
   runCommand,
   sanitizeExcludeWindowIds,
@@ -32,6 +33,7 @@ function runner(options: {
   osascript?: Error
   inspect?: string | Error
   finderFolder?: string | Error
+  defaultBrowser?: string | Error
   scripts?: string[]
   files?: string[]
   args?: string[][]
@@ -52,6 +54,10 @@ function runner(options: {
       if (script === LIST_SCREENS_SCRIPT) {
         return { stdout: options.screens ?? screensJson(), stderr: '' }
       }
+      if (script === DEFAULT_BROWSER_SCRIPT) {
+        if (options.defaultBrowser instanceof Error) throw options.defaultBrowser
+        return { stdout: options.defaultBrowser ?? JSON.stringify('com.apple.Safari'), stderr: '' }
+      }
       if (script.includes('CGWindowListCopyWindowInfo')) {
         if (options.inspect instanceof Error) throw options.inspect
         return { stdout: options.inspect ?? JSON.stringify({ appName: 'Pages' }), stderr: '' }
@@ -69,6 +75,9 @@ function runner(options: {
         : args.at(-1)
       if (typeof output !== 'string') throw new Error('missing capture path')
       await writeCaptureFile(output, options.capture ?? FAKE_DESKTOP_PNG)
+      return { stdout: '', stderr: '' }
+    }
+    if (file === '/usr/bin/open') {
       return { stdout: '', stderr: '' }
     }
     throw new Error(`unexpected command ${file}`)
@@ -330,6 +339,65 @@ describe('macOS backend with an injected runner', () => {
     await backend.hotkey({ keys: ['cmd', 'c'] })
     expect(scripts.join('\n')).toContain('chord([55,8])')
     expect(scripts.join('\n')).toContain('CGEventSetFlags')
+    scripts.length = 0
+    await backend.longPress({ screen: screen!, position: [0, 0], durationSeconds: 3 })
+    expect(scripts.join('\n')).toContain('longPressAt(0, 0, 3000)')
+    scripts.length = 0
+    await backend.drag({
+      startScreen: screen!, startPosition: [0, 0],
+      endScreen: screen!, endPosition: [1000, 1000],
+    })
+    expect(scripts.join('\n')).toContain('dragFromTo(0, 0, 100, 50)')
+    expect(scripts.join('\n')).toContain('const LEFT_DRAGGED = 6')
+    expect(scripts.join('\n')).toContain('postMouse(LEFT_DRAGGED,')
+  })
+
+  it('opens URLs, the default browser, Desktop files, and Finder reveals', async () => {
+    const files: string[] = []
+    const args: string[][] = []
+    const scripts: string[] = []
+    const backend = createMacosDesktopBackend(runner({ files, args, scripts }))
+    files.length = 0
+    args.length = 0
+    await backend.openInBrowser({ url: 'https://example.com/search/刘谦' })
+    expect(files).toEqual(['/usr/bin/open'])
+    expect(args).toEqual([['https://example.com/search/刘谦']])
+    files.length = 0
+    args.length = 0
+    scripts.length = 0
+    await backend.openInBrowser({})
+    expect(scripts).toContain(DEFAULT_BROWSER_SCRIPT)
+    expect(files.filter(file => file === '/usr/bin/open')).toEqual(['/usr/bin/open'])
+    expect(args.at(-1)).toEqual(['-b', 'com.apple.Safari'])
+    files.length = 0
+    args.length = 0
+    await backend.openInFinder({ path: '/Users/tester/Desktop', revealOnly: false })
+    expect(files).toEqual(['/usr/bin/open'])
+    expect(args).toEqual([['/Users/tester/Desktop']])
+    files.length = 0
+    args.length = 0
+    await backend.openInFinder({ path: '/Users/tester/Desktop/notes.txt', revealOnly: true })
+    expect(args).toEqual([['-R', '/Users/tester/Desktop/notes.txt']])
+  })
+
+  it('names the path or URL when open fails and refuses a missing default browser', async () => {
+    const mixed: CommandRunner = async (file, args, options) => {
+      if (file === '/usr/bin/open') throw new Error('denied')
+      return runner({})(file, args, options)
+    }
+    const backend = createMacosDesktopBackend(mixed)
+    await expect(backend.openInBrowser({ url: 'https://example.com' }))
+      .rejects.toThrow(/open failed for https:\/\/example.com/u)
+    await expect(backend.openInFinder({ path: '/Users/tester/Desktop', revealOnly: false }))
+      .rejects.toThrow(/open failed for \/Users\/tester\/Desktop/u)
+    await expect(createMacosDesktopBackend(runner({ defaultBrowser: 'null' })).openInBrowser({}))
+      .rejects.toThrow(/could not resolve the default browser/u)
+    await expect(createMacosDesktopBackend(runner({ defaultBrowser: '' })).openInBrowser({}))
+      .rejects.toThrow(/could not resolve the default browser/u)
+    await expect(createMacosDesktopBackend(runner({ defaultBrowser: 'not-json' })).openInBrowser({}))
+      .rejects.toThrow(/could not resolve the default browser/u)
+    await expect(createMacosDesktopBackend(runner({ defaultBrowser: JSON.stringify('  ') })).openInBrowser({}))
+      .rejects.toThrow(/could not resolve the default browser/u)
   })
 
   it('rejects unknown hotkeys before posting', async () => {
@@ -356,6 +424,13 @@ describe('macOS backend with an injected runner', () => {
       screen: screen!, position: [0, 0], direction: 'up', scrollLevel: 1,
     })).rejects.toThrow(/Accessibility permission/u)
     await expect(hid.hotkey({ keys: ['c'] })).rejects.toThrow(/Accessibility permission/u)
+    await expect(hid.longPress({
+      screen: screen!, position: [0, 0], durationSeconds: 3,
+    })).rejects.toThrow(/Accessibility permission/u)
+    await expect(hid.drag({
+      startScreen: screen!, startPosition: [0, 0],
+      endScreen: screen!, endPosition: [10, 10],
+    })).rejects.toThrow(/Accessibility permission/u)
   })
 
   it('stringifies non-Error HID failures', async () => {
@@ -377,6 +452,13 @@ describe('macOS backend with an injected runner', () => {
       screen: screen!, position: [0, 0], direction: 'up', scrollLevel: 1,
     })).rejects.toThrow(/Accessibility permission is required\): denied/u)
     await expect(hid.hotkey({ keys: ['c'] })).rejects.toThrow(/Accessibility permission is required\): denied/u)
+    await expect(hid.longPress({
+      screen: screen!, position: [0, 0], durationSeconds: 3,
+    })).rejects.toThrow(/Accessibility permission is required\): denied/u)
+    await expect(hid.drag({
+      startScreen: screen!, startPosition: [0, 0],
+      endScreen: screen!, endPosition: [10, 10],
+    })).rejects.toThrow(/Accessibility permission is required\): denied/u)
   })
 
   it('stringifies non-Error capture failures', async () => {

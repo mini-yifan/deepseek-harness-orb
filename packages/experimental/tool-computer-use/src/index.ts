@@ -1,5 +1,5 @@
 /**
- * Experimental Computer Use plugin: five exclusive GUI tools plus a first-turn screenshot.
+ * Experimental Computer Use plugin: exclusive GUI tools plus a first-turn screenshot.
  * Observation rides existing `user/message` and `tool/result` events; there is no screenshot tool.
  * @module @deepseek-ai/dsh-experimental-tool-computer-use
  */
@@ -23,7 +23,11 @@ export type {
   ClickInput,
   DesktopBackend,
   DesktopForeground,
+  DragInput,
   HotkeyInput,
+  LongPressInput,
+  OpenInBrowserInput,
+  OpenInFinderInput,
   ScreenInfo,
   ScrollInput,
   TypeInput,

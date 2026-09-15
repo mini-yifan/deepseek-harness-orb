@@ -3,6 +3,7 @@
  * @module @deepseek-ai/dsh-experimental-tool-computer-use/src/plugin
  */
 
+import { stat } from 'node:fs/promises'
 import type { Context } from '@deepseek-ai/cordis'
 import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -12,6 +13,11 @@ import type { GenericCallView } from '@deepseek-ai/dsh-tools'
 import type { ClickButton, DesktopBackend, DesktopForeground } from './backend.ts'
 import type { ResolvedComputerUseConfig } from './config.ts'
 import { assertAllowedHotkey, requireNormalizedPosition } from './coordinates.ts'
+import {
+  requireBrowserUrl,
+  requireLongPressDuration,
+  resolveFinderOpen,
+} from './open.ts'
 import {
   compactForeground,
   observationContent,
@@ -116,7 +122,7 @@ async function recapture(
 }
 
 /**
- * Register the five GUI tools, the policy section, and first-frame screenshot attachment.
+ * Register the exclusive GUI tools, the policy section, and first-frame screenshot attachment.
  * @param ctx - registration scope; requires `tools`, `systemPrompt`, and `attachments`.
  * @param backend - desktop capture and input.
  * @param config - resolved tunables.
@@ -433,6 +439,247 @@ export function applyComputerUse(
       const observation = await recapture(ctx, backend, config, exec.signal)
       return {
         waitSeconds,
+        screens: observation.screens,
+        foreground: observation.foreground,
+      }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'long_press',
+    description:
+      'Press and hold the left button at a 0–1000 position on one desktop screen, then return the post-action screenshot. '
+      + 'duration_seconds defaults to 3 and must be 1–10. Exclusive.',
+    parameters: {
+      screen_index: { type: 'integer', required: true, description: 'Zero-based display index from the latest screenshot envelope.' },
+      position: {
+        type: 'array',
+        required: true,
+        items: { type: 'number' },
+        description: '[x, y] as a 0–1000 fraction of that screenshot, not pixels.',
+      },
+      duration_seconds: {
+        type: 'number',
+        default: 3,
+        description: 'Hold duration in seconds. Default: 3. Must be 1–10.',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          screenIndex: { type: 'integer', required: true },
+          position: { type: 'array', required: true, items: { type: 'number' } },
+          durationSeconds: { type: 'number', required: true },
+          screens: SCREENS_FIELD,
+          foreground: FOREGROUND_FIELD,
+        },
+      },
+      render: (_args, value) => resultBlocks(
+        `Long-pressed screen ${String(value.screenIndex)} at [${value.position.join(', ')}] for ${String(value.durationSeconds)}s. Coordinates remain 0–1000.`,
+        value.screens,
+        value.foreground,
+      ),
+    },
+    isConcurrencySafe: () => false,
+    presentCall: args => genericExecute('Long press', {
+      screen_index: args.screen_index,
+      position: args.position,
+      duration_seconds: args.duration_seconds ?? 3,
+    }),
+    async execute(args, exec) {
+      await assertImageCapableRoute(ctx, exec)
+      const position = requireNormalizedPosition(args.position)
+      const durationSeconds = requireLongPressDuration(args.duration_seconds)
+      const screens = await backend.listScreens(exec.signal)
+      const screen = requireScreen(screens, args.screen_index)
+      await backend.longPress({ screen, position, durationSeconds }, exec.signal)
+      await delay(config.postActionWaitMs, exec.signal)
+      const observation = await recapture(ctx, backend, config, exec.signal)
+      return {
+        screenIndex: args.screen_index,
+        position,
+        durationSeconds,
+        screens: observation.screens,
+        foreground: observation.foreground,
+      }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'drag',
+    description:
+      'Drag from a start 0–1000 position to an end 0–1000 position, including across screens, then return the post-action screenshot. Exclusive.',
+    parameters: {
+      start_screen_index: {
+        type: 'integer',
+        required: true,
+        description: 'Zero-based display index for the drag start.',
+      },
+      start_position: {
+        type: 'array',
+        required: true,
+        items: { type: 'number' },
+        description: '[x, y] start as a 0–1000 fraction of that screenshot, not pixels.',
+      },
+      end_screen_index: {
+        type: 'integer',
+        required: true,
+        description: 'Zero-based display index for the drag end.',
+      },
+      end_position: {
+        type: 'array',
+        required: true,
+        items: { type: 'number' },
+        description: '[x, y] end as a 0–1000 fraction of that screenshot, not pixels.',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          startScreenIndex: { type: 'integer', required: true },
+          startPosition: { type: 'array', required: true, items: { type: 'number' } },
+          endScreenIndex: { type: 'integer', required: true },
+          endPosition: { type: 'array', required: true, items: { type: 'number' } },
+          screens: SCREENS_FIELD,
+          foreground: FOREGROUND_FIELD,
+        },
+      },
+      render: (_args, value) => resultBlocks(
+        `Dragged from screen ${String(value.startScreenIndex)} [${value.startPosition.join(', ')}] `
+        + `to screen ${String(value.endScreenIndex)} [${value.endPosition.join(', ')}]. Coordinates remain 0–1000.`,
+        value.screens,
+        value.foreground,
+      ),
+    },
+    isConcurrencySafe: () => false,
+    presentCall: args => genericExecute('Drag', {
+      start_screen_index: args.start_screen_index,
+      end_screen_index: args.end_screen_index,
+    }),
+    async execute(args, exec) {
+      await assertImageCapableRoute(ctx, exec)
+      const startPosition = requireNormalizedPosition(args.start_position)
+      const endPosition = requireNormalizedPosition(args.end_position)
+      const screens = await backend.listScreens(exec.signal)
+      const startScreen = requireScreen(screens, args.start_screen_index)
+      const endScreen = requireScreen(screens, args.end_screen_index)
+      await backend.drag({ startScreen, startPosition, endScreen, endPosition }, exec.signal)
+      await delay(config.postActionWaitMs, exec.signal)
+      const observation = await recapture(ctx, backend, config, exec.signal)
+      return {
+        startScreenIndex: args.start_screen_index,
+        startPosition,
+        endScreenIndex: args.end_screen_index,
+        endPosition,
+        screens: observation.screens,
+        foreground: observation.foreground,
+      }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'open_in_browser',
+    description:
+      'Open the default browser, or a full http(s) URL in it, then return the post-action screenshot. '
+      + 'This is the user-visible browser. Do not use web_fetch as a substitute. '
+      + 'Chinese in path or query must be plain text, never CJK percent-encoding such as %E5... / %E8.... Exclusive.',
+    parameters: {
+      url: {
+        type: 'string',
+        description: 'http(s) URL to open. Omit to launch the default browser with no page.',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          url: { type: 'string' },
+          screens: SCREENS_FIELD,
+          foreground: FOREGROUND_FIELD,
+        },
+      },
+      render: (_args, value) => resultBlocks(
+        value.url === undefined
+          ? 'Opened the default browser. Coordinates remain 0–1000.'
+          : `Opened ${value.url} in the default browser. Coordinates remain 0–1000.`,
+        value.screens,
+        value.foreground,
+      ),
+    },
+    isConcurrencySafe: () => false,
+    presentCall: args => genericExecute('Open in browser', args.url === undefined ? {} : { url: args.url }),
+    async execute(args, exec) {
+      await assertImageCapableRoute(ctx, exec)
+      const url = args.url === undefined || args.url.trim() === '' ? undefined : requireBrowserUrl(args.url)
+      await backend.openInBrowser(url === undefined ? {} : { url }, exec.signal)
+      await delay(config.postActionWaitMs, exec.signal)
+      const observation = await recapture(ctx, backend, config, exec.signal)
+      return {
+        ...url === undefined ? {} : { url },
+        screens: observation.screens,
+        foreground: observation.foreground,
+      }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'open_in_finder',
+    description:
+      'Open a folder in Finder, open a file with its default app, or reveal a file in Finder, then return the post-action screenshot. '
+      + 'Omit path to open the Desktop. Use reveal_only only to select a file in Finder (Open With or rename/move). '
+      + 'Pass a real path; do not OCR one from the screenshot. Exclusive.',
+    parameters: {
+      path: {
+        type: 'string',
+        description: 'Absolute or ~ path. Omit to open the user Desktop.',
+      },
+      reveal_only: {
+        type: 'boolean',
+        default: false,
+        description: 'When true and path is a file, reveal it in Finder instead of opening it. Default: false.',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          path: { type: 'string', required: true },
+          revealOnly: { type: 'boolean', required: true },
+          screens: SCREENS_FIELD,
+          foreground: FOREGROUND_FIELD,
+        },
+      },
+      render: (_args, value) => resultBlocks(
+        value.revealOnly
+          ? `Revealed ${value.path} in Finder. Coordinates remain 0–1000.`
+          : `Opened ${value.path}. Coordinates remain 0–1000.`,
+        value.screens,
+        value.foreground,
+      ),
+    },
+    isConcurrencySafe: () => false,
+    presentCall: args => genericExecute('Open in Finder', {
+      ...args.path === undefined ? {} : { path: args.path },
+      reveal_only: args.reveal_only ?? false,
+    }),
+    async execute(args, exec) {
+      await assertImageCapableRoute(ctx, exec)
+      const requestedReveal = args.reveal_only ?? false
+      const target = await resolveFinderOpen(args.path, requestedReveal)
+      const info = await stat(target.path)
+      const revealOnly = target.revealOnly && info.isFile()
+      await backend.openInFinder({ path: target.path, revealOnly }, exec.signal)
+      await delay(config.postActionWaitMs, exec.signal)
+      const observation = await recapture(ctx, backend, config, exec.signal)
+      return {
+        path: target.path,
+        revealOnly,
         screens: observation.screens,
         foreground: observation.foreground,
       }

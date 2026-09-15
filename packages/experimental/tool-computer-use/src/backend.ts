@@ -82,6 +82,35 @@ export interface HotkeyInput {
   readonly keys: readonly string[]
 }
 
+/** Left-button press-and-hold on one screen. */
+export interface LongPressInput {
+  readonly screen: ScreenInfo
+  readonly position: readonly [number, number]
+  readonly durationSeconds: number
+}
+
+/** Pointer drag between two 0–1000 positions, possibly on different screens. */
+export interface DragInput {
+  readonly startScreen: ScreenInfo
+  readonly startPosition: readonly [number, number]
+  readonly endScreen: ScreenInfo
+  readonly endPosition: readonly [number, number]
+}
+
+/** Open the default browser, or a validated http(s) URL in it. */
+export interface OpenInBrowserInput {
+  /** Normalized http(s) URL. Omit to launch the default browser with no page. */
+  readonly url?: string
+}
+
+/** Open a resolved file or folder with Finder / the default app. */
+export interface OpenInFinderInput {
+  /** Absolute POSIX path after expand and realpath. */
+  readonly path: string
+  /** When true and `path` is a file, reveal it in Finder instead of opening it. */
+  readonly revealOnly: boolean
+}
+
 /**
  * Capture plus HID input for one desktop. Production macOS implements this;
  * tests inject a fake; other platforms throw from each method.
@@ -131,6 +160,30 @@ export interface DesktopBackend {
    * @param signal - cooperative cancellation.
    */
   hotkey(input: HotkeyInput, signal?: AbortSignal): Promise<void>
+  /**
+   * Press and hold the left button at a 0–1000 position on `input.screen`.
+   * @param input - screen, position, and hold duration in seconds.
+   * @param signal - cooperative cancellation.
+   */
+  longPress(input: LongPressInput, signal?: AbortSignal): Promise<void>
+  /**
+   * Drag from `startPosition` to `endPosition`, mapping each through its screen.
+   * @param input - start and end screens and 0–1000 positions.
+   * @param signal - cooperative cancellation.
+   */
+  drag(input: DragInput, signal?: AbortSignal): Promise<void>
+  /**
+   * Launch the default browser, or open `input.url` in it.
+   * @param input - optional normalized http(s) URL.
+   * @param signal - cooperative cancellation.
+   */
+  openInBrowser(input: OpenInBrowserInput, signal?: AbortSignal): Promise<void>
+  /**
+   * Open a folder in Finder, open a file with its default app, or reveal a file.
+   * @param input - resolved path and reveal flag.
+   * @param signal - cooperative cancellation.
+   */
+  openInFinder(input: OpenInFinderInput, signal?: AbortSignal): Promise<void>
 }
 
 /**
