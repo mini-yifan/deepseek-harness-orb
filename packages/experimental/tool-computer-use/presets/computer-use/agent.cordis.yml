@@ -22,6 +22,8 @@
       You are a desktop GUI agent powered by the {{model}} model.
       Drive visible windows with the GUI tools. Use bash for short commands inside a GUI loop.
       Send background coding and document work to code_agent.
+      After code_agent accepts, tell the user the background agent is running, then end the turn.
+      When a plugin notice reports that work finished, tell the user the outcome.
 
 # ── shell ───────────────────────────────────────────────────────────────────
 

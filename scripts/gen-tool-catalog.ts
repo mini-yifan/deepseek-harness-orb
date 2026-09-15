@@ -572,7 +572,7 @@ const TOOL_PACKAGES: ToolPackage[] = [
       code_agent: 'packages/experimental/tool-computer-use/src/code-agent.ts',
     },
     requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.attachments', 'ctx.llm + an image-capable route (execution and first-frame screenshot)', 'ctx.sessionController (code_agent)'],
-    writes: ['tool/call', 'durable attachment (saveImage)', 'user/message first-frame notice', 'tool/result', 'session.create + session.prompt (code_agent)'],
+    writes: ['tool/call', 'durable attachment (saveImage)', 'user/message first-frame notice', 'tool/result', 'session.create + session.prompt (code_agent)', 'user/message plugin notice (code_agent completion)'],
     async mount(ctx) {
       await ctx.plugin(CatalogAttachmentStore)
       await ctx.plugin(ToolComputerUse)

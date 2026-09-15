@@ -75,7 +75,7 @@ There is no `screenshot` or `observe` tool. The first user turn already includes
 | `scroll` | `screen_index`, `position`, `direction` (`up`/`down`), `scroll_level` 1–10 | scroll, wait, recapture |
 | `hotkey` | `keys: string[]` | key combo; system screenshot chords are rejected; wait, recapture |
 | `wait` | optional `wait_seconds`, clamped by `maxWaitSeconds` | wait, recapture |
-| `code_agent` | `task`, optional `session_id`, optional `cwd` | enqueue on a first-class standard session; returns that `session_id` |
+| `code_agent` | `task`, optional `session_id`, optional `cwd` | enqueue on a first-class standard session and return that `session_id`; a plugin notice follows after both sessions are idle |
 
 All five run exclusive. `presentCall` is generic. The text envelope names screen index, logical size, the 0–1000 space, attached pixel size, and downscale multipliers when `saveImage` resized the raster. It never includes a filesystem path.
 
@@ -105,6 +105,7 @@ First-frame attachment uses `agent/pre-step`: the listener always awaits `next()
 | [`src/preset-root.ts`](src/preset-root.ts) | Overlay-only plugin: publishes the extra agent-presets root |
 | [`src/plugin.ts`](src/plugin.ts) | Shared `applyComputerUse`: policy, five GUI tools, first-frame pre-step |
 | [`src/code-agent.ts`](src/code-agent.ts) | Computer Use-only `code_agent`: `session.create` / `session.prompt` |
+| [`src/code-agent-completion.ts`](src/code-agent-completion.ts) | Parked plugin notice after the Code session and the Computer Use caller are idle |
 | [`src/macos.ts`](src/macos.ts) | Darwin capture via `screencapture`, or ScreenCaptureKit `excludingWindows` when overlay window ids are set; click, scroll, and hotkey via JXA `CGEvent`; `input_text` pastes via NSPasteboard |
 | [`src/macos-sck-capture.swift`](src/macos-sck-capture.swift) | Darwin helper: display capture that omits overlay CGWindowIDs |
 | [`src/overlay-guard.ts`](src/overlay-guard.ts) | Optional Desktop overlay cloak: `wrapDesktopBackend` around capture and HID |
@@ -122,6 +123,7 @@ First-frame attachment uses `agent/pre-step`: the listener always awaits `next()
 - [Generated tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-experimental-tool-computer-use) — the five GUI schemas and `code_agent`.
 - [Adding a tool](../../../docs/cookbook/adding-a-tool.md) — UI render intent (`generic`) and image blocks in content.
 - [Computer Use Agent Note](../../../.agents/notes/implemented/feature/2026-09-13-experimental-computer-use.md) — plugin vs Skill vs loop, the Computer Use agent preset, observation-in-result, and the consent gate.
+- [Computer Use parks Code agent completion](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-code-agent-completion.md) — parked plugin notice after both sessions are idle.
 - [Desktop floating orb](../../../.agents/notes/implemented/feature/2026-09-14-desktop-floating-orb.md) — macOS overlay, runtime extra, and first-class `code_agent` sessions.
 - [Desktop overlay guard](../../../.agents/notes/implemented/architecture/2026-09-14-desktop-overlay-guard.md) — capture exclusion and HID click-through for the floating ball.
 - [Headless computer-use snapshot](../../../snapshots/session/computer-use/snapshot.yml) — authored click loop over a fake desktop and a vision model.
@@ -159,6 +161,10 @@ Route the user's request yourself:
 - New background work such as writing a Word document → code_agent without session_id.
 - Follow-up on the same artifact such as making that Word document's font green → code_agent with the session_id from that earlier result.
 - Unrelated new background work such as making a gobang game after the Word document → code_agent without session_id. Do not reuse the Word session.
+
+After code_agent returns, tell the user the background Code agent is running, then end the turn. Do not call wait or bash sleep to poll that session.
+
+When a plugin notice reports that a Code agent session finished, tell the user which background task completed and what it produced.
 ```
 
 #### Token effect
@@ -197,6 +203,7 @@ These limits are current package constraints. The plugin drives the real unsandb
 - **Retina vs attached size** — backing scale can differ from the attached raster; use the 0–1000 space and any envelope multipliers.
 - **Fixed settle wait** — post-action delay is `postActionWaitMs` only; there is no pixel-diff stall.
 - **No drag, lasso, or app launch** — GUI coverage is click, type, scroll, hotkey, and wait. Background documents and code go through `code_agent`.
+- **`code_agent` notice needs live Agents** — execute still returns after queue accept. A missing live Code agent, a disposed Computer Use caller, or a Code session that never returns to idle drops the notice. Policy cannot stop a model that still calls `wait`.
 - **Desktop overlay is macOS-only** — Windows Desktop keeps a single main window. The experimental package is a signed runtime extra, not a Desktop Host npm dependency.
 - **Experimental prototype with no stability promise** — the package is private; schemas and backends can change freely.
 

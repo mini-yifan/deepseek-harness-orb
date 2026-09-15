@@ -24,4 +24,8 @@ Route the user's request yourself:
 - Visible GUI such as opening WeChat or clicking a button in Pages → GUI tools only. Do not call code_agent.
 - New background work such as writing a Word document → code_agent without session_id.
 - Follow-up on the same artifact such as making that Word document's font green → code_agent with the session_id from that earlier result.
-- Unrelated new background work such as making a gobang game after the Word document → code_agent without session_id. Do not reuse the Word session.`
+- Unrelated new background work such as making a gobang game after the Word document → code_agent without session_id. Do not reuse the Word session.
+
+After code_agent returns, tell the user the background Code agent is running, then end the turn. Do not call wait or bash sleep to poll that session.
+
+When a plugin notice reports that a Code agent session finished, tell the user which background task completed and what it produced.`

@@ -16,7 +16,7 @@ Status: implemented
 
 插件注入 `tools`、`systemPrompt` 与 `attachments`。缺少 attachments 时保持 pending。可选的 `llm` 负责图片路由门禁：纯文本路由跳过首帧图片并拒绝这些工具。安装或 patch 插件就是同意门槛；工具不会对每次点击 `ask`。插件不在 `dsh-base` 中。本地试用是 `pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch.yml`，然后在新会话上选择 Computer Use agent preset。Desktop 把同一包作为签名 runtime extra 拷贝，并由 Desktop Host 挂上 locator，而不是作为 npm 依赖；见 [桌面悬浮球](2026-09-14-desktop-floating-orb.zh.md)。
 
-Web overlay 只插入 `computer-use-preset-root`，由它提供本包旁的额外 `trust: system` agent-presets 根目录。overlay 在 `agent-presets` 行上加上 `inject: [computerUsePresetRoot]`，因此 Loader 插值 `!!js ctx.computerUsePresetRoot` 会等到该服务就绪。GUI 工具注册在该 preset 的常驻作用域里。Host 目录与随附的 `standard` preset 都不会收到它们。Computer Use preset 还会注册 `code_agent`，它通过 `session.create` / `session.prompt` 创建或续写一等 standard 会话，以便桌面侧栏显示委派工作。
+Web overlay 只插入 `computer-use-preset-root`，由它提供本包旁的额外 `trust: system` agent-presets 根目录。overlay 在 `agent-presets` 行上加上 `inject: [computerUsePresetRoot]`，因此 Loader 插值 `!!js ctx.computerUsePresetRoot` 会等到该服务就绪。GUI 工具注册在该 preset 的常驻作用域里。Host 目录与随附的 `standard` preset 都不会收到它们。Computer Use preset 还会注册 `code_agent`，它通过 `session.create` / `session.prompt` 创建或续写一等 standard 会话，以便桌面侧栏显示委派工作。接受之后，调用方拥有的监视会把插件通知停到两边都空闲再投递；[Computer Use 把 Code agent 完成通知停到空闲再投递](2026-09-15-computer-use-code-agent-completion.zh.md) 拥有这条投递路径。
 
 接地文案是 `systemPrompt.section`。坐标是每屏 0–1000。系统截屏组合键（Cmd/Win+Shift+3/4/5）会被拒绝。
 
@@ -44,6 +44,6 @@ Web overlay 只插入 `computer-use-preset-root`，由它提供本包旁的额�
 
 ## 测试
 
-包测试只使用假桌面。它们覆盖坐标映射、热键拒绝、工具 execute/render、首帧 pre-step、纯文本拒绝、HMR、通过仅测试 `cordis.yml` 的 Loader 组合，一次进程内 agent-loop 点击把图片块放到 `user/message` 与 `tool/result` 上，仅 overlay 使用的 preset-root locator、overlay YAML（不在 Host 插入 GUI 工具，`agent-presets` 注入 `computerUsePresetRoot`）、该 inject 之后对 `!!js ctx.computerUsePresetRoot` 的 Loader 插值、额外 preset 的 `scanRoot`、Host `schemas()` 中不出现的作用域 GUI 工具，以及 `code_agent` 创建/续写/拒绝路径（追加与侧栏会话相同的 `user/message` 事件）。注入的 macOS `CommandRunner` 测试断言生成的 JXA 含有 `clickAt`、`pasteText`、`chord` 与 `CGEventCreateScrollWheelEvent2`，设置 overlay 窗口 id 时的 helper argv，以及不回退到 `screencapture`。
+包测试只使用假桌面。它们覆盖坐标映射、热键拒绝、工具 execute/render、首帧 pre-step、纯文本拒绝、HMR、通过仅测试 `cordis.yml` 的 Loader 组合，一次进程内 agent-loop 点击把图片块放到 `user/message` 与 `tool/result` 上，仅 overlay 使用的 preset-root locator、overlay YAML（不在 Host 插入 GUI 工具，`agent-presets` 注入 `computerUsePresetRoot`）、该 inject 之后对 `!!js ctx.computerUsePresetRoot` 的 Loader 插值、额外 preset 的 `scanRoot`、Host `schemas()` 中不出现的作用域 GUI 工具，`code_agent` 创建/续写/拒绝路径（追加与侧栏会话相同的 `user/message` 事件），以及停到两边都空闲才 `followup` 的 `code_agent` 完成通知。注入的 macOS `CommandRunner` 测试断言生成的 JXA 含有 `clickAt`、`pasteText`、`chord` 与 `CGEventCreateScrollWheelEvent2`，设置 overlay 窗口 id 时的 helper argv，以及不回退到 `screencapture`。
 
 人工编写的 headless overlay [`snapshots/session/computer-use/`](../../../../snapshots/session/computer-use/) 挂载场景本地的假桌面插件，以及视觉模型 `deepseek-v4-flash-vision-exp`，并把 `postActionWaitMs` 设为 `0`。回放使用固定 PNG，绝不驱动真实桌面。该 overlay 会桩掉 `sessionController` 并注册 `code_agent`，以便 header pin 含有该 schema；headless 没有 Session Remote。该插件不在已发布的 `dsh-base` 中。

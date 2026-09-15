@@ -54,6 +54,8 @@ The Computer Use agent on the ball decides how to handle the current sentence. T
 - A follow-up on the same artifact (after writing a Word document, make the font green) sends another message on that existing standard session.
 - Unrelated new background work (after the Word document, make a gobang game) creates a blank standard session.
 
+After enqueue, the Computer Use agent tells you the background session is running and ends its turn, so you can keep chatting or give it new GUI work. When that standard session finishes and the ball is idle, Computer Use reports what the background agent produced.
+
 Those background sessions are the same kind as a session you type in the main window. Files and the terminal stay with that standard agent’s bash/fs. The ball’s own bash is only for short commands inside a GUI loop.
 
 ## Limits

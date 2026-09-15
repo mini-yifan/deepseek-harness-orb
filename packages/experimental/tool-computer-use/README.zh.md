@@ -75,7 +75,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 | `scroll` | `screen_index`、`position`、`direction`（`up`/`down`）、`scroll_level` 1–10 | 滚动、等待、重新截屏 |
 | `hotkey` | `keys: string[]` | 组合键；系统截屏快捷键会被拒绝；等待、重新截屏 |
 | `wait` | 可选 `wait_seconds`，受 `maxWaitSeconds` 限制 | 等待、重新截屏 |
-| `code_agent` | `task`、可选 `session_id`、可选 `cwd` | 在一等 standard 会话上入队；返回该 `session_id` |
+| `code_agent` | `task`、可选 `session_id`、可选 `cwd` | 在一等 standard 会话上入队并返回该 `session_id`；两边都空闲后跟一条插件通知 |
 
 五个工具都互斥运行。`presentCall` 为 generic。文本信封标明屏幕序号、逻辑尺寸、0–1000 坐标空间、附件像素尺寸，以及 `saveImage` 缩放栅格时的倍率。它从不包含文件系统路径。
 
@@ -105,6 +105,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 | [`src/preset-root.ts`](src/preset-root.ts) | 仅 overlay 使用的插件：发布额外的 agent-presets 根目录 |
 | [`src/plugin.ts`](src/plugin.ts) | 共享的 `applyComputerUse`：策略、五个 GUI 工具、首帧 pre-step |
 | [`src/code-agent.ts`](src/code-agent.ts) | 仅 Computer Use 的 `code_agent`：`session.create` / `session.prompt` |
+| [`src/code-agent-completion.ts`](src/code-agent-completion.ts) | Code 会话与 Computer Use 调用方都空闲后投递的插件通知 |
 | [`src/macos.ts`](src/macos.ts) | Darwin 通过 `screencapture` 捕获，或在设置了 overlay 窗口 id 时走 ScreenCaptureKit `excludingWindows`；click、scroll 与 hotkey 走 JXA `CGEvent`；`input_text` 通过 NSPasteboard 粘贴 |
 | [`src/macos-sck-capture.swift`](src/macos-sck-capture.swift) | Darwin helper：省略 overlay CGWindowID 的显示捕获 |
 | [`src/overlay-guard.ts`](src/overlay-guard.ts) | 可选的 Desktop overlay 遮蔽：把 capture 与 HID 包进 `wrapDesktopBackend` |
@@ -122,6 +123,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 - [生成的工具目录](../../../docs/tool-catalog.zh.md#deepseek-aidsh-experimental-tool-computer-use) — 五个 GUI schema 与 `code_agent`。
 - [添加工具](../../../docs/cookbook/adding-a-tool.zh.md) — UI 呈现意图（`generic`）与内容中的图片块。
 - [Computer Use Agent Note](../../../.agents/notes/implemented/feature/2026-09-13-experimental-computer-use.zh.md) — 插件 vs Skill vs loop、Computer Use agent preset、结果内观察，以及同意门槛。
+- [Computer Use 把 Code agent 完成通知停到空闲再投递](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-code-agent-completion.zh.md) — 两边都空闲后投递的插件通知。
 - [桌面悬浮球](../../../.agents/notes/implemented/feature/2026-09-14-desktop-floating-orb.zh.md) — macOS overlay、runtime extra，以及一等 `code_agent` 会话。
 - [桌面 overlay-guard](../../../.agents/notes/implemented/architecture/2026-09-14-desktop-overlay-guard.zh.md) — 悬浮球的截屏排除与 HID 点击穿透。
 - [Headless computer-use snapshot](../../../snapshots/session/computer-use/snapshot.yml) — 在假桌面与视觉模型上人工编写的点击循环。
@@ -159,6 +161,10 @@ Route the user's request yourself:
 - New background work such as writing a Word document → code_agent without session_id.
 - Follow-up on the same artifact such as making that Word document's font green → code_agent with the session_id from that earlier result.
 - Unrelated new background work such as making a gobang game after the Word document → code_agent without session_id. Do not reuse the Word session.
+
+After code_agent returns, tell the user the background Code agent is running, then end the turn. Do not call wait or bash sleep to poll that session.
+
+When a plugin notice reports that a Code agent session finished, tell the user which background task completed and what it produced.
 ```
 
 #### Token 影响
@@ -197,6 +203,7 @@ Route the user's request yourself:
 - **Retina 与附件尺寸** — backing scale 可能与附件栅格不同；使用 0–1000 空间以及信封中的倍率。
 - **固定等待** — 动作后延迟只有 `postActionWaitMs`；没有像素差 stall。
 - **没有拖拽、套索或启动应用** — GUI 覆盖是 click、type、scroll、hotkey 与 wait。后台文档与代码走 `code_agent`。
+- **`code_agent` 通知需要活的 Agent** — execute 仍在入队接受后返回。找不到活的 Code agent、Computer Use 调用方已销毁、或 Code 会话再也不回到空闲，都会丢掉通知。策略拦不住仍然调用 `wait` 的模型。
 - **桌面 overlay 仅 macOS** — Windows Desktop 仍是单主窗口。实验包是签名 runtime extra，不是 Desktop Host 的 npm 依赖。
 - **实验性原型，不提供稳定性承诺** — 本包为私有；schema 与后端可以自由变更。
 
