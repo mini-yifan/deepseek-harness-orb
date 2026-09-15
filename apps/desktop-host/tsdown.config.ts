@@ -24,4 +24,8 @@ export default defineConfig([
     entry: ['lib/types/computer-use-preset-root.js'],
     ...nodeBundle,
   },
+  {
+    entry: ['lib/types/computer-use-orb-permission.js'],
+    ...nodeBundle,
+  },
 ])

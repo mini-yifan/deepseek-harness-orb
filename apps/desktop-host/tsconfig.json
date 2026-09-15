@@ -14,6 +14,10 @@
     { "path": "../../packages/client/connection/tsconfig.host.json" },
     { "path": "../../packages/client/modules" },
     { "path": "../../packages/host/webserver" },
-    { "path": "../../packages/util/launch-environment" }
+    { "path": "../../packages/util/launch-environment" },
+    { "path": "../../packages/util/home-paths" },
+    { "path": "../../packages/interaction/permission-presets" },
+    { "path": "../../packages/core/session" },
+    { "path": "../../packages/session/session-projection" }
   ]
 }
