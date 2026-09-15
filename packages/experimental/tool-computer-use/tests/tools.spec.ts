@@ -1,5 +1,5 @@
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
@@ -159,6 +159,23 @@ describe('computer-use tools', () => {
     expect(ctx.tools.executionMode({
       signal: SIGNAL, callId: ToolCallId('mode-wait'), name: 'wait', arguments: {},
     })).toEqual({ kind: 'exclusive' })
+    expect(ctx.tools.executionMode({
+      signal: SIGNAL, callId: ToolCallId('mode-long-press'), name: 'long_press',
+      arguments: { screen_index: 0, position: [0, 0] },
+    })).toEqual({ kind: 'exclusive' })
+    expect(ctx.tools.executionMode({
+      signal: SIGNAL, callId: ToolCallId('mode-drag'), name: 'drag',
+      arguments: {
+        start_screen_index: 0, start_position: [0, 0],
+        end_screen_index: 0, end_position: [1, 1],
+      },
+    })).toEqual({ kind: 'exclusive' })
+    expect(ctx.tools.executionMode({
+      signal: SIGNAL, callId: ToolCallId('mode-browser'), name: 'open_in_browser', arguments: {},
+    })).toEqual({ kind: 'exclusive' })
+    expect(ctx.tools.executionMode({
+      signal: SIGNAL, callId: ToolCallId('mode-finder'), name: 'open_in_finder', arguments: {},
+    })).toEqual({ kind: 'exclusive' })
     expect(ctx.tools.get('click')?.presentCall?.({
       screen_index: 0, position: [0, 0],
     })).toMatchObject({ card: 'generic', kind: 'execute', title: 'Click' })
@@ -211,6 +228,90 @@ describe('computer-use tools', () => {
       .toMatchObject({ card: 'generic', title: 'Wait' })
   })
 
+  it('long-presses, drags, and opens through the fake backend', async () => {
+    const { ctx, backend } = await setup()
+    const home = await mkdtemp(join(homedir(), 'dsh-cu-finder-'))
+    homes.push(home)
+    const file = join(home, 'report.pdf')
+    await writeFile(file, 'x')
+    const resolvedFile = await realpath(file)
+    const resolvedHome = await realpath(home)
+    const pressed = await execute(ctx, 'long_press', { screen_index: 0, position: [10, 20] })
+    expect(pressed.isError).toBe(false)
+    expect(text(pressed)).toContain('Long-pressed screen 0 at [10, 20] for 3s')
+    expect(backend.actions.at(-1)).toMatchObject({
+      type: 'longPress',
+      input: { position: [10, 20], durationSeconds: 3 },
+    })
+    const held = await execute(ctx, 'long_press', {
+      screen_index: 0, position: [0, 0], duration_seconds: 2,
+    })
+    expect(held.isError).toBe(false)
+    expect(backend.actions.at(-1)).toMatchObject({
+      type: 'longPress',
+      input: { durationSeconds: 2 },
+    })
+    const dragged = await execute(ctx, 'drag', {
+      start_screen_index: 0, start_position: [0, 0],
+      end_screen_index: 0, end_position: [500, 500],
+    })
+    expect(dragged.isError).toBe(false)
+    expect(text(dragged)).toContain('Dragged from screen 0 [0, 0] to screen 0 [500, 500]')
+    expect(backend.actions.at(-1)).toMatchObject({
+      type: 'drag',
+      input: { startPosition: [0, 0], endPosition: [500, 500] },
+    })
+    const browser = await execute(ctx, 'open_in_browser', { url: 'www.bilibili.com' })
+    expect(browser.isError).toBe(false)
+    expect(text(browser)).toContain('Opened https://www.bilibili.com in the default browser')
+    expect(backend.actions.at(-1)).toMatchObject({
+      type: 'openInBrowser',
+      input: { url: 'https://www.bilibili.com' },
+    })
+    const launched = await execute(ctx, 'open_in_browser', {})
+    expect(launched.isError).toBe(false)
+    expect(text(launched)).toContain('Opened the default browser')
+    expect(backend.actions.at(-1)).toMatchObject({ type: 'openInBrowser', input: {} })
+    const blankUrl = await execute(ctx, 'open_in_browser', { url: '   ' })
+    expect(blankUrl.isError).toBe(false)
+    expect(backend.actions.at(-1)).toMatchObject({ type: 'openInBrowser', input: {} })
+    const opened = await execute(ctx, 'open_in_finder', { path: file })
+    expect(opened.isError).toBe(false)
+    expect(text(opened)).toContain(`Opened ${resolvedFile}`)
+    expect(backend.actions.at(-1)).toMatchObject({
+      type: 'openInFinder',
+      input: { path: resolvedFile, revealOnly: false },
+    })
+    const revealed = await execute(ctx, 'open_in_finder', { path: file, reveal_only: true })
+    expect(revealed.isError).toBe(false)
+    expect(text(revealed)).toContain(`Revealed ${resolvedFile} in Finder`)
+    expect(backend.actions.at(-1)).toMatchObject({
+      type: 'openInFinder',
+      input: { revealOnly: true },
+    })
+    const folderReveal = await execute(ctx, 'open_in_finder', { path: home, reveal_only: true })
+    expect(folderReveal.isError).toBe(false)
+    expect(backend.actions.at(-1)).toMatchObject({
+      type: 'openInFinder',
+      input: { path: resolvedHome, revealOnly: false },
+    })
+    expect(ctx.tools.get('long_press')?.presentCall?.({
+      screen_index: 0, position: [0, 0],
+    })).toMatchObject({ card: 'generic', title: 'Long press' })
+    expect(ctx.tools.get('drag')?.presentCall?.({
+      start_screen_index: 0, start_position: [0, 0],
+      end_screen_index: 0, end_position: [1, 1],
+    })).toMatchObject({ card: 'generic', title: 'Drag' })
+    expect(ctx.tools.get('open_in_browser')?.presentCall?.({}))
+      .toMatchObject({ card: 'generic', title: 'Open in browser' })
+    expect(ctx.tools.get('open_in_browser')?.presentCall?.({ url: 'https://example.com' }))
+      .toMatchObject({ card: 'generic', title: 'Open in browser' })
+    expect(ctx.tools.get('open_in_finder')?.presentCall?.({}))
+      .toMatchObject({ card: 'generic', title: 'Open in Finder' })
+    expect(ctx.tools.get('open_in_finder')?.presentCall?.({ path: file }))
+      .toMatchObject({ card: 'generic', title: 'Open in Finder' })
+  })
+
   it('rejects screenshot hotkeys, bad positions, and text-only routes', async () => {
     const { ctx } = await setup()
     const shot = await execute(ctx, 'hotkey', { keys: ['cmd', 'shift', '3'] })
@@ -235,6 +336,25 @@ describe('computer-use tools', () => {
     expect(empty.isError).toBe(true)
     const wait = await execute(ctx, 'wait', { wait_seconds: -1 })
     expect(wait.isError).toBe(true)
+    const duration = await execute(ctx, 'long_press', {
+      screen_index: 0, position: [0, 0], duration_seconds: 11,
+    })
+    expect(duration.isError).toBe(true)
+    expect(text(duration)).toContain('1 to 10')
+    const cjk = await execute(ctx, 'open_in_browser', { url: 'https://example.com/%E5%88%98' })
+    expect(cjk.isError).toBe(true)
+    expect(text(cjk)).toContain('plain CJK')
+    const ftp = await execute(ctx, 'open_in_browser', { url: 'ftp://example.com' })
+    expect(ftp.isError).toBe(true)
+    const forbidden = await execute(ctx, 'open_in_finder', { path: '/etc' })
+    expect(forbidden.isError).toBe(true)
+    expect(text(forbidden)).toContain('system path is forbidden')
+    const missingPath = await execute(ctx, 'open_in_finder', { path: '/no/such/computer-use-path' })
+    expect(missingPath.isError).toBe(true)
+    expect(text(missingPath)).toContain('does not exist')
+    const textLongPress = await execute(ctx, 'long_press', { screen_index: 0, position: [0, 0] }, 'text-model')
+    expect(textLongPress.isError).toBe(true)
+    expect(text(textLongPress)).toContain('does not declare image input')
     const missingLlm = await setup({ llm: false })
     const noLlm = await execute(missingLlm.ctx, 'click', { screen_index: 0, position: [0, 0] })
     expect(noLlm.isError).toBe(true)
@@ -258,6 +378,11 @@ describe('computer-use tools', () => {
     expect(POLICY).toContain('Ignore pixel widths, request-preview sizes')
     expect(POLICY).not.toContain('downscale')
     expect(POLICY).not.toContain('multiply')
+    expect(POLICY).toContain('call open_in_finder with that path')
+    expect(POLICY).toContain('Open a site in the user\'s visible browser with open_in_browser')
+    expect(POLICY).toContain('Do not use bash open as a substitute')
+    expect(POLICY).toContain('Drag sliders, window edges, and files with drag')
+    expect(POLICY).toContain('Press and hold with long_press')
   })
 
   it('unregisters tools and the policy on fiber disposal', async () => {
@@ -276,7 +401,8 @@ describe('computer-use tools', () => {
     )
     const fiber = await ctx.plugin(computerUse)
     expect(ctx.tools.schemas().map(schema => schema.name).sort()).toEqual([
-      'click', 'hotkey', 'input_text', 'scroll', 'wait',
+      'click', 'drag', 'hotkey', 'input_text', 'long_press',
+      'open_in_browser', 'open_in_finder', 'scroll', 'wait',
     ])
     expect(ctx.tools.schemas().map(schema => schema.name)).not.toContain('code_agent')
     await fiber.dispose()
@@ -306,7 +432,8 @@ describe('computer-use tools', () => {
     ]))
     apply(host, { postActionWaitMs: 0 })
     expect(host.tools.schemas().map(schema => schema.name).sort()).toEqual([
-      'click', 'hotkey', 'input_text', 'scroll', 'wait',
+      'click', 'drag', 'hotkey', 'input_text', 'long_press',
+      'open_in_browser', 'open_in_finder', 'scroll', 'wait',
     ])
     expect(host.tools.schemas().map(schema => schema.name)).not.toContain('code_agent')
     if (process.platform === 'darwin') return

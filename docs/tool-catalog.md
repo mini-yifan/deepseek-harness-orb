@@ -38,7 +38,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-subagent-control` | `interrupt_agent`, `list_agents`, `send_message` | `ctx.tools`, `ctx.subagents`, `ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`, `tool/result`, `child session events through ctx.subagents` | - | The globally named control tools over continuable background subagents: provider-bound `tool-subagent` instances register distinct delegation tools, while this package registers `send_message` and `interrupt_agent` once, plus `list_agents` from its separately loaded `/list-agents` plugin (whose catalog rows use the sessionProjections and live Agent registries). |
 | `@deepseek-ai/dsh-tool-jobs` | `job_kill`, `job_list`, `job_output` | `ctx.tools`, `ctx.jobs`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `user/message via agent.inject() for background completion notices` | - | The kind-agnostic background-job controller: background bash commands, PTY sends, and subagents are read, listed, and killed through the same three tools. Loading the plugin attaches the controller that arms producers' `ctx.jobs.start()`. |
 | `@deepseek-ai/dsh-experimental-tool-agent-team` | `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | All nine tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
-| `@deepseek-ai/dsh-experimental-tool-computer-use` | `click`, `code_agent`, `hotkey`, `input_text`, `scroll`, `wait` | `ctx.tools`, `ctx.systemPrompt`, `ctx.attachments`, `ctx.llm + an image-capable route (execution and first-frame screenshot)`, `ctx.sessionController (code_agent)` | `tool/call`, `durable attachment (saveImage)`, `user/message first-frame notice`, `tool/result`, `session.create + session.prompt (code_agent)`, `user/message plugin notice (code_agent completion)` | - | Experimental opt-in GUI tools plus Computer Use-only code_agent. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no screenshot tool: the first user turn and every GUI result attach screens plus overlay-skip foreground tags. code_agent is registered only with the Computer Use preset; the catalog stub satisfies inject so the schema is harvestable. |
+| `@deepseek-ai/dsh-experimental-tool-computer-use` | `click`, `code_agent`, `drag`, `hotkey`, `input_text`, `long_press`, `open_in_browser`, `open_in_finder`, `scroll`, `wait` | `ctx.tools`, `ctx.systemPrompt`, `ctx.attachments`, `ctx.llm + an image-capable route (execution and first-frame screenshot)`, `ctx.sessionController (code_agent)` | `tool/call`, `durable attachment (saveImage)`, `user/message first-frame notice`, `tool/result`, `session.create + session.prompt (code_agent)`, `user/message plugin notice (code_agent completion)` | - | Experimental opt-in GUI tools plus Computer Use-only code_agent. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no screenshot tool: the first user turn and every GUI result attach screens plus overlay-skip foreground tags. code_agent is registered only with the Computer Use preset; the catalog stub satisfies inject so the schema is harvestable. |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
@@ -2153,6 +2153,48 @@ Delegate background coding and document work to a standard-mode Code agent that 
 
 Source: [`packages/experimental/tool-computer-use/src/code-agent.ts`](../packages/experimental/tool-computer-use/src/code-agent.ts)
 
+### `drag`
+
+Drag from a start 0–1000 position to an end 0–1000 position, including across screens, then return the post-action screenshot. Exclusive.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "start_screen_index": {
+      "type": "integer",
+      "description": "Zero-based display index for the drag start."
+    },
+    "start_position": {
+      "type": "array",
+      "description": "[x, y] start as a 0–1000 fraction of that screenshot, not pixels.",
+      "items": {
+        "type": "number"
+      }
+    },
+    "end_screen_index": {
+      "type": "integer",
+      "description": "Zero-based display index for the drag end."
+    },
+    "end_position": {
+      "type": "array",
+      "description": "[x, y] end as a 0–1000 fraction of that screenshot, not pixels.",
+      "items": {
+        "type": "number"
+      }
+    }
+  },
+  "required": [
+    "start_screen_index",
+    "start_position",
+    "end_screen_index",
+    "end_position"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
 ### `hotkey`
 
 Press a key combination on the desktop, then return the post-action screenshot. System screenshot shortcuts (Cmd/Win+Shift+3/4/5) are rejected. Exclusive.
@@ -2216,6 +2258,81 @@ Click to focus a 0–1000 position, type text, optionally replace existing conte
     "position",
     "text"
   ]
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `long_press`
+
+Press and hold the left button at a 0–1000 position on one desktop screen, then return the post-action screenshot. duration_seconds defaults to 3 and must be 1–10. Exclusive.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "screen_index": {
+      "type": "integer",
+      "description": "Zero-based display index from the latest screenshot envelope."
+    },
+    "position": {
+      "type": "array",
+      "description": "[x, y] as a 0–1000 fraction of that screenshot, not pixels.",
+      "items": {
+        "type": "number"
+      }
+    },
+    "duration_seconds": {
+      "type": "number",
+      "description": "Hold duration in seconds. Default: 3. Must be 1–10.",
+      "default": 3
+    }
+  },
+  "required": [
+    "screen_index",
+    "position"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `open_in_browser`
+
+Open the default browser, or a full http(s) URL in it, then return the post-action screenshot. This is the user-visible browser. Do not use web_fetch as a substitute. Chinese in path or query must be plain text, never CJK percent-encoding such as %E5... / %E8.... Exclusive.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string",
+      "description": "http(s) URL to open. Omit to launch the default browser with no page."
+    }
+  }
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `open_in_finder`
+
+Open a folder in Finder, open a file with its default app, or reveal a file in Finder, then return the post-action screenshot. Omit path to open the Desktop. Use reveal_only only to select a file in Finder (Open With or rename/move). Pass a real path; do not OCR one from the screenshot. Exclusive.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Absolute or ~ path. Omit to open the user Desktop."
+    },
+    "reveal_only": {
+      "type": "boolean",
+      "description": "When true and path is a file, reveal it in Finder instead of opening it. Default: false.",
+      "default": false
+    }
+  }
 }
 ```
 

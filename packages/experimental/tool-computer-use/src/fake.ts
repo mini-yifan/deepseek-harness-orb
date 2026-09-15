@@ -8,7 +8,11 @@ import type {
   ClickInput,
   DesktopBackend,
   DesktopForeground,
+  DragInput,
   HotkeyInput,
+  LongPressInput,
+  OpenInBrowserInput,
+  OpenInFinderInput,
   ScreenInfo,
   ScrollInput,
   TypeInput,
@@ -26,6 +30,10 @@ export type FakeDesktopAction =
   | { readonly type: 'typeText'; readonly input: TypeInput }
   | { readonly type: 'scroll'; readonly input: ScrollInput }
   | { readonly type: 'hotkey'; readonly input: HotkeyInput }
+  | { readonly type: 'longPress'; readonly input: LongPressInput }
+  | { readonly type: 'drag'; readonly input: DragInput }
+  | { readonly type: 'openInBrowser'; readonly input: OpenInBrowserInput }
+  | { readonly type: 'openInFinder'; readonly input: OpenInFinderInput }
 
 /** Fake backend that records HID calls and returns a fixture PNG. */
 export interface FakeDesktopBackend extends DesktopBackend {
@@ -79,6 +87,22 @@ export function createFakeDesktopBackend(options: FakeDesktopOptions = {}): Fake
     },
     hotkey: (input) => {
       actions.push({ type: 'hotkey', input })
+      return Promise.resolve()
+    },
+    longPress: (input) => {
+      actions.push({ type: 'longPress', input })
+      return Promise.resolve()
+    },
+    drag: (input) => {
+      actions.push({ type: 'drag', input })
+      return Promise.resolve()
+    },
+    openInBrowser: (input) => {
+      actions.push({ type: 'openInBrowser', input })
+      return Promise.resolve()
+    },
+    openInFinder: (input) => {
+      actions.push({ type: 'openInFinder', input })
       return Promise.resolve()
     },
   }

@@ -16,7 +16,7 @@ Computer Use 观察已经会附上屏幕，但模型无法知道当前焦点在�
 
 这些标签走现有的 `user/message`（首帧插件通知）和 `tool/result` 内容。没有新的会话事件，没有 `ignorable` 标志，也不 bump `SESSION_FORMAT_VERSION`。`SCREEN_SCHEMA` 保持不变（`additionalProperties: false`）。结构化的 `foreground` 是每个 GUI 工具输出上的兄弟字段，以便 `output.render` 能格式化它。
 
-macOS JXA 在跳过 overlay 之后检查屏幕上 layer-0 窗口。假后端默认 `{ appName: 'Pages' }`，因此人工编写的 snapshot 能钉住一个不含文件夹的稳定标签。不支持的后端抛出同样的仅 macOS 错误。`wrapDesktopBackend` 在 `withCapture` 里跑 inspect，这样 exclude id 是活的；`listScreens` 保持不包装。查询或解析失败返回焦点 fallback，且不得让 `observeDesktop` 失败。中止仍会让这次观察失败。
+macOS JXA 在跳过 overlay 之后检查屏幕上 layer-0 窗口。假后端默认 `{ appName: 'Pages' }`，因此人工编写的 snapshot 能钉住一个不含文件夹的稳定标签。不支持的后端抛出同样的仅 macOS 错误。`wrapDesktopBackend` 在 `withCapture` 里跑 inspect，这样 exclude id 是活的；`listScreens` 与 `open_*` 保持不包装。查询或解析失败返回焦点 fallback，且不得让 `observeDesktop` 失败。中止仍会让这次观察失败。
 
 [实验性 Computer Use](2026-09-13-experimental-computer-use.zh.md) 仍拥有 GUI 工具、首帧附件和同意门槛。
 

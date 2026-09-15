@@ -34,6 +34,10 @@ const platformBackend = vi.hoisted(() => {
     typeText: vi.fn(() => Promise.resolve()),
     scroll: vi.fn(() => Promise.resolve()),
     hotkey: vi.fn(() => Promise.resolve()),
+    longPress: vi.fn(() => Promise.resolve()),
+    drag: vi.fn(() => Promise.resolve()),
+    openInBrowser: vi.fn(() => Promise.resolve()),
+    openInFinder: vi.fn(() => Promise.resolve()),
   }
 })
 
@@ -108,12 +112,16 @@ function stubBackend(overrides: Partial<DesktopBackend> = {}): DesktopBackend {
     typeText: () => Promise.resolve(),
     scroll: () => Promise.resolve(),
     hotkey: () => Promise.resolve(),
+    longPress: () => Promise.resolve(),
+    drag: () => Promise.resolve(),
+    openInBrowser: () => Promise.resolve(),
+    openInFinder: () => Promise.resolve(),
     ...overrides,
   }
 }
 
 describe('wrapDesktopBackend', () => {
-  it('cloaks capture, inspect, and HID but leaves listScreens unwrapped', async () => {
+  it('cloaks capture, inspect, and HID but leaves listScreens and open unwrapped', async () => {
     const inner = createFakeDesktopBackend({ screens: [screen] })
     const guard = recordingGuard()
     const backend = wrapDesktopBackend(inner, guard)
@@ -124,6 +132,13 @@ describe('wrapDesktopBackend', () => {
     await backend.typeText({ screen, position: [1, 2], text: 'a', replace: false, submit: false })
     await backend.scroll({ screen, position: [1, 2], direction: 'down', scrollLevel: 1 })
     await backend.hotkey({ keys: ['c'] })
+    await backend.longPress({ screen, position: [1, 2], durationSeconds: 3 })
+    await backend.drag({
+      startScreen: screen, startPosition: [0, 0],
+      endScreen: screen, endPosition: [10, 10],
+    })
+    await backend.openInBrowser({ url: 'https://example.com' })
+    await backend.openInFinder({ path: '/tmp', revealOnly: false })
     expect(guard.calls).toEqual([
       'capture', 'capture-end',
       'capture', 'capture-end',
@@ -131,8 +146,12 @@ describe('wrapDesktopBackend', () => {
       'input', 'input-end',
       'input', 'input-end',
       'input', 'input-end',
+      'input', 'input-end',
+      'input', 'input-end',
     ])
-    expect(inner.actions.map(action => action.type)).toEqual(['click', 'typeText', 'scroll', 'hotkey'])
+    expect(inner.actions.map(action => action.type)).toEqual([
+      'click', 'typeText', 'scroll', 'hotkey', 'longPress', 'drag', 'openInBrowser', 'openInFinder',
+    ])
   })
 
   it('forwards overlay window ids into the capture interval', async () => {

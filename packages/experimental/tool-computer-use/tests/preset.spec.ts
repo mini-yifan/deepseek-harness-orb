@@ -18,7 +18,10 @@ import { applyComputerUse } from '../src/plugin.ts'
 import * as PresetRoot from '../src/preset-root.ts'
 import { apply, name, PRESET_ROOT } from '../src/preset-root.ts'
 
-const GUI_TOOLS = ['click', 'hotkey', 'input_text', 'scroll', 'wait']
+const GUI_TOOLS = [
+  'click', 'drag', 'hotkey', 'input_text', 'long_press',
+  'open_in_browser', 'open_in_finder', 'scroll', 'wait',
+]
 
 const SOURCE_OVERLAY = fileURLToPath(new URL('../cordis.source.patch.yml', import.meta.url))
 const BUILT_OVERLAY = fileURLToPath(new URL('../cordis.patch.yml', import.meta.url))

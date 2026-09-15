@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-`@deepseek-ai/dsh-experimental-tool-computer-use` 是私有实验性 Cordis 插件。它注册五个互斥 GUI 工具（`click`、`input_text`、`scroll`、`hotkey`、`wait`），并通过 `agent/pre-step` 在首次用户回合附上当前屏幕。每个工具执行一次桌面动作，等待 `postActionWaitMs`，重新截屏，并由 `output.render` 返回 `[文本信封, ...ImageBlock]`。信封以 `<frontmost_app>` 开头（前台是 Finder 时还有 `<frontmost_folder>`；跳过 overlay 窗口后没有剩余窗口时是 `<focus_note>`），随后是每屏的 `<screen_index>` 与 `<coordinate_space>0-1000</coordinate_space>` 标签；[Computer Use 观察前台元数据](2026-09-15-computer-use-observation-foreground.zh.md) 拥有这些前台标签，[Computer Use 0–1000 比例坐标](../bug-fix/2026-09-15-computer-use-fraction-coordinates.zh.md) 拥有点击空间。图片放在内容里，不放在 `presentationMeta`。没有截屏工具。
+`@deepseek-ai/dsh-experimental-tool-computer-use` 是私有实验性 Cordis 插件。它注册九个互斥 GUI 工具（`click`、`input_text`、`scroll`、`hotkey`、`wait`、`long_press`、`drag`、`open_in_browser`、`open_in_finder`），并通过 `agent/pre-step` 在首次用户回合附上当前屏幕。每个工具执行一次桌面动作，等待 `postActionWaitMs`，重新截屏，并由 `output.render` 返回 `[文本信封, ...ImageBlock]`。信封以 `<frontmost_app>` 开头（前台是 Finder 时还有 `<frontmost_folder>`；跳过 overlay 窗口后没有剩余窗口时是 `<focus_note>`），随后是每屏的 `<screen_index>` 与 `<coordinate_space>0-1000</coordinate_space>` 标签；[Computer Use 观察前台元数据](2026-09-15-computer-use-observation-foreground.zh.md) 拥有这些前台标签，[Computer Use 0–1000 比例坐标](../bug-fix/2026-09-15-computer-use-fraction-coordinates.zh.md) 拥有点击空间。图片放在内容里，不放在 `presentationMeta`。没有截屏工具。[Computer Use 指针与打开工具](2026-09-15-computer-use-pointer-and-open-tools.zh.md) 拥有 `long_press`、`drag`、`open_in_browser` 与 `open_in_finder`。
 
 `applyComputerUse(ctx, backend, config)` 是共享注册助手。生产环境的 `apply` 使用宿主平台后端（macOS 捕获与 HID 输入；其他平台在执行时抛出固定的仅 macOS 错误）。测试与无密钥 snapshot 注入返回固定 PNG 并记录动作的假桌面。没有 Config `driver: fake`。macOS HID 发送由 [Computer Use macOS HID](../bug-fix/2026-09-13-computer-use-macos-hid.zh.md) 负责。
 
@@ -24,7 +24,7 @@ Web overlay 只插入 `computer-use-preset-root`，由它提供本包旁的额�
 
 **只用 Skill 做接地。** Skill 可以携带 See/Step 文案，但不能注册工具、附加持久图片，或出现在生成的工具目录中。Computer Use 是带提示词分节的 Cordis 插件，由 Computer Use agent preset 组合。
 
-**把 GUI 工具插到 Host。** Host 注册的工具会出现在每个 preset 中，包括 `standard`。overlay 改为追加一个系统 extra root，因此只有点名 `computer-use` 的会话才会收到五个 GUI 工具。
+**把 GUI 工具插到 Host。** Host 注册的工具会出现在每个 preset 中，包括 `standard`。overlay 改为追加一个系统 extra root，因此只有点名 `computer-use` 的会话才会收到九个 GUI 工具。
 
 **改 `agent-loop`。** loop 已经会把工具结果中的图片送入下一次请求。loop 特例会让桌面控制变成核心语义，并迫使每个组合都了解屏幕。
 
@@ -40,10 +40,10 @@ Web overlay 只插入 `computer-use-preset-root`，由它提供本包旁的额�
 
 ## 影响
 
-在 Computer Use preset 中、具备图片能力的路由上挂载该插件，会在每次请求中增加策略 token、五个互斥 GUI schema 以及 `code_agent`，再加上首帧通知与每次 GUI 结果的图片 token，直到压缩。纯文本路由仍能用于编码会话：跳过首帧附件，GUI 工具以路由诊断失败。macOS 需要屏幕录制与辅助功能；缺少权限时，捕获或输入会失败，并指出对应的 TCC。`input_text` 在粘贴期间覆盖字符串剪贴板，并在之后恢复。Web chrome 会出现在截屏中。Desktop 主窗口始终可被截到；macOS overlay 由 ScreenCaptureKit 窗口排除从 Computer Use 截图中省略，并只在对应的 HID 突发期间点击穿透。观察文本还携带由 [Computer Use 观察前台元数据](2026-09-15-computer-use-observation-foreground.zh.md) 拥有的、跳过 overlay 后的前台标签。没有逐次点击批准、像素差 settle、拖拽，也没有 `dsh-base` 默认项。
+在 Computer Use preset 中、具备图片能力的路由上挂载该插件，会在每次请求中增加策略 token、九个互斥 GUI schema 以及 `code_agent`，再加上首帧通知与每次 GUI 结果的图片 token，直到压缩。纯文本路由仍能用于编码会话：跳过首帧附件，GUI 工具以路由诊断失败。macOS 需要屏幕录制与辅助功能；缺少权限时，捕获或输入会失败，并指出对应的 TCC。`input_text` 在粘贴期间覆盖字符串剪贴板，并在之后恢复。Web chrome 会出现在截屏中。Desktop 主窗口始终可被截到；macOS overlay 由 ScreenCaptureKit 窗口排除从 Computer Use 截图中省略，并只在对应的 HID 突发期间点击穿透。观察文本还携带由 [Computer Use 观察前台元数据](2026-09-15-computer-use-observation-foreground.zh.md) 拥有的、跳过 overlay 后的前台标签。没有逐次点击批准、像素差 settle、套索，也没有 `dsh-base` 默认项。
 
 ## 测试
 
-包测试只使用假桌面。它们覆盖坐标映射、热键拒绝、工具 execute/render、首帧 pre-step、纯文本拒绝、HMR、通过仅测试 `cordis.yml` 的 Loader 组合，一次进程内 agent-loop 点击把图片块放到 `user/message` 与 `tool/result` 上，仅 overlay 使用的 preset-root locator、overlay YAML（不在 Host 插入 GUI 工具，`agent-presets` 注入 `computerUsePresetRoot`）、该 inject 之后对 `!!js ctx.computerUsePresetRoot` 的 Loader 插值、额外 preset 的 `scanRoot`、Host `schemas()` 中不出现的作用域 GUI 工具，`code_agent` 创建/续写/拒绝路径（追加与侧栏会话相同的 `user/message` 事件），以及停到两边都空闲才 `followup` 的 `code_agent` 完成通知。注入的 macOS `CommandRunner` 测试断言生成的 JXA 含有 `clickAt`、`pasteText`、`chord` 与 `CGEventCreateScrollWheelEvent2`，设置 overlay 窗口 id 时的 helper argv，以及不回退到 `screencapture`。
+包测试只使用假桌面。它们覆盖坐标映射、热键拒绝、工具 execute/render、首帧 pre-step、纯文本拒绝、HMR、通过仅测试 `cordis.yml` 的 Loader 组合，一次进程内 agent-loop 点击把图片块放到 `user/message` 与 `tool/result` 上，仅 overlay 使用的 preset-root locator、overlay YAML（不在 Host 插入 GUI 工具，`agent-presets` 注入 `computerUsePresetRoot`）、该 inject 之后对 `!!js ctx.computerUsePresetRoot` 的 Loader 插值、额外 preset 的 `scanRoot`、Host `schemas()` 中不出现的作用域 GUI 工具，`code_agent` 创建/续写/拒绝路径（追加与侧栏会话相同的 `user/message` 事件），以及停到两边都空闲才 `followup` 的 `code_agent` 完成通知。注入的 macOS `CommandRunner` 测试断言生成的 JXA 含有 `clickAt`、`pasteText`、`chord`、`CGEventCreateScrollWheelEvent2`、`longPressAt` 与 `dragFromTo`，浏览器与 Finder 的 `/usr/bin/open` argv，设置 overlay 窗口 id 时的 helper argv，以及不回退到 `screencapture`。
 
 人工编写的 headless overlay [`snapshots/session/computer-use/`](../../../../snapshots/session/computer-use/) 挂载场景本地的假桌面插件，以及视觉模型 `deepseek-v4-flash-vision-exp`，并把 `postActionWaitMs` 设为 `0`。回放使用固定 PNG，绝不驱动真实桌面。该 overlay 会桩掉 `sessionController` 并注册 `code_agent`，以便 header pin 含有该 schema；headless 没有 Session Remote。首帧和 click 结果含 `<frontmost_app>Pages</frontmost_app>`。该插件不在已发布的 `dsh-base` 中。

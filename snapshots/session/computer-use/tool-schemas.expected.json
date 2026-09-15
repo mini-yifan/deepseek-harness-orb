@@ -132,6 +132,43 @@
       }
     },
     {
+      "name": "drag",
+      "description": "Drag from a start 0–1000 position to an end 0–1000 position, including across screens, then return the post-action screenshot. Exclusive.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "start_screen_index": {
+            "type": "integer",
+            "description": "Zero-based display index for the drag start."
+          },
+          "start_position": {
+            "type": "array",
+            "description": "[x, y] start as a 0–1000 fraction of that screenshot, not pixels.",
+            "items": {
+              "type": "number"
+            }
+          },
+          "end_screen_index": {
+            "type": "integer",
+            "description": "Zero-based display index for the drag end."
+          },
+          "end_position": {
+            "type": "array",
+            "description": "[x, y] end as a 0–1000 fraction of that screenshot, not pixels.",
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "required": [
+          "start_screen_index",
+          "start_position",
+          "end_screen_index",
+          "end_position"
+        ]
+      }
+    },
+    {
       "name": "edit",
       "description": "Edit an existing UTF-8 text file by replacing literal text.",
       "parameters": {
@@ -380,6 +417,66 @@
               "children",
               "descendants"
             ]
+          }
+        }
+      }
+    },
+    {
+      "name": "long_press",
+      "description": "Press and hold the left button at a 0–1000 position on one desktop screen, then return the post-action screenshot. duration_seconds defaults to 3 and must be 1–10. Exclusive.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "screen_index": {
+            "type": "integer",
+            "description": "Zero-based display index from the latest screenshot envelope."
+          },
+          "position": {
+            "type": "array",
+            "description": "[x, y] as a 0–1000 fraction of that screenshot, not pixels.",
+            "items": {
+              "type": "number"
+            }
+          },
+          "duration_seconds": {
+            "type": "number",
+            "description": "Hold duration in seconds. Default: 3. Must be 1–10.",
+            "default": 3
+          }
+        },
+        "required": [
+          "screen_index",
+          "position"
+        ]
+      }
+    },
+    {
+      "name": "open_in_browser",
+      "description": "Open the default browser, or a full http(s) URL in it, then return the post-action screenshot. This is the user-visible browser. Do not use web_fetch as a substitute. Chinese in path or query must be plain text, never CJK percent-encoding such as %E5... / %E8.... Exclusive.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "http(s) URL to open. Omit to launch the default browser with no page."
+          }
+        }
+      }
+    },
+    {
+      "name": "open_in_finder",
+      "description": "Open a folder in Finder, open a file with its default app, or reveal a file in Finder, then return the post-action screenshot. Omit path to open the Desktop. Use reveal_only only to select a file in Finder (Open With or rename/move). Pass a real path; do not OCR one from the screenshot. Exclusive.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Absolute or ~ path. Omit to open the user Desktop."
+          },
+          "reveal_only": {
+            "type": "boolean",
+            "description": "When true and path is a file, reveal it in Finder instead of opening it. Default: false.",
+            "default": false
           }
         }
       }

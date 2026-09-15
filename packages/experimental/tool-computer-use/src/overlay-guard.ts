@@ -57,7 +57,8 @@ function captureExcludeIds(session: OverlayCaptureSession | undefined): readonly
 
 /**
  * Wrap a desktop backend so capture, foreground inspect, and HID run inside overlay-guard intervals.
- * `listScreens` is unwrapped because it does not capture pixels, inspect windows, or post input.
+ * `listScreens`, `openInBrowser`, and `openInFinder` are unwrapped because they do not capture pixels,
+ * inspect windows, or post HID.
  * @param inner - platform or fake backend.
  * @param guard - host overlay cloak.
  * @returns a backend that cloaks around capture, inspect, and HID.
@@ -86,5 +87,9 @@ export function wrapDesktopBackend(
     typeText: (input, signal) => guard.withInput(() => inner.typeText(input, signal), signal),
     scroll: (input, signal) => guard.withInput(() => inner.scroll(input, signal), signal),
     hotkey: (input, signal) => guard.withInput(() => inner.hotkey(input, signal), signal),
+    longPress: (input, signal) => guard.withInput(() => inner.longPress(input, signal), signal),
+    drag: (input, signal) => guard.withInput(() => inner.drag(input, signal), signal),
+    openInBrowser: (input, signal) => inner.openInBrowser(input, signal),
+    openInFinder: (input, signal) => inner.openInFinder(input, signal),
   }
 }

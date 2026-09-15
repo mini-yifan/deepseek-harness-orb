@@ -8,7 +8,7 @@ import z from '@deepseek-ai/schemastery'
 /** Loader-accepted Computer Use configuration. */
 export interface Config {
   /**
-   * Milliseconds to wait after a pointer, keyboard, or hotkey action before recapturing.
+   * Milliseconds to wait after a GUI action before recapturing.
    * Default: 500.
    */
   readonly postActionWaitMs?: number

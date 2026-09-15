@@ -6,7 +6,8 @@
  * Tests inject a {@link CommandRunner}; production uses `/usr/bin/osascript`
  * and `/usr/sbin/screencapture`, or the ScreenCaptureKit helper when overlay
  * window ids are active. Foreground inspect uses CGWindowList (skip overlay
- * ids only) plus Finder AppleScript for the current folder.
+ * ids only) plus Finder AppleScript for the current folder. `open_in_browser` and
+ * `open_in_finder` use `/usr/bin/open`.
  * @module @deepseek-ai/dsh-experimental-tool-computer-use/src/macos
  */
 
@@ -22,7 +23,11 @@ import {
   type CapturedScreen,
   type ClickInput,
   type DesktopBackend,
+  type DragInput,
   type HotkeyInput,
+  type LongPressInput,
+  type OpenInBrowserInput,
+  type OpenInFinderInput,
   type ScreenInfo,
   type ScrollInput,
   type TypeInput,
@@ -51,6 +56,7 @@ export type CommandRunner = (
 
 const SCREENCAPTURE = '/usr/sbin/screencapture'
 const OSASCRIPT = '/usr/bin/osascript'
+const OPEN = '/usr/bin/open'
 
 /**
  * Absolute path of the Darwin ScreenCaptureKit overlay-exclude helper.
@@ -90,6 +96,19 @@ export const FINDER_FOLDER_SCRIPT = `tell application "Finder"
         return ""
     end try
 end tell
+`
+
+/** JXA that prints the default https handler bundle id, or null. */
+export const DEFAULT_BROWSER_SCRIPT = `ObjC.import('AppKit')
+const url = $.NSURL.URLWithString('https:')
+const appUrl = $.NSWorkspace.sharedWorkspace.URLForApplicationToOpenURL(url)
+if (!appUrl) {
+  JSON.stringify(null)
+} else {
+  const id = $.NSBundle.bundleWithURL(appUrl).bundleIdentifier
+  const unwrapped = id ? ObjC.unwrap(id) : ''
+  JSON.stringify(typeof unwrapped === 'string' && unwrapped.length > 0 ? unwrapped : null)
+}
 `
 
 /**
@@ -216,6 +235,19 @@ function parseFinderFolder(stdout: string): string | undefined {
   return path
 }
 
+function parseDefaultBrowserBundle(stdout: string): string | undefined {
+  const trimmed = stdout.trim()
+  if (trimmed === '') return undefined
+  try {
+    const parsed: unknown = JSON.parse(trimmed)
+    if (typeof parsed !== 'string') return undefined
+    const bundle = parsed.trim()
+    return bundle === '' ? undefined : bundle
+  } catch {
+    return undefined
+  }
+}
+
 function isAbortError(error: unknown, signal?: AbortSignal): boolean {
   if (signal?.aborted) return true
   return error instanceof Error && error.name === 'AbortError'
@@ -264,6 +296,8 @@ function jxa(script: string): readonly string[] {
 /**
  * Shared JXA posted for every HID action.
  * Numeric CGEvent types: JXA exposes kCG* enums as strings.
+ * Drag posts LeftMouseDragged (6), not MouseMoved (5): the latter relocates the
+ * cursor without delivering mouseDragged: to AppKit and Electron.
  * `input_text` pastes: JXA cannot pass a UniChar buffer to CGEventKeyboardSetUnicodeString,
  * and virtual keycode 0 is the "a" key, so a failed unicode override types "a".
  */
@@ -271,11 +305,12 @@ const HID_RUNTIME = `
 ObjC.import('Cocoa')
 const HID = 0
 const SRC = $.CGEventSourceCreate(1)
-const MOVE = 5
 const LEFT_DOWN = 1
 const LEFT_UP = 2
 const RIGHT_DOWN = 3
 const RIGHT_UP = 4
+const MOVE = 5
+const LEFT_DRAGGED = 6
 const LEFT = 0
 const RIGHT = 1
 const CLICK_STATE = 1
@@ -390,6 +425,26 @@ function scrollAt(x, y, dy) {
     $.CGEventPost(HID, event)
     sleep(20)
   }
+}
+function longPressAt(x, y, durationMs) {
+  postMouse(MOVE, x, y, LEFT, 0)
+  sleep(80)
+  postMouse(LEFT_DOWN, x, y, LEFT, 1)
+  sleep(durationMs)
+  postMouse(LEFT_UP, x, y, LEFT, 1)
+}
+function dragFromTo(x1, y1, x2, y2) {
+  postMouse(MOVE, x1, y1, LEFT, 0)
+  sleep(80)
+  postMouse(LEFT_DOWN, x1, y1, LEFT, 1)
+  sleep(50)
+  var steps = 10
+  for (var i = 1; i <= steps; i++) {
+    var t = i / steps
+    postMouse(LEFT_DRAGGED, x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, LEFT, 1)
+    sleep(20)
+  }
+  postMouse(LEFT_UP, x2, y2, LEFT, 1)
 }
 `.trim()
 
@@ -547,6 +602,56 @@ export function createMacosDesktopBackend(run: CommandRunner = runCommand): Desk
         throw new Error(
           `computer-use: hotkey input failed (Accessibility permission is required): ${errorDetail(error)}`,
         )
+      }
+    },
+
+    async longPress(input: LongPressInput, signal) {
+      const point = roundedPoint(input.position, input.screen)
+      const durationMs = Math.round(input.durationSeconds * 1000)
+      try {
+        await hid(`longPressAt(${point.x}, ${point.y}, ${String(durationMs)})`, signal)
+      } catch (error: unknown) {
+        throw new Error(
+          `computer-use: pointer input failed (Accessibility permission is required): ${errorDetail(error)}`,
+        )
+      }
+    },
+
+    async drag(input: DragInput, signal) {
+      const start = roundedPoint(input.startPosition, input.startScreen)
+      const end = roundedPoint(input.endPosition, input.endScreen)
+      try {
+        await hid(`dragFromTo(${start.x}, ${start.y}, ${end.x}, ${end.y})`, signal)
+      } catch (error: unknown) {
+        throw new Error(
+          `computer-use: pointer input failed (Accessibility permission is required): ${errorDetail(error)}`,
+        )
+      }
+    },
+
+    async openInBrowser(input: OpenInBrowserInput, signal) {
+      try {
+        if (input.url !== undefined) {
+          await run(OPEN, [input.url], { signal })
+          return
+        }
+        const result = await run(OSASCRIPT, jxa(DEFAULT_BROWSER_SCRIPT), { signal })
+        const bundle = parseDefaultBrowserBundle(result.stdout)
+        if (bundle === undefined) {
+          throw new Error('could not resolve the default browser')
+        }
+        await run(OPEN, ['-b', bundle], { signal })
+      } catch (error: unknown) {
+        const target = input.url === undefined ? 'the default browser' : input.url
+        throw new Error(`computer-use: open failed for ${target}: ${errorDetail(error)}`)
+      }
+    },
+
+    async openInFinder(input: OpenInFinderInput, signal) {
+      try {
+        await run(OPEN, input.revealOnly ? ['-R', input.path] : [input.path], { signal })
+      } catch (error: unknown) {
+        throw new Error(`computer-use: open failed for ${input.path}: ${errorDetail(error)}`)
       }
     },
   }

@@ -16,7 +16,7 @@ When the remaining owner is `Finder` or `访达`, a second osascript reads `POSI
 
 Those tags ride existing `user/message` (first-frame plugin notice) and `tool/result` content. There is no new session event, no `ignorable` flag, and no `SESSION_FORMAT_VERSION` bump. `SCREEN_SCHEMA` stays unchanged (`additionalProperties: false`). Structured `foreground` is a sibling field on each GUI tool output so `output.render` can format it.
 
-macOS JXA implements inspect over on-screen layer-0 windows. The fake backend defaults to `{ appName: 'Pages' }` so the authored snapshot pins a stable tag without a folder. The unsupported backend throws the same macOS-only error. `wrapDesktopBackend` runs inspect inside `withCapture` so exclude ids are live; `listScreens` stays unwrapped. Query or parse failures return the focus fallback and must not fail `observeDesktop`. Abort still fails the observation.
+macOS JXA implements inspect over on-screen layer-0 windows. The fake backend defaults to `{ appName: 'Pages' }` so the authored snapshot pins a stable tag without a folder. The unsupported backend throws the same macOS-only error. `wrapDesktopBackend` runs inspect inside `withCapture` so exclude ids are live; `listScreens` and `open_*` stay unwrapped. Query or parse failures return the focus fallback and must not fail `observeDesktop`. Abort still fails the observation.
 
 [Experimental Computer Use](2026-09-13-experimental-computer-use.md) still owns the GUI tools, first-frame attach, and the consent gate.
 

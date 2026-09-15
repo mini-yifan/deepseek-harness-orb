@@ -22,5 +22,9 @@ export function createUnsupportedDesktopBackend(): DesktopBackend {
     typeText: fail,
     scroll: fail,
     hotkey: fail,
+    longPress: fail,
+    drag: fail,
+    openInBrowser: fail,
+    openInFinder: fail,
   }
 }
