@@ -40,7 +40,7 @@ Policy tells the model: known path → `open_in_finder`; visible site → `open_
 
 ## Consequences
 
-The Computer Use catalog is nine exclusive GUI tools plus `code_agent`. `open_*` can raise windows the overlay does not cloak. The path blacklist includes `/private`, so macOS `/tmp` after `realpath` is forbidden. CJK percent-encoding fails at execute with a model-facing diagnostic.
+The Computer Use catalog is ten exclusive GUI tools plus `code_agent`. `open_*` can raise windows the overlay does not cloak. The path blacklist includes `/private`, so macOS `/tmp` after `realpath` is forbidden. CJK percent-encoding fails at execute with a model-facing diagnostic.
 
 ## Testing
 

@@ -69,7 +69,7 @@ async function harness(adapter: LlmAdapter) {
   await ctx.plugin(LocalAttachmentStore, { dshHome: home })
   await ctx.plugin(AgentLoop, { agents: [] })
   const backend = createFakeDesktopBackend()
-  applyComputerUse(ctx, backend, resolveComputerUseConfig({ postActionWaitMs: 0, maxWaitSeconds: 1 }))
+  applyComputerUse(ctx, backend, resolveComputerUseConfig({ postActionWaitMs: 0 }))
   ctx.llm.registerAdapter(['mock'], adapter)
   const agent = await ctx.agentLoop.create(SessionId('computer-use-loop'), { provider: 'mock', model: 'mock' })
   return { ctx, agent, backend }

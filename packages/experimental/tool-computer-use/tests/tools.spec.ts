@@ -1,7 +1,7 @@
 import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId, LlmAdapter, LlmRuntime } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, LlmModelInfo, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
@@ -17,6 +17,7 @@ import * as ComputerUse from '../src/index.ts'
 import { POLICY } from '../src/policy.ts'
 import { formatScreenEnvelope } from '../src/observe.ts'
 import { UNSUPPORTED_DESKTOP_MESSAGE } from '../src/unsupported.ts'
+import * as waitModule from '../src/wait.ts'
 
 const SIGNAL = new AbortController().signal
 
@@ -68,8 +69,13 @@ const homes: string[] = []
 const contexts: Context[] = []
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   for (const ctx of contexts.splice(0)) await ctx.fiber.dispose()
   for (const home of homes.splice(0)) await rm(home, { recursive: true, force: true })
+})
+
+beforeEach(() => {
+  vi.spyOn(waitModule, 'delay').mockResolvedValue(undefined)
 })
 
 async function setup(options: {
@@ -98,7 +104,7 @@ async function setup(options: {
   const backend = createFakeDesktopBackend(
     options.foreground === undefined ? {} : { foreground: options.foreground },
   )
-  applyComputerUse(ctx, backend, resolveComputerUseConfig({ postActionWaitMs: 0, maxWaitSeconds: 0, maxScreens: 4 }))
+  applyComputerUse(ctx, backend, resolveComputerUseConfig({ postActionWaitMs: 0, maxScreens: 4 }))
   return { ctx, backend }
 }
 
@@ -111,8 +117,6 @@ describe('plugin metadata', () => {
     expect(() => resolveComputerUseConfig({ postActionWaitMs: -1 })).toThrow(/postActionWaitMs/u)
     expect(() => resolveComputerUseConfig({ maxScreens: 0 })).toThrow(/maxScreens/u)
     expect(() => resolveComputerUseConfig({ maxScreens: 1.5 })).toThrow(/maxScreens/u)
-    expect(() => resolveComputerUseConfig({ maxWaitSeconds: Number.NaN })).toThrow(/maxWaitSeconds/u)
-    expect(() => resolveComputerUseConfig({ maxWaitSeconds: -1 })).toThrow(/maxWaitSeconds/u)
     expect('default' in ComputerUse).toBe(false)
   })
 })
@@ -160,6 +164,9 @@ describe('computer-use tools', () => {
       signal: SIGNAL, callId: ToolCallId('mode-wait'), name: 'wait', arguments: {},
     })).toEqual({ kind: 'exclusive' })
     expect(ctx.tools.executionMode({
+      signal: SIGNAL, callId: ToolCallId('mode-long-wait'), name: 'long_wait', arguments: { wait_seconds: 20 },
+    })).toEqual({ kind: 'exclusive' })
+    expect(ctx.tools.executionMode({
       signal: SIGNAL, callId: ToolCallId('mode-long-press'), name: 'long_press',
       arguments: { screen_index: 0, position: [0, 0] },
     })).toEqual({ kind: 'exclusive' })
@@ -197,14 +204,13 @@ describe('computer-use tools', () => {
     expect(scrolled.isError).toBe(false)
     const hotkey = await execute(ctx, 'hotkey', { keys: ['cmd', 'c'] })
     expect(hotkey.isError).toBe(false)
-    const waited = await execute(ctx, 'wait', { wait_seconds: 0 })
+    const waited = await execute(ctx, 'wait', {})
     expect(waited.isError).toBe(false)
-    expect(text(waited)).toContain('Waited 0s')
-    const clamped = await execute(ctx, 'wait', { wait_seconds: 10 })
-    expect(clamped.isError).toBe(false)
-    expect(text(clamped)).toContain('Waited 0s')
-    const defaultWait = await execute(ctx, 'wait', {})
-    expect(text(defaultWait)).toContain('Waited 0s')
+    expect(text(waited)).toContain('Waited 1s')
+    expect(waitModule.delay).toHaveBeenCalledWith(1000, SIGNAL)
+    const extra = await execute(ctx, 'wait', { wait_seconds: 5 })
+    expect(extra.isError).toBe(false)
+    expect(text(extra)).toContain('Waited 1s')
     const right = await execute(ctx, 'click', { screen_index: 0, position: [1, 1], button: 'right', count: 2 })
     expect(right.isError).toBe(false)
     expect(backend.actions.some(action => action.type === 'click' && action.input.button === 'right' && action.input.count === 2)).toBe(true)
@@ -224,8 +230,21 @@ describe('computer-use tools', () => {
     })).toMatchObject({ card: 'generic', title: 'Scroll' })
     expect(ctx.tools.get('hotkey')?.presentCall?.({ keys: ['c'] }))
       .toMatchObject({ card: 'generic', title: 'Hotkey' })
-    expect(ctx.tools.get('wait')?.presentCall?.({ wait_seconds: 2 }))
+    expect(ctx.tools.get('wait')?.presentCall?.({}))
       .toMatchObject({ card: 'generic', title: 'Wait' })
+  })
+
+  it('long-waits only the 20/30/60/120 buckets', async () => {
+    const { ctx } = await setup()
+    for (const seconds of [20, 30, 60, 120] as const) {
+      vi.mocked(waitModule.delay).mockClear()
+      const result = await execute(ctx, 'long_wait', { wait_seconds: seconds })
+      expect(result.isError).toBe(false)
+      expect(text(result)).toContain(`Waited ${String(seconds)}s`)
+      expect(waitModule.delay).toHaveBeenCalledWith(seconds * 1000, SIGNAL)
+    }
+    expect(ctx.tools.get('long_wait')?.presentCall?.({ wait_seconds: 60 }))
+      .toMatchObject({ card: 'generic', title: 'Long wait' })
   })
 
   it('long-presses, drags, and opens through the fake backend', async () => {
@@ -334,8 +353,16 @@ describe('computer-use tools', () => {
     expect(text(plain)).toContain('does not declare image input')
     const empty = await execute(ctx, 'hotkey', { keys: [] })
     expect(empty.isError).toBe(true)
-    const wait = await execute(ctx, 'wait', { wait_seconds: -1 })
-    expect(wait.isError).toBe(true)
+    const omitted = await execute(ctx, 'long_wait', {})
+    expect(omitted.isError).toBe(true)
+    expect(text(omitted)).toMatch(/wait_seconds/u)
+    for (const seconds of [1, 5, 19, 25]) {
+      const invalid = await execute(ctx, 'long_wait', { wait_seconds: seconds })
+      expect(invalid.isError).toBe(true)
+    }
+    const textLongWait = await execute(ctx, 'long_wait', { wait_seconds: 20 }, 'text-model')
+    expect(textLongWait.isError).toBe(true)
+    expect(text(textLongWait)).toContain('does not declare image input')
     const duration = await execute(ctx, 'long_press', {
       screen_index: 0, position: [0, 0], duration_seconds: 11,
     })
@@ -383,6 +410,10 @@ describe('computer-use tools', () => {
     expect(POLICY).toContain('Do not use bash open as a substitute')
     expect(POLICY).toContain('Drag sliders, window edges, and files with drag')
     expect(POLICY).toContain('Press and hold with long_press')
+    expect(POLICY).toContain('call wait')
+    expect(POLICY).toContain('call long_wait with the smallest of 20, 30, 60, or 120')
+    expect(POLICY).toContain('Do not use long_wait for ordinary page load')
+    expect(POLICY).toContain('Do not call wait, long_wait, or bash sleep')
   })
 
   it('unregisters tools and the policy on fiber disposal', async () => {
@@ -401,7 +432,7 @@ describe('computer-use tools', () => {
     )
     const fiber = await ctx.plugin(computerUse)
     expect(ctx.tools.schemas().map(schema => schema.name).sort()).toEqual([
-      'click', 'drag', 'hotkey', 'input_text', 'long_press',
+      'click', 'drag', 'hotkey', 'input_text', 'long_press', 'long_wait',
       'open_in_browser', 'open_in_finder', 'scroll', 'wait',
     ])
     expect(ctx.tools.schemas().map(schema => schema.name)).not.toContain('code_agent')
@@ -432,7 +463,7 @@ describe('computer-use tools', () => {
     ]))
     apply(host, { postActionWaitMs: 0 })
     expect(host.tools.schemas().map(schema => schema.name).sort()).toEqual([
-      'click', 'drag', 'hotkey', 'input_text', 'long_press',
+      'click', 'drag', 'hotkey', 'input_text', 'long_press', 'long_wait',
       'open_in_browser', 'open_in_finder', 'scroll', 'wait',
     ])
     expect(host.tools.schemas().map(schema => schema.name)).not.toContain('code_agent')
@@ -505,7 +536,7 @@ describe('screen envelopes', () => {
     expect(text(finder)).not.toContain('<path>')
 
     const { ctx: fallbackCtx } = await setup({ foreground: FOCUS_FALLBACK_FOREGROUND })
-    const fallback = await execute(fallbackCtx, 'wait', { wait_seconds: 0 })
+    const fallback = await execute(fallbackCtx, 'wait', {})
     expect(text(fallback)).toContain('<frontmost_app>none</frontmost_app>')
     expect(text(fallback)).toContain('<focus_note>')
   })

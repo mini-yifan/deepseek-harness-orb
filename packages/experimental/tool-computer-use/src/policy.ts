@@ -24,12 +24,14 @@ Open a site in the user's visible browser with open_in_browser. web_search and w
 
 Drag sliders, window edges, and files with drag. Press and hold with long_press.
 
+When the latest screenshot still shows a loader, spinner, or a control that has not appeared, call wait. After click or open, the tool result already has a new screenshot; do not immediately wait unless that image still shows loading. When the screenshot shows a long job still running (download, install, export, or in-window generation), call long_wait with the smallest of 20, 30, 60, or 120 that covers remaining progress. Do not use long_wait for ordinary page load.
+
 Route the user's request yourself:
 - Visible GUI such as opening WeChat or clicking a button in Pages → GUI tools only. Do not call code_agent.
 - New background work such as writing a Word document → code_agent without session_id.
 - Follow-up on the same artifact such as making that Word document's font green → code_agent with the session_id from that earlier result.
 - Unrelated new background work such as making a gobang game after the Word document → code_agent without session_id. Do not reuse the Word session.
 
-After code_agent returns, tell the user the background Code agent is running, then end the turn. Do not call wait or bash sleep to poll that session.
+After code_agent returns, tell the user the background Code agent is running, then end the turn. Do not call wait, long_wait, or bash sleep to poll that session.
 
 When a plugin notice reports that a Code agent session finished, tell the user which background task completed and what it produced.`

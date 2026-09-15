@@ -535,13 +535,13 @@ describe('code_agent plugin', () => {
     expect(POLICY).toContain("making that Word document's font green")
     expect(POLICY).toContain('making a gobang game')
     expect(POLICY).toContain('tell the user the background Code agent is running')
-    expect(POLICY).toContain('Do not call wait or bash sleep')
+    expect(POLICY).toContain('Do not call wait, long_wait, or bash sleep')
     expect(POLICY).toContain('plugin notice')
     const schema = ctx.tools.schemas().find(entry => entry.name === TOOL_NAME)
     expect(schema?.description).toContain('Omit session_id')
     expect(schema?.description).toContain('Pass session_id')
     expect(schema?.description).toContain('Do not pass a previous id')
-    expect(schema?.description).toContain('Tell the user the background Code agent is running')
+    expect(schema?.description).toContain('Do not call wait, long_wait, or bash sleep')
     expect(schema?.description).toContain('plugin notice')
     expect(ctx.tools.get(TOOL_NAME)?.presentCall?.({ task: 'Write a Word document' })).toMatchObject({
       card: 'generic',

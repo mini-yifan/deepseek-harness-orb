@@ -114,13 +114,8 @@ describe('observeDesktop', () => {
     const observation = await observeDesktop(
       ctx,
       {
-        listScreens: fake.listScreens,
-        capture: fake.capture,
+        ...fake,
         inspectForeground: () => Promise.reject(new Error('ax failed')),
-        click: fake.click,
-        typeText: fake.typeText,
-        scroll: fake.scroll,
-        hotkey: fake.hotkey,
       },
       resolveComputerUseConfig({}),
       SIGNAL,
@@ -142,13 +137,8 @@ describe('observeDesktop', () => {
     await expect(observeDesktop(
       ctx,
       {
-        listScreens: fake.listScreens,
-        capture: fake.capture,
+        ...fake,
         inspectForeground: () => Promise.reject(abort),
-        click: fake.click,
-        typeText: fake.typeText,
-        scroll: fake.scroll,
-        hotkey: fake.hotkey,
       },
       resolveComputerUseConfig({}),
       SIGNAL,
@@ -158,16 +148,11 @@ describe('observeDesktop', () => {
     await expect(observeDesktop(
       ctx,
       {
-        listScreens: fake.listScreens,
-        capture: fake.capture,
+        ...fake,
         inspectForeground: () => {
           controller.abort(new Error('stopped'))
           return Promise.reject(new Error('ax failed'))
         },
-        click: fake.click,
-        typeText: fake.typeText,
-        scroll: fake.scroll,
-        hotkey: fake.hotkey,
       },
       resolveComputerUseConfig({}),
       controller.signal,

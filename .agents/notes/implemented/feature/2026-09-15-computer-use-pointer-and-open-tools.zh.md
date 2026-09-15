@@ -40,7 +40,7 @@ Computer Use preset 已经能点击、输入、滚动、热键与等待，但不
 
 ## 影响
 
-Computer Use 目录是九个互斥 GUI 工具加 `code_agent`。`open_*` 可以弹出 overlay 不会遮蔽的窗口。路径黑名单含 `/private`，因此 macOS 上 `realpath` 后的 `/tmp` 被禁止。CJK 百分号编码会在 execute 以面向模型的诊断失败。
+Computer Use 目录是十个互斥 GUI 工具加 `code_agent`。`open_*` 可以弹出 overlay 不会遮蔽的窗口。路径黑名单含 `/private`，因此 macOS 上 `realpath` 后的 `/tmp` 被禁止。CJK 百分号编码会在 execute 以面向模型的诊断失败。
 
 ## 测试
 
