@@ -8,7 +8,7 @@ function isRemoteStream(input: string | URL): boolean {
   return String(input).includes('/.dsh/remote-stream')
 }
 
-function hangingStreamResponse(signal: AbortSignal | undefined): {
+function hangingStreamResponse(signal: AbortSignal | null | undefined): {
   ok: true
   body: { getReader(): { read(): Promise<never>; cancel(): void } }
 } {
@@ -38,8 +38,8 @@ function createNdjsonPump() {
   const chunks: Uint8Array[] = []
   let wake: (() => void) | undefined
   let aborted: unknown
-  const attach = (signal: AbortSignal | undefined): void => {
-    if (signal === undefined) return
+  const attach = (signal: AbortSignal | null | undefined): void => {
+    if (signal == null) return
     const onAbort = (): void => {
       aborted = signal.reason
       wake?.()
@@ -52,7 +52,7 @@ function createNdjsonPump() {
       chunks.push(encoder.encode(`${JSON.stringify(frame)}\n`))
       wake?.()
     },
-    response(signal: AbortSignal | undefined) {
+    response(signal: AbortSignal | null | undefined) {
       attach(signal)
       return {
         ok: true as const,
@@ -645,8 +645,8 @@ it('shows a Computer Use question on the overlay and submits a selected option',
       },
     })
     await expect.poll(() => document.querySelector('#question-title')?.textContent).toBe('Which app should I open?')
-    expect(document.querySelector('#question')?.hidden).toBe(false)
-    expect(document.querySelector('#transcript')?.hidden).toBe(true)
+    expect(document.querySelector<HTMLElement>('#question')?.hidden).toBe(false)
+    expect(document.querySelector<HTMLElement>('#transcript')?.hidden).toBe(true)
     expect(document.body.classList.contains('asking')).toBe(true)
     expect(document.querySelector('#question-eyebrow')?.textContent).toBe('Desktop')
     expect(document.querySelector('.question-recommended')?.textContent).toBe('Recommended')
@@ -667,7 +667,7 @@ it('shows a Computer Use question on the overlay and submits a selected option',
         },
       },
     })
-    await expect.poll(() => document.querySelector('#question')?.hidden).toBe(true)
+    await expect.poll(() => document.querySelector<HTMLElement>('#question')?.hidden).toBe(true)
     expect(document.body.classList.contains('asking')).toBe(false)
   } finally { overlay.dom.window.close() }
 })
@@ -783,7 +783,7 @@ it('delegates questions from other agents with next()', async () => {
       eventId: 'ev-other',
       outcome: { kind: 'next' },
     })
-    expect(overlay.dom.window.document.querySelector('#question')?.hidden).toBe(true)
+    expect(overlay.dom.window.document.querySelector<HTMLElement>('#question')?.hidden).toBe(true)
   } finally { overlay.dom.window.close() }
 })
 
@@ -802,7 +802,7 @@ it('dismisses the card when the Host cancels the waterfall', async () => {
     })
     await expect.poll(() => document.querySelector('#question-title')?.textContent).toBe('Waiting elsewhere?')
     overlay.pump.push({ type: 'cancel', eventId: 'ev-host-cancel' })
-    await expect.poll(() => document.querySelector('#question')?.hidden).toBe(true)
+    await expect.poll(() => document.querySelector<HTMLElement>('#question')?.hidden).toBe(true)
     expect(resultCalls(overlay.calls)).toEqual([])
   } finally { overlay.dom.window.close() }
 })
@@ -830,19 +830,19 @@ it('keeps an unanswered question while History switches away and back', async ()
       'Open WeChat',
       'Click Pages',
     ])
-    expect(document.querySelector('#question')?.hidden).toBe(true)
+    expect(document.querySelector<HTMLElement>('#question')?.hidden).toBe(true)
     const prior = [...document.querySelectorAll('.history-row')].find(node => node.textContent === 'Click Pages')
     if (prior === undefined) throw new Error('missing prior Computer Use row')
     prior.dispatchEvent(new overlay.dom.window.Event('click', { bubbles: true }))
     await expect.poll(() => document.querySelector('.bubble.user')?.textContent).toBe('Click Pages')
-    expect(document.querySelector('#question')?.hidden).toBe(true)
+    expect(document.querySelector<HTMLElement>('#question')?.hidden).toBe(true)
     expect(resultCalls(overlay.calls)).toEqual([])
     document.querySelector<HTMLButtonElement>('#history')?.click()
     await expect.poll(() => [...document.querySelectorAll('.history-row')].some(node => node.textContent === 'Open WeChat')).toBe(true)
     const original = [...document.querySelectorAll('.history-row')].find(node => node.textContent === 'Open WeChat')
     if (original === undefined) throw new Error('missing original Computer Use row')
     original.dispatchEvent(new overlay.dom.window.Event('click', { bubbles: true }))
-    await expect.poll(() => document.querySelector('#question')?.hidden).toBe(false)
+    await expect.poll(() => document.querySelector<HTMLElement>('#question')?.hidden).toBe(false)
     expect(document.querySelector('#question-title')?.textContent).toBe('Stay with this chat?')
     expect(resultCalls(overlay.calls)).toEqual([])
   } finally { overlay.dom.window.close() }
