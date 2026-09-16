@@ -143,7 +143,14 @@ describe('OverlayChatRoot', () => {
     expect(css).toContain('--dsh-chat-content-width: 100%')
     expect(css).toContain('--dsh-composer-side-clearance: 0px')
     expect(css).toContain('[data-chat-turn-rail]')
-    const view = vi.fn(() => <span>chat</span>)
+    const view = vi.fn((
+      _name: string,
+      _owner: {
+        openView: (view: string, focus: string) => void
+        completeViewRequest: () => void
+      },
+      _options?: { only: string },
+    ) => <span>chat</span>)
     const props = {
       useSessions: (select: (state: { current: string }) => unknown) => select({ current: 'session-orb' }),
       SessionProvider: ({
@@ -160,10 +167,7 @@ describe('OverlayChatRoot', () => {
     expect(view).toHaveBeenCalledWith('conversation.view', expect.objectContaining({
       viewRequest: null,
     }), { only: 'chat' })
-    const seat = view.mock.calls[0]![1] as {
-      openView: (view: string, focus: string) => void
-      completeViewRequest: () => void
-    }
+    const seat = view.mock.calls[0]![1]
     seat.openView('chat', 'focus')
     seat.completeViewRequest()
     rendered.unmount()
