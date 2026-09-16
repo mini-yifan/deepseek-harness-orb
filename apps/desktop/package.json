@@ -7,7 +7,7 @@
   "type": "module",
   "main": "lib/main.js",
   "scripts": {
-    "build": "tsc -b && tsdown",
+    "build": "tsc -b && tsdown && node scripts/build-macos-selection.mjs",
     "dev": "tsx scripts/dev.ts",
     "start": "tsx scripts/dev.ts --skip-build",
     "prepare:runtime": "tsx scripts/prepare-runtime.ts",

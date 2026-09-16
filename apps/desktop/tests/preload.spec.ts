@@ -9,22 +9,35 @@ vi.mock('electron', () => electron)
 
 afterEach(() => { vi.clearAllMocks(); vi.resetModules() })
 
-it('exposes overlay expand, clamp, and dsh_orb workspace IPC', async () => {
+it('exposes overlay expand, clamp, dsh_orb workspace, and selection IPC', async () => {
   await import('../src/preload.ts')
   const api = electron.contextBridge.exposeInMainWorld.mock.calls[0]?.[1] as DshDesktopApi
   expect(api.floating).toMatchObject({
     setExpanded: expect.any(Function),
     clamp: expect.any(Function),
     orbWorkspacePath: expect.any(Function),
+    setSessionRunning: expect.any(Function),
+    onSelectionPrompt: expect.any(Function),
+  })
+  expect(api.selection).toMatchObject({
+    search: expect.any(Function),
+    translate: expect.any(Function),
+    explain: expect.any(Function),
+    setLanguage: expect.any(Function),
+    onState: expect.any(Function),
   })
   expect(api.floating).not.toHaveProperty('toggle')
   expect(api.floating).not.toHaveProperty('dock')
   await api.floating.setExpanded(true)
   await api.floating.clamp()
   await api.floating.orbWorkspacePath()
+  await api.floating.setSessionRunning(true)
+  await api.selection.search()
   expect(electron.ipcRenderer.invoke.mock.calls).toEqual([
     [DESKTOP_IPC.floatingSetExpanded, true],
     [DESKTOP_IPC.floatingClamp],
     [DESKTOP_IPC.floatingOrbWorkspace],
+    [DESKTOP_IPC.floatingRunning, true],
+    [DESKTOP_IPC.selectionSearch],
   ])
 })

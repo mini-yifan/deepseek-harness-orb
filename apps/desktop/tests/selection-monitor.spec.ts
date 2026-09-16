@@ -1,0 +1,38 @@
+import { describe, expect, it } from 'vitest'
+import { parseSelectionHelperLine, startSelectionMonitor } from '../src/selection-monitor.ts'
+
+describe('selection helper protocol', () => {
+  it('parses ready, untrusted, pointer, key, and selection lines', () => {
+    expect(parseSelectionHelperLine('{"type":"ready"}')).toEqual({ type: 'ready' })
+    expect(parseSelectionHelperLine('{"type":"untrusted"}')).toEqual({ type: 'untrusted' })
+    expect(parseSelectionHelperLine('{"type":"key"}')).toEqual({ type: 'key' })
+    expect(parseSelectionHelperLine('{"type":"mouse-down","x":10,"y":20}')).toEqual({
+      type: 'mouse-down',
+      x: 10,
+      y: 20,
+    })
+    expect(parseSelectionHelperLine('{"type":"selection","text":"  hi  ","pid":3,"bundle":"com.app"}')).toEqual({
+      type: 'selection',
+      text: '  hi  ',
+      pid: 3,
+      bundle: 'com.app',
+    })
+    expect(parseSelectionHelperLine('{"type":"selection","text":"hi","bounds":{"x":1,"y":2,"width":3,"height":4}}'))
+      .toEqual({
+        type: 'selection',
+        text: 'hi',
+        bounds: { x: 1, y: 2, width: 3, height: 4 },
+      })
+  })
+
+  it('drops blank, invalid, and empty-text payloads', () => {
+    expect(parseSelectionHelperLine('')).toBeUndefined()
+    expect(parseSelectionHelperLine('not-json')).toBeUndefined()
+    expect(parseSelectionHelperLine('{"type":"selection","text":"   "}')).toBeUndefined()
+    expect(parseSelectionHelperLine('{"type":"mouse-up","x":"1","y":2}')).toBeUndefined()
+  })
+
+  it('does not spawn a helper when the binary is missing', () => {
+    expect(startSelectionMonitor({ onEvent: () => undefined })).toBeUndefined()
+  })
+})

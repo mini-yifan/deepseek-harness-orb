@@ -203,4 +203,5 @@ pnpm run prepare:desktop
 - 依赖包含 lifecycle script 的桌面插件，只有其包名进入桌面项目经过评审的 `allowBuilds` 策略后才能安装。
 - 桌面壳与 CLI dsh 共享 `$DSH_HOME` 下的会话、设置、凭据、工作区和存储，但可执行包、插件激活、锁文件与包管理器状态彼此隔离。
 - macOS 悬浮球是同一 Desktop Host 上的第二扇 Electron overlay。它把 Computer Use 会话放在侧栏 `dsh_orb` 文件夹下；主窗口保持当前会话。Windows 仍是单主窗口。
-- Computer Use 作为签名 runtime extra 放在 `extraResources/dsh` 下，而不是 Desktop Host 的 npm 依赖。主窗口始终可被截到。macOS overlay 由 ScreenCaptureKit 窗口排除从 Computer Use 截图中省略，并只在对应的 HID 突发期间点击穿透。
+- macOS 拖拽划选后，不激活的工具条提供搜索 / 翻译 / Agent 讲解。翻译和讲解写入球的 Computer Use 会话；搜索打开 Bing。Windows 没有工具条。
+- Computer Use 作为签名 runtime extra 放在 `extraResources/dsh` 下，而不是 Desktop Host 的 npm 依赖。主窗口始终可被截到。macOS overlay 与划词工具条由 ScreenCaptureKit 窗口排除从 Computer Use 截图中省略；HID 点击穿透作用于球，并在该突发期间隐藏工具条。

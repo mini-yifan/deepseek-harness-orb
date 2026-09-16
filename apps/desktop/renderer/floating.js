@@ -261,6 +261,7 @@ async function main() {
     document.body.classList.toggle('running', running)
     stop.hidden = !expanded || !running
     syncGif()
+    void api.floating.setSessionRunning(running)
   }
 
   function applyDirection(state) {
@@ -847,6 +848,23 @@ async function main() {
     void finishPointer(event)
   })
 
+  api.floating.onSelectionPrompt(async payload => {
+    const text = typeof payload?.text === 'string' ? payload.text.trim() : ''
+    if (text === '') return
+    setHistoryOpen(false)
+    const id = await ensureSession()
+    await setExpanded(true, true)
+    setRunning(true)
+    await rpc('session/prompt', {
+      request: {
+        requestId: rpcId(),
+        sessionId: id,
+        mode: 'queue',
+        content: [{ type: 'text', text }],
+      },
+    })
+    await refreshOverlay()
+  })
   document.querySelector('#composer').addEventListener('submit', async event => {
     event.preventDefault()
     const text = prompt.value.trim()

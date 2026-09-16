@@ -174,6 +174,8 @@ it('creates a Computer Use session on dsh_orb and sends from the overlay', async
       clamp: vi.fn(),
       setExpanded,
       orbWorkspacePath: async () => '/tmp/dsh_orb',
+      setSessionRunning: vi.fn(),
+      onSelectionPrompt: () => () => {},
     },
   }
   Object.defineProperty(dom.window, 'dshDesktop', { value: api })
@@ -281,6 +283,8 @@ it('collapses then moves by the ball grab offset instead of the window origin', 
       clamp: vi.fn(),
       setExpanded,
       orbWorkspacePath: async () => '/tmp/dsh_orb',
+      setSessionRunning: vi.fn(),
+      onSelectionPrompt: () => () => {},
     },
   }
   Object.defineProperty(dom.window, 'dshDesktop', { value: api })
@@ -470,6 +474,8 @@ it('lists orb Computer Use chats and reopens the selected session', async () => 
       clamp: vi.fn(),
       setExpanded: async (expanded: boolean) => ({ expanded, horizontal: 'left', vertical: 'up' }),
       orbWorkspacePath: async () => '/tmp/dsh_orb',
+      setSessionRunning: vi.fn(),
+      onSelectionPrompt: () => () => {},
     },
   }
   Object.defineProperty(dom.window, 'dshDesktop', { value: api })
@@ -613,6 +619,8 @@ async function mountQuestionOverlay() {
         clamp: vi.fn(),
         setExpanded,
         orbWorkspacePath: async () => '/tmp/dsh_orb',
+        setSessionRunning: vi.fn(),
+        onSelectionPrompt: () => () => {},
       },
     },
   })
@@ -849,4 +857,91 @@ it('keeps an unanswered question while History switches away and back', async ()
     expect(document.querySelector('#question-title')?.textContent).toBe('Stay with this chat?')
     expect(resultCalls(overlay.calls)).toEqual([])
   } finally { overlay.dom.window.close() }
+})
+
+it('expands and session/prompts a Desktop selection-toolbar message', async () => {
+  const preamble = 'Desktop selection. Answer in this chat only. Do not call GUI tools or code_agent.'
+  const promptText = `${preamble}\n\nExplain this text:\n\nhello`
+  const dom = new JSDOM(readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8'), {
+    runScripts: 'outside-only',
+    url: 'dsh-app://shell/floating.html',
+  })
+  const calls: { method: string; payload: unknown }[] = []
+  const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+    if (isRemoteStream(_input)) return hangingStreamResponse(init?.signal)
+    const body = JSON.parse(String(init?.body)) as {
+      rpcId: string
+      method: string
+      payload: { args: Record<string, unknown> }
+    }
+    calls.push({ method: body.method, payload: body.payload.args })
+    let value: unknown = {}
+    if (body.method === 'workspace/create') {
+      value = { workspace: { workspaceId: 'ws-orb' }, created: true }
+    }
+    if (body.method === 'session/create') value = { sessionId: 'session-orb', agentPreset: 'computer-use' }
+    if (body.method === 'session/modelCatalog') {
+      value = { groups: [{ id: 'deepseek-official', models: [{ id: 'deepseek-flash' }] }] }
+    }
+    if (body.method === 'session/page') value = { records: [] }
+    if (body.method === 'session/list') {
+      value = { items: [{ sessionId: 'session-orb', running: false, projections: { asOfSeq: 0 } }] }
+    }
+    if (body.method === 'session/prompt') value = { accepted: true }
+    return {
+      ok: true,
+      json: async () => ({
+        type: 'server-response',
+        rpcId: body.rpcId,
+        result: { ok: true, value },
+      }),
+    }
+  })
+  Object.defineProperty(dom.window, 'fetch', { value: fetchMock })
+  Object.defineProperty(dom.window, 'crypto', { value: globalThis.crypto })
+  const setSessionId = vi.fn()
+  const setExpanded = vi.fn(async (expanded: boolean) => ({
+    expanded,
+    horizontal: 'left',
+    vertical: 'up',
+  }))
+  const setSessionRunning = vi.fn()
+  let selectionPrompt: ((payload: { text: string }) => void) | undefined
+  const api = {
+    locale: async () => resolveDesktopLocale('en'),
+    backend: {
+      status: async () => ({ phase: 'ready' }),
+      subscribe: vi.fn(),
+    },
+    floating: {
+      sessionId: async () => undefined,
+      setSessionId,
+      move: vi.fn(),
+      clamp: vi.fn(),
+      setExpanded,
+      orbWorkspacePath: async () => '/tmp/dsh_orb',
+      setSessionRunning,
+      onSelectionPrompt(listener: (payload: { text: string }) => void) {
+        selectionPrompt = listener
+        return () => {}
+      },
+    },
+  }
+  Object.defineProperty(dom.window, 'dshDesktop', { value: api })
+  try {
+    runInContext(readFileSync(new URL('../renderer/floating.js', import.meta.url), 'utf8'), dom.getInternalVMContext())
+    await expect.poll(() => setSessionId.mock.calls).toEqual([['session-orb']])
+    if (selectionPrompt === undefined) throw new Error('missing selection prompt listener')
+    selectionPrompt({ text: promptText })
+    await expect.poll(() => calls.some(call => call.method === 'session/prompt')).toBe(true)
+    expect(calls.find(call => call.method === 'session/prompt')?.payload).toMatchObject({
+      request: {
+        sessionId: 'session-orb',
+        mode: 'queue',
+        content: [{ type: 'text', text: promptText }],
+      },
+    })
+    expect(setExpanded.mock.calls.some(call => call[0] === true)).toBe(true)
+    expect(setSessionRunning).toHaveBeenCalledWith(true)
+  } finally { dom.window.close() }
 })

@@ -28,6 +28,7 @@ import {
 } from './observe.ts'
 import { POLICY } from './policy.ts'
 import { assertImageCapableRoute, routeAcceptsImages } from './route.ts'
+import { isDesktopSelectionTurn } from './selection-turn.ts'
 import { pairScreenshotFiles, writeDesktopScreenshots } from './screenshot.ts'
 import { delay } from './wait.ts'
 import { LONG_WAIT_SECONDS, WAIT_SECONDS, requireLongWaitSeconds } from './wait-args.ts'
@@ -887,6 +888,7 @@ export function applyComputerUse(
   ): Promise<PreStepDecision> => {
     const decision = await next()
     if (decision.kind === 'reject' || decision.messages.length === 0) return decision
+    if (isDesktopSelectionTurn(messages)) return decision
     if (!messages.some(message => message.source.kind === 'user')) return decision
     if (!await routeAcceptsImages(ctx, agent, signal)) return decision
     signal.throwIfAborted()

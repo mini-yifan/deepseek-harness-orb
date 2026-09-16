@@ -536,6 +536,10 @@ describe('computer-use tools', () => {
     expect(POLICY).toContain('Do not call screenshot merely to see the window')
     expect(POLICY).toContain('Call screenshot when the user asked for a screenshot file')
     expect(POLICY).toContain('Do not call wait, long_wait, or bash sleep')
+    expect(POLICY).toContain(
+      'When a user message starts with "Desktop selection. Answer in this chat only. Do not call GUI tools or code_agent."',
+    )
+    expect(POLICY).toContain('Do not call GUI tools, code_agent, or screenshot on that turn')
   })
 
   it('unregisters tools and the policy on fiber disposal', async () => {

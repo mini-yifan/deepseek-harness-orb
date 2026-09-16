@@ -42,9 +42,11 @@ pnpm run start:desktop
 
 ## 使用 macOS 悬浮球
 
-Host 就绪后才会创建球。悬停展开白底面板，球留在输入胶囊一角。单击固定面板；再点取消固定，指针离开后折叠。拖动移动球并夹在屏幕内，不吸边。面板显示气泡、单行输入（回车发送）、仅 Computer Use 会话运行时出现在输入胶囊里、与球相对一端的停止，以及左上角**历史**以列出并重新打开 `dsh_orb` 上的 Computer Use 对话，右上角**新建**以在该文件夹上再开一条 Computer Use 对话。当 Computer Use agent 向用户提问时，展开面板会显示题目和选项或输入框，可直接在球上作答；主窗口仍可回答同一请求。没有发送按钮、模式选择器、语音、划词或圈选。
+Host 就绪后才会创建球。悬停展开白底面板，球留在输入胶囊一角。单击固定面板；再点取消固定，指针离开后折叠。拖动移动球并夹在屏幕内，不吸边。面板显示气泡、单行输入（回车发送）、仅 Computer Use 会话运行时出现在输入胶囊里、与球相对一端的停止，以及左上角**历史**以列出并重新打开 `dsh_orb` 上的 Computer Use 对话，右上角**新建**以在该文件夹上再开一条 Computer Use 对话。当 Computer Use agent 向用户提问时，展开面板会显示题目和选项或输入框，可直接在球上作答；主窗口仍可回答同一请求。没有发送按钮、模式选择器、语音或圈选。
 
-输入框占位符是「向桌面 agent 发送消息…」。发送后，球会话使用 Computer Use 与 DeepSeek-V41-Flash、思考模式 Max。停止按钮只取消球的 Computer Use 会话，不会停止侧栏里的标准会话。右键菜单提供「打开主窗口」和「退出 DeepSeek Harness」；只有明确退出才会结束进程。
+在其他应用里拖拽划选后，工具条提供**搜索**（默认浏览器打开 Bing）、**翻译**（中文或英文，写入球当前 Computer Use 对话）和 **Agent 讲解**（同一对话，不附带首帧截图）。右键球可关闭工具条。Mac 需要允许辅助功能；第一次读取失败会打开系统设置。
+
+输入框占位符是「向桌面 agent 发送消息…」。发送后，球会话使用 Computer Use 与 DeepSeek-V41-Flash、思考模式 Max。停止按钮只取消球的 Computer Use 会话，不会停止侧栏里的标准会话。右键菜单提供「打开主窗口」、开启或关闭划词，以及「退出 DeepSeek Harness」；只有明确退出才会结束进程。
 
 球上 Computer Use 的 bash 和文件系统默认为完全权限，因此可以写入 `dsh_orb` 以外的位置。后台 `code_agent` 会话仍是工作区内修改。
 
@@ -63,7 +65,7 @@ Host 就绪后才会创建球。悬停展开白底面板，球留在输入胶囊
 
 ## 限制
 
-悬浮球只做 Mac。没有语音、划词、圈选或逐次点击批准。Computer Use 通过 ScreenCaptureKit 窗口排除，只在那一次截屏里省略球和展开面板，只在那一次 HID 期间让整扇 overlay 点击穿透；主窗口始终可被截到、可被点到。Computer Use 包是签名 runtime extra，不是 Desktop Host 的 npm 依赖。
+悬浮球只做 Mac。没有语音、圈选或逐次点击批准。Computer Use 通过 ScreenCaptureKit 窗口排除，只在那一次截屏里省略球、展开面板和划词工具条，只在那一次 HID 期间让整扇 overlay 点击穿透并隐藏工具条；主窗口始终可被截到、可被点到。Computer Use 包是签名 runtime extra，不是 Desktop Host 的 npm 依赖。
 
 ## 继续阅读
 

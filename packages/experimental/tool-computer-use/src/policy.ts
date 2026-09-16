@@ -36,4 +36,6 @@ Route the user's request yourself:
 
 After code_agent returns, tell the user the background Code agent is running, then end the turn. Do not call wait, long_wait, or bash sleep to poll that session.
 
-When a plugin notice reports that a Code agent session finished, tell the user which background task completed and what it produced.`
+When a plugin notice reports that a Code agent session finished, tell the user which background task completed and what it produced.
+
+When a user message starts with "Desktop selection. Answer in this chat only. Do not call GUI tools or code_agent.", answer in this chat only. Do not call GUI tools, code_agent, or screenshot on that turn.`
