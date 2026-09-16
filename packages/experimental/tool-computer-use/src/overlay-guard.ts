@@ -7,7 +7,7 @@ import type { DesktopBackend } from './backend.ts'
 import { runWithCaptureExcludeWindowIds } from './capture-exclude.ts'
 
 /**
- * Overlay CGWindowIDs to omit from one ScreenCaptureKit display capture.
+ * Overlay CGWindowIDs to omit from one ScreenCaptureKit window capture.
  * Desktop Host fills this from Electron's overlay-guard ack; CLI leaves it empty.
  */
 export interface OverlayCaptureSession {
@@ -56,19 +56,26 @@ function captureExcludeIds(session: OverlayCaptureSession | undefined): readonly
 }
 
 /**
- * Wrap a desktop backend so capture, foreground inspect, and HID run inside overlay-guard intervals.
- * `listScreens`, `openInBrowser`, `openInFinder`, and `copyImageToClipboard` are unwrapped because
- * they do not capture pixels, inspect windows, or post HID.
+ * Wrap a desktop backend so capture, foreground inspect, listScreens, HID, and openApp run inside overlay-guard intervals.
+ * `openApp` uses `withInput` so the overlay yields key status before activate.
+ * `listApps`, `openInBrowser`, `openInFinder`, and `copyImageToClipboard` are unwrapped because
+ * they do not capture pixels, inspect windows, post HID, or steal key status.
  * @param inner - platform or fake backend.
  * @param guard - host overlay cloak.
- * @returns a backend that cloaks around capture, inspect, and HID.
+ * @returns a backend that cloaks around capture, inspect, listScreens, HID, and openApp.
  */
 export function wrapDesktopBackend(
   inner: DesktopBackend,
   guard: ComputerUseOverlayGuard,
 ): DesktopBackend {
   return {
-    listScreens: signal => inner.listScreens(signal),
+    listScreens: signal => guard.withCapture(
+      session => runWithCaptureExcludeWindowIds(
+        captureExcludeIds(session),
+        () => inner.listScreens(signal),
+      ),
+      signal,
+    ),
     capture: (screen, signal) => guard.withCapture(
       session => runWithCaptureExcludeWindowIds(
         captureExcludeIds(session),
@@ -83,6 +90,8 @@ export function wrapDesktopBackend(
       ),
       signal,
     ),
+    listApps: signal => inner.listApps(signal),
+    openApp: (input, signal) => guard.withInput(() => inner.openApp(input, signal), signal),
     click: (input, signal) => guard.withInput(() => inner.click(input, signal), signal),
     typeText: (input, signal) => guard.withInput(() => inner.typeText(input, signal), signal),
     scroll: (input, signal) => guard.withInput(() => inner.scroll(input, signal), signal),

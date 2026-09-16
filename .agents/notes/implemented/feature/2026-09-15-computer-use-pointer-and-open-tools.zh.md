@@ -14,7 +14,7 @@ Computer Use preset 已经能点击、输入、滚动、热键与等待，但不
 
 `long_press` 接受 `screen_index`、0–1000 的 `position`，以及可选 `duration_seconds`（默认 3，含 1–10）。该上下限是 HID 安全不变量，不是 cordis Config。macOS 发送 `longPressAt`（左键按下、休眠、抬起）。
 
-`drag` 接受起止屏幕序号与 0–1000 坐标。允许跨屏。macOS 发送 `dragFromTo`：移动、左键按下、十次 LeftMouseDragged（类型 6）步进、抬起。步数留在 [`HID_RUNTIME`](../../../../packages/experimental/tool-computer-use/src/macos.ts) 内。
+`drag` 接受起止屏幕序号与 0–1000 坐标。对本附上的那一扇窗，两个序号都是 0。macOS 发送 `dragFromTo`：移动、左键按下、十次 LeftMouseDragged（类型 6）步进、抬起。步数留在 [`HID_RUNTIME`](../../../../packages/experimental/tool-computer-use/src/macos.ts) 内。[Computer Use 焦点窗口观察](2026-09-16-computer-use-focused-window-observation.zh.md) 拥有该单一观察面。
 
 `open_in_browser` 与 `open_in_finder` 通过 `/usr/bin/open` 启动，不走 HID。省略 `url` 则启动默认 HTTP 处理器（LaunchServices 查找后 `open -b`）。给出的 URL 必须是 http(s)；缺 scheme 时补 `https://`；拒绝 userinfo；路径与查询中的 CJK 必须是明文，不得使用 `%E5...` / `%E8...` 这类多字节百分号编码。这是用户可见浏览器。`web_search` / `web_fetch` 仍是给模型的文本。
 
@@ -34,13 +34,13 @@ Computer Use preset 已经能点击、输入、滚动、热键与等待，但不
 
 **HID 点击 Dock 或桌面图标。** 打开已知路径或 URL 不需要找像素，overlay chrome 还会挡。
 
-**本刀加入 `launch_app`、`capture_screen` 与 `manage_files`。** 那些是另一些 CoView 工具。观察已经在首帧和每次 GUI 结果里；启动应用与文件管理仍延期。
+**本刀加入 `launch_app`、`capture_screen` 与 `manage_files`。** `list_apps` / `open_app` 由 [Computer Use 焦点窗口观察](2026-09-16-computer-use-focused-window-observation.zh.md) 拥有。文件管理仍延期。
 
 **用 cordis Config 配置按住时长或拖拽步数。** 1–10 的按住上下限是 HID 安全不变量。拖拽步数是 `HID_RUNTIME` 里的实现常量。
 
 ## 影响
 
-Computer Use 目录是十一个互斥 GUI 工具加 `code_agent`。`open_*` 可以弹出 overlay 不会遮蔽的窗口。路径黑名单含 `/private`，因此 macOS 上 `realpath` 后的 `/tmp` 被禁止。CJK 百分号编码会在 execute 以面向模型的诊断失败。
+Computer Use 目录是十三个互斥 GUI 工具加 `code_agent`。`open_*` 可以弹出 overlay 不会遮蔽的窗口。路径黑名单含 `/private`，因此 macOS 上 `realpath` 后的 `/tmp` 被禁止。CJK 百分号编码会在 execute 以面向模型的诊断失败。
 
 ## 测试
 

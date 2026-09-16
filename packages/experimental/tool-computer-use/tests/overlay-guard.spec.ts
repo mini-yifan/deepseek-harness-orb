@@ -30,6 +30,8 @@ const platformBackend = vi.hoisted(() => {
     listScreens: vi.fn(() => Promise.resolve([screen])),
     capture: vi.fn(() => Promise.resolve({ data: new Uint8Array(png), mediaType: 'image/png' as const })),
     inspectForeground: vi.fn(() => Promise.resolve({ appName: 'Pages' })),
+    listApps: vi.fn(() => Promise.resolve(['Pages'])),
+    openApp: vi.fn(() => Promise.resolve({ kind: 'activated' as const, name: 'Pages' })),
     click: vi.fn(() => Promise.resolve()),
     typeText: vi.fn(() => Promise.resolve()),
     scroll: vi.fn(() => Promise.resolve()),
@@ -109,6 +111,8 @@ function stubBackend(overrides: Partial<DesktopBackend> = {}): DesktopBackend {
     listScreens: () => Promise.resolve([screen]),
     capture: () => Promise.resolve({ data: new Uint8Array(), mediaType: 'image/png' as const }),
     inspectForeground: () => Promise.resolve({ appName: 'Pages' }),
+    listApps: () => Promise.resolve(['Pages']),
+    openApp: () => Promise.resolve({ kind: 'activated' as const, name: 'Pages' }),
     click: () => Promise.resolve(),
     typeText: () => Promise.resolve(),
     scroll: () => Promise.resolve(),
@@ -123,13 +127,15 @@ function stubBackend(overrides: Partial<DesktopBackend> = {}): DesktopBackend {
 }
 
 describe('wrapDesktopBackend', () => {
-  it('cloaks capture, inspect, and HID but leaves listScreens and open unwrapped', async () => {
+  it('cloaks listScreens, capture, inspect, HID, and openApp but leaves list/open-path unwrapped', async () => {
     const inner = createFakeDesktopBackend({ screens: [screen] })
     const guard = recordingGuard()
     const backend = wrapDesktopBackend(inner, guard)
     await backend.listScreens()
     await backend.capture(screen)
     await backend.inspectForeground()
+    await backend.listApps()
+    await backend.openApp({ name: 'Pages' })
     await backend.click({ screen, position: [1, 2], button: 'left', count: 1 })
     await backend.typeText({ screen, position: [1, 2], text: 'a', replace: false, submit: false })
     await backend.scroll({ screen, position: [1, 2], direction: 'down', scrollLevel: 1 })
@@ -145,6 +151,8 @@ describe('wrapDesktopBackend', () => {
     expect(guard.calls).toEqual([
       'capture', 'capture-end',
       'capture', 'capture-end',
+      'capture', 'capture-end',
+      'input', 'input-end',
       'input', 'input-end',
       'input', 'input-end',
       'input', 'input-end',
@@ -153,7 +161,7 @@ describe('wrapDesktopBackend', () => {
       'input', 'input-end',
     ])
     expect(inner.actions.map(action => action.type)).toEqual([
-      'click', 'typeText', 'scroll', 'hotkey', 'longPress', 'drag', 'openInBrowser', 'openInFinder',
+      'openApp', 'click', 'typeText', 'scroll', 'hotkey', 'longPress', 'drag', 'openInBrowser', 'openInFinder',
       'copyImageToClipboard',
     ])
   })
@@ -171,6 +179,23 @@ describe('wrapDesktopBackend', () => {
       withInput: run => run(),
     })
     await backend.capture(screen)
+    expect(seen).toEqual([[11, 22]])
+    expect(activeCaptureExcludeWindowIds()).toEqual([])
+  })
+
+  it('forwards overlay window ids into listScreens', async () => {
+    const seen: (readonly number[])[] = []
+    const inner = stubBackend({
+      listScreens: () => {
+        seen.push(activeCaptureExcludeWindowIds())
+        return Promise.resolve([screen])
+      },
+    })
+    const backend = wrapDesktopBackend(inner, {
+      withCapture: run => run({ excludeWindowIds: [11, 22] }),
+      withInput: run => run(),
+    })
+    await backend.listScreens()
     expect(seen).toEqual([[11, 22]])
     expect(activeCaptureExcludeWindowIds()).toEqual([])
   })
@@ -282,7 +307,7 @@ describe('apply overlay guard wiring', () => {
       } as never,
     })
     expect(result.isError).toBe(true)
-    expect(text(result)).toContain('cloaked-input')
+    expect(text(result)).toContain('cloaked-capture')
   })
 
   it('wraps when computerUseOverlayGuard is provided on a parent context', async () => {
@@ -313,6 +338,6 @@ describe('apply overlay guard wiring', () => {
       } as never,
     })
     expect(result.isError).toBe(true)
-    expect(text(result)).toContain('cloaked-input')
+    expect(text(result)).toContain('cloaked-capture')
   })
 })

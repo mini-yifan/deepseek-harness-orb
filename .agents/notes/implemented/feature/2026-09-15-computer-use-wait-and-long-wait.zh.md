@@ -22,13 +22,13 @@ Computer Use 的 `wait` 接受自由的 `wait_seconds` 数字，默认 1，并�
 
 **再做一个 5–15 秒的中间工具。** 那会重新打开「保险等待」。空隙用重复 `wait` 或付出 `long_wait` 10 秒来填。
 
-**CoView `page_loading` 的像素 settle。** 本包在 HID/open 之后只保留固定的 `postActionWaitMs`，不做像素差 stall。
+**CoView `page_loading` 的像素 settle。** 本包在 HID/open 之后只保留固定的 `postActionWaitMs`（默认 600），紧挨在截取像素之前，不做像素差 stall。
 
 **`long_wait` 默认 60 或可省略秒数。** 省略必须失败。默认 60 会再次鼓励贴上限。
 
 ## 影响
 
-Computer Use 目录是十一个互斥 GUI 工具加 `code_agent`。普通加载不能再要 3–5 秒。还剩 8 秒的下载要么连调 `wait`，要么用 `long_wait` 10 多等一会。overlay-guard 不变：这两个工具都不发 HID。
+Computer Use 目录是十三个互斥 GUI 工具加 `code_agent`。普通加载不能再要 3–5 秒。还剩 8 秒的下载要么连调 `wait`，要么用 `long_wait` 10 多等一会。overlay-guard 不变：这两个工具都不发 HID。
 
 ## 测试
 

@@ -42,7 +42,7 @@
 | `@deepseek-ai/dsh-tool-subagent-control` | `interrupt_agent`、`list_agents`、`send_message` | `ctx.tools`、`ctx.subagents`、`ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`、`tool/result`、`child session events through ctx.subagents` | - | 这些是控制可继续后台 subagent 的全局命名工具：绑定提供方的 `tool-subagent` 实例注册不同的委派工具；本包注册一次 `send_message` 和 `interrupt_agent`，另由 `list_agents` 通过单独加载的 `/list-agents` 插件提供，其目录行使用 sessionProjections 和实时 Agent 注册表。 |
 | `@deepseek-ai/dsh-tool-jobs` | `job_kill`、`job_list`、`job_output` | `ctx.tools`、`ctx.jobs`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`user/message via agent.inject() for background completion notices` | - | 与任务种类无关的后台任务控制器：后台 bash 命令、PTY 发送和 subagent 都通过相同的 3 个工具读取、列出和终止。加载该插件会挂接控制器，从而启用生产方的 `ctx.jobs.start()`。 |
 | `@deepseek-ai/dsh-experimental-tool-agent-team` | `interrupt_agent`、`list_agents`、`send_message`、`spawn_teammate`、`team_task_create`、`team_task_get`、`team_task_list`、`team_task_update`、`wait_agent` | `ctx.tools`、`ctx.systemPrompt`、`ctx.agentTeams`、`an exact live Team member Agent` | `tool/call`、`team/member`、`team/message/queued`、`team/message/delivered`、`team/task`、`tool/result` | - | 这 9 个工具限定于隐式 Team Lead 与持久 teammate 作用域。随产品发布的 dsh-base bundle 默认禁用该包；文档中的 Agent Teams profile patch 会启用它，并禁用旧 continuable child 的同名控制工具。 |
-| `@deepseek-ai/dsh-experimental-tool-computer-use` | `click`、`code_agent`、`drag`、`hotkey`、`input_text`、`long_press`、`long_wait`、`open_in_browser`、`open_in_finder`、`screenshot`、`scroll`、`wait` | `ctx.tools`、`ctx.systemPrompt`、`ctx.attachments`、`ctx.llm + an image-capable route (execution and first-frame screenshot)`、`ctx.sessionController (code_agent)` | `tool/call`、`durable attachment (saveImage)`、`user/message first-frame notice`、`tool/result`、`session.create + session.prompt (code_agent)`、`user/message plugin notice (code_agent completion)` | - | 实验性可选 GUI 工具，外加仅 Computer Use 的 code_agent。不在 dsh-base 中。生产环境的捕获与输入仅 macOS 实现，其他平台在执行时失败。测试与 snapshot 通过 applyComputerUse 注入假桌面；本目录引导使用生产 apply，只注册 schema，不发送输入。没有 observe 工具：首次用户回合和每次 GUI 结果都会附上屏幕以及跳过 overlay 后的前台标签。screenshot 会在用户要文件或粘贴时写入桌面文件和剪贴板。code_agent 只随 Computer Use preset 注册；本目录桩满足 inject，以便采集 schema。 |
+| `@deepseek-ai/dsh-experimental-tool-computer-use` | `click`、`code_agent`、`drag`、`hotkey`、`input_text`、`list_apps`、`long_press`、`long_wait`、`open_app`、`open_in_browser`、`open_in_finder`、`screenshot`、`scroll`、`wait` | `ctx.tools`、`ctx.systemPrompt`、`ctx.attachments`、`ctx.llm + an image-capable route (execution and first-frame screenshot)`、`ctx.sessionController (code_agent)` | `tool/call`、`durable attachment (saveImage)`、`user/message first-frame notice`、`tool/result`、`session.create + session.prompt (code_agent)`、`user/message plugin notice (code_agent completion)` | - | 实验性可选 GUI 工具，外加仅 Computer Use 的 code_agent。不在 dsh-base 中。生产环境的捕获与输入仅 macOS 实现，其他平台在执行时失败。测试与 snapshot 通过 applyComputerUse 注入假桌面；本目录引导使用生产 apply，只注册 schema，不发送输入。没有 observe 工具：首次用户回合和每次 GUI 结果都会附上跳过 overlay 后的最前窗口以及前台标签。screenshot 会在用户要文件或粘贴时写入桌面文件和剪贴板。list_apps 与 open_app 用于切换应用，不要去点 Dock。code_agent 只随 Computer Use preset 注册；本目录桩满足 inject，以便采集 schema。 |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`、`owning Agent session` | `tool/call`、`todo/write`、`tool/result` | - | todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为检查清单。`allowParallelInProgress` 是没有默认值的必填项，因此本目录明确选择 `true`，对应描述允许同时存在多个 `in_progress` 项。选择 `false` 的部署会获得同一工具，但描述会要求只能有 1 个活动任务。 |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`、`ctx.workflowEngine`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents the script children)` | `tool/call`、`tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`、`web_search` | `ctx.tools`、`ctx.web`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可见 schema 在更换后端时保持稳定。 |
@@ -2085,7 +2085,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 ### `click`
 
-在一块桌面屏幕的 0–1000 位置点击，然后返回动作后的截屏。使用左键（默认）或右键；count 为 2 表示双击。互斥：不要在同一步中与其他 GUI 工具组合。
+在附加的最前窗口截图的 0–1000 位置点击，然后返回动作后的截屏。使用左键（默认）或右键；count 为 2 表示双击。互斥：不要在同一步中与其他 GUI 工具组合。
 
 ```json
 {
@@ -2093,7 +2093,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
   "properties": {
     "screen_index": {
       "type": "integer",
-      "description": "Zero-based display index from the latest screenshot envelope."
+      "description": "0 for the attached frontmost-window screenshot."
     },
     "position": {
       "type": "array",
@@ -2161,7 +2161,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 ### `drag`
 
-从起始 0–1000 位置拖到结束 0–1000 位置（可跨屏），然后返回动作后的截屏。互斥。
+从起始 0–1000 位置拖到结束 0–1000 位置（在附加的最前窗口截图上），然后返回动作后的截屏。互斥。
 
 ```json
 {
@@ -2169,7 +2169,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
   "properties": {
     "start_screen_index": {
       "type": "integer",
-      "description": "Zero-based display index for the drag start."
+      "description": "0 for the attached frontmost-window screenshot."
     },
     "start_position": {
       "type": "array",
@@ -2180,7 +2180,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
     },
     "end_screen_index": {
       "type": "integer",
-      "description": "Zero-based display index for the drag end."
+      "description": "0 for the attached frontmost-window screenshot."
     },
     "end_position": {
       "type": "array",
@@ -2227,7 +2227,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 ### `input_text`
 
-点击以聚焦 0–1000 位置，输入文本，可选择替换现有内容并按 Enter，然后返回动作后的截屏。互斥。
+点击以聚焦附加的最前窗口截图上的 0–1000 位置，输入文本，可选择替换现有内容并按 Enter，然后返回动作后的截屏。互斥。
 
 ```json
 {
@@ -2235,7 +2235,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
   "properties": {
     "screen_index": {
       "type": "integer",
-      "description": "Zero-based display index from the latest screenshot envelope."
+      "description": "0 for the attached frontmost-window screenshot."
     },
     "position": {
       "type": "array",
@@ -2269,9 +2269,22 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 来源：[`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
 
+### `list_apps`
+
+按显示名列出正在运行的常规（Dock 可见）应用，然后返回当前最前窗口截图。附加窗口不是目标应用时使用。互斥。
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+来源：[`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
 ### `long_press`
 
-在一块桌面屏幕的 0–1000 位置按住左键，然后返回动作后的截屏。duration_seconds 默认 3，必须为 1–10。互斥。
+在附加的最前窗口截图的 0–1000 位置按住左键，然后返回动作后的截屏。duration_seconds 默认 3，必须为 1–10。互斥。
 
 ```json
 {
@@ -2279,7 +2292,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
   "properties": {
     "screen_index": {
       "type": "integer",
-      "description": "Zero-based display index from the latest screenshot envelope."
+      "description": "0 for the attached frontmost-window screenshot."
     },
     "position": {
       "type": "array",
@@ -2305,7 +2318,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 ### `long_wait`
 
-暂停 10、30、60 或 120 秒，然后返回新的桌面截屏，不移动指针。仅用于看得见的长任务，如下载、安装器、导出或屏幕上的生成。选能覆盖剩余进度的最小 wait_seconds；120 只在截图已经写明还要几分钟时使用。普通加载用 wait。不要用于 code_agent。互斥。
+暂停 10、30、60 或 120 秒，然后返回新的最前窗口截屏，不移动指针。仅用于看得见的长任务，如下载、安装器、导出或屏幕上的生成。选能覆盖剩余进度的最小 wait_seconds；120 只在截图已经写明还要几分钟时使用。普通加载用 wait。不要用于 code_agent。互斥。
 
 ```json
 {
@@ -2324,6 +2337,27 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
   },
   "required": [
     "wait_seconds"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `open_app`
+
+按显示名或 bundle id 激活正在运行的应用，或启动它，然后返回动作后的截屏。附加窗口不是目标应用时使用。不要去点 Dock。互斥。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Localized application name or bundle identifier, for example Pages or com.apple.TextEdit."
+    }
+  },
+  "required": [
+    "name"
   ]
 }
 ```
@@ -2373,7 +2407,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 ### `screenshot`
 
-把当前桌面截图保存到用户桌面并复制到剪贴板。返回保存的文件路径。不要用它来看屏幕——首次用户回合和每次 GUI 结果已经附上屏幕。当用户要截图文件或需要把图片放到剪贴板以便粘贴时使用。互斥。
+把当前最前窗口截图保存到用户桌面并复制到剪贴板。返回保存的文件路径。不要用它来看屏幕——首次用户回合和每次 GUI 结果已经附上最前窗口。当用户要截图文件或需要把图片放到剪贴板以便粘贴时使用。互斥。
 
 ```json
 {
@@ -2386,7 +2420,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 ### `scroll`
 
-在一块桌面屏幕的 0–1000 位置向上或向下滚动，然后返回动作后的截屏。scroll_level 为 1–10。互斥。
+在附加的最前窗口截图的 0–1000 位置向上或向下滚动，然后返回动作后的截屏。scroll_level 为 1–10。互斥。
 
 ```json
 {
@@ -2394,7 +2428,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
   "properties": {
     "screen_index": {
       "type": "integer",
-      "description": "Zero-based display index from the latest screenshot envelope."
+      "description": "0 for the attached frontmost-window screenshot."
     },
     "position": {
       "type": "array",
@@ -2429,7 +2463,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 ### `wait`
 
-暂停 1 秒，然后返回新的桌面截屏，不移动指针。用于页面刷新、加载中，或控件尚未出现。不要用于 code_agent。互斥。
+暂停 1 秒，然后返回新的最前窗口截屏，不移动指针。用于页面刷新、加载中，或控件尚未出现。不要用于 code_agent。互斥。
 
 ```json
 {
@@ -2440,7 +2474,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 来源：[`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
 
-实验性可选 GUI 工具，外加仅 Computer Use 的 code_agent。不在 dsh-base 中。生产环境的捕获与输入仅 macOS 实现，其他平台在执行时失败。测试与 snapshot 通过 applyComputerUse 注入假桌面；本目录引导使用生产 apply，只注册 schema，不发送输入。没有 observe 工具：首次用户回合和每次 GUI 结果都会附上屏幕以及跳过 overlay 后的前台标签。screenshot 会在用户要文件或粘贴时写入桌面文件和剪贴板。code_agent 只随 Computer Use preset 注册；本目录桩满足 inject，以便采集 schema。
+实验性可选 GUI 工具，外加仅 Computer Use 的 code_agent。不在 dsh-base 中。生产环境的捕获与输入仅 macOS 实现，其他平台在执行时失败。测试与 snapshot 通过 applyComputerUse 注入假桌面；本目录引导使用生产 apply，只注册 schema，不发送输入。没有 observe 工具：首次用户回合和每次 GUI 结果都会附上跳过 overlay 后的最前窗口以及前台标签。screenshot 会在用户要文件或粘贴时写入桌面文件和剪贴板。list_apps 与 open_app 用于切换应用，不要去点 Dock。code_agent 只随 Computer Use preset 注册；本目录桩满足 inject，以便采集 schema。
 
 <a id="deepseek-aidsh-tool-todo"></a>
 

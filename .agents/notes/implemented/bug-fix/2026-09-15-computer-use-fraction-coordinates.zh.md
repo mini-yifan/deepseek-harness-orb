@@ -14,7 +14,7 @@ Computer Use 把 `click` / `input_text` / `scroll` 的 `position` 按每屏逻�
 
 `formatScreenEnvelope` 只发出 `<screen_index>` 和 `<coordinate_space>0-1000</coordinate_space>`。它省略 `<logical_size>`、`<attached_size>`、`<content>` 像素/字节行，以及所有 `multiply coordinates` / `downscaled from` 说明。`originalDimensions` 仍留在已存储的附件引用上；观察里不对模型可见。
 
-POLICY、首帧通知和 `position` 参数描述写明：`[0, 0]` 是可见截图左上角，`[1000, 1000]` 是右下角，x 与 y 独立缩放，并且必须忽略像素宽度和其他图片句柄尺寸。`mapNormalizedToGlobal` 不变。[图片句柄省略请求预览像素](2026-09-15-omit-request-preview-handle-dimensions.zh.md) 拥有共用句柄。
+POLICY、首帧通知和 `position` 参数描述写明：`[0, 0]` 是可见截图左上角，`[1000, 1000]` 是右下角，x 与 y 独立缩放，并且必须忽略像素宽度和其他图片句柄尺寸。`mapNormalizedToGlobal` 把这些比例乘以当前观察面的逻辑边框。[Computer Use 焦点窗口观察](../feature/2026-09-16-computer-use-focused-window-observation.zh.md) 提供窗口边框，而不是 `NSScreen.frame`。[图片句柄省略请求预览像素](2026-09-15-omit-request-preview-handle-dimensions.zh.md) 拥有共用句柄。
 
 ## 考虑过的替代方案
 
@@ -26,7 +26,7 @@ POLICY、首帧通知和 `position` 参数描述写明：`[0, 0]` 是可见截�
 
 ## 影响
 
-Retina 捕获、2048×2048 附件规范化，以及 1,690,000 像素请求预算仍会缩放栅格；它们不是 Computer Use 观察上的第二套坐标系。共用图片句柄按[图片句柄省略请求预览像素](2026-09-15-omit-request-preview-handle-dimensions.zh.md)省略请求预览像素。HID、overlay-guard 和 ScreenCaptureKit 捕获不变。
+Retina 捕获、2048×2048 附件规范化，以及 1,690,000 像素请求预算仍会缩放栅格；它们不是 Computer Use 观察上的第二套坐标系。共用图片句柄按[图片句柄省略请求预览像素](2026-09-15-omit-request-preview-handle-dimensions.zh.md)省略请求预览像素。HID 发送和 overlay-guard 不变；ScreenCaptureKit 捕获按 [Computer Use 焦点窗口观察](../feature/2026-09-16-computer-use-focused-window-observation.zh.md) 针对窗口。
 
 ## 测试
 

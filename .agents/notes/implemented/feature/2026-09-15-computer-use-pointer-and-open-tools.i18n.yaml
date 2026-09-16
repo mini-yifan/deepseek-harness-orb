@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-15-computer-use-pointer-and-open-tools.md
-2026-09-15-computer-use-pointer-and-open-tools.md: b49c776d50b870ddcd59ce28b766316d67d1478c
-2026-09-15-computer-use-pointer-and-open-tools.zh.md: 1d892e264415469b7148edac0e601d1ab00d77dd
+2026-09-15-computer-use-pointer-and-open-tools.md: 85fa84b161eaf202f32be8044cc28437eed4d305
+2026-09-15-computer-use-pointer-and-open-tools.zh.md: 667b8cabb18093d7e419ec153ed066a953cc8491

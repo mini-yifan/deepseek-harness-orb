@@ -30,6 +30,8 @@ describe('unsupported desktop', () => {
     })).rejects.toThrow(UNSUPPORTED_DESKTOP_MESSAGE)
     await expect(backend.hotkey({ keys: ['c'] })).rejects.toThrow(UNSUPPORTED_DESKTOP_MESSAGE)
     await expect(backend.inspectForeground()).rejects.toThrow(UNSUPPORTED_DESKTOP_MESSAGE)
+    await expect(backend.listApps()).rejects.toThrow(UNSUPPORTED_DESKTOP_MESSAGE)
+    await expect(backend.openApp({ name: 'Pages' })).rejects.toThrow(UNSUPPORTED_DESKTOP_MESSAGE)
     await expect(backend.longPress({
       screen: { index: 0, bounds: { x: 0, y: 0, width: 1, height: 1 }, scale: 1 },
       position: [0, 0],

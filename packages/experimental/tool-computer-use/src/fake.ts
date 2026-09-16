@@ -12,6 +12,8 @@ import type {
   DragInput,
   HotkeyInput,
   LongPressInput,
+  OpenAppInput,
+  OpenAppResult,
   OpenInBrowserInput,
   OpenInFinderInput,
   ScreenInfo,
@@ -33,6 +35,7 @@ export type FakeDesktopAction =
   | { readonly type: 'hotkey'; readonly input: HotkeyInput }
   | { readonly type: 'longPress'; readonly input: LongPressInput }
   | { readonly type: 'drag'; readonly input: DragInput }
+  | { readonly type: 'openApp'; readonly input: OpenAppInput }
   | { readonly type: 'openInBrowser'; readonly input: OpenInBrowserInput }
   | { readonly type: 'openInFinder'; readonly input: OpenInFinderInput }
   | { readonly type: 'copyImageToClipboard'; readonly input: CopyImageToClipboardInput }
@@ -47,15 +50,23 @@ export interface FakeDesktopBackend extends DesktopBackend {
 export interface FakeDesktopOptions {
   /** Encoded PNG returned by every capture. Default: {@link FAKE_DESKTOP_PNG}. */
   readonly png?: Uint8Array
-  /** Display list. Default: one 1000×800 logical screen. */
+  /** Observation surface list. Default: one 1000×800 logical window. */
   readonly screens?: readonly ScreenInfo[]
   /** Foreground metadata. Default: Pages with no Finder folder. */
   readonly foreground?: DesktopForeground
+  /** Running regular app names. Default: Pages and Safari. */
+  readonly apps?: readonly string[]
+  /** Thrown from {@link DesktopBackend.openApp} when set. */
+  readonly openAppError?: Error
+  /** Result of a successful {@link DesktopBackend.openApp}. Default: activated as the requested name. */
+  readonly openAppResult?: OpenAppResult
 }
 
 const DEFAULT_SCREENS: readonly ScreenInfo[] = [
-  { index: 0, bounds: { x: 0, y: 0, width: 1000, height: 800 }, scale: 2 },
+  { index: 0, bounds: { x: 0, y: 0, width: 1000, height: 800 }, scale: 2, windowId: 1 },
 ]
+
+const DEFAULT_APPS: readonly string[] = ['Pages', 'Safari']
 
 /**
  * Construct a fake desktop that records actions and returns a fixture PNG.
@@ -66,6 +77,7 @@ export function createFakeDesktopBackend(options: FakeDesktopOptions = {}): Fake
   const png = options.png ?? FAKE_DESKTOP_PNG
   const screens = options.screens ?? DEFAULT_SCREENS
   const foreground = options.foreground ?? { appName: 'Pages' }
+  const apps = options.apps ?? DEFAULT_APPS
   const actions: FakeDesktopAction[] = []
   const captured: CapturedScreen = { data: png, mediaType: 'image/png' }
   return {
@@ -75,6 +87,12 @@ export function createFakeDesktopBackend(options: FakeDesktopOptions = {}): Fake
     listScreens: () => Promise.resolve(screens),
     capture: () => Promise.resolve(captured),
     inspectForeground: () => Promise.resolve(foreground),
+    listApps: () => Promise.resolve(apps),
+    openApp: (input) => {
+      actions.push({ type: 'openApp', input })
+      if (options.openAppError !== undefined) return Promise.reject(options.openAppError)
+      return Promise.resolve(options.openAppResult ?? { kind: 'activated', name: input.name })
+    },
     click: (input) => {
       actions.push({ type: 'click', input })
       return Promise.resolve()

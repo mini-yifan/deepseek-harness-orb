@@ -747,14 +747,10 @@ export interface Config {
 /** Loader-accepted Computer Use configuration. */
 export interface Config {
   /**
-   * Milliseconds to wait after a GUI action before recapturing.
-   * Default: 500.
+   * Milliseconds to wait after a GUI action, immediately before recapturing pixels.
+   * Default: 600.
    */
   readonly postActionWaitMs?: number
-  /**
-   * Maximum number of displays captured per observation. Default: 4.
-   */
-  readonly maxScreens?: number
 }
 ```
 

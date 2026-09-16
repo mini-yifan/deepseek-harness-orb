@@ -14,9 +14,9 @@ Desktop Host 协议版本是 5。管道 `FRAME_MAGIC` 仍是 `0x44534833`，因�
 
 主窗口从不设置 `contentProtection` 或 `ignoreMouseEvents`。overlay 默认保持画出、可点。捕获不设置 `contentProtection`。`input` 模式只在该区间对整扇 overlay 窗设置 `setIgnoreMouseEvents(true, { forward: false })` 并 `blur()`。`postActionWaitMs` 在未遮蔽状态下运行。
 
-当 `excludeWindowIds` 非空时，Computer Use 捕获运行 Darwin 的 ScreenCaptureKit helper（`SCContentFilter` 的 `excludingWindows`、`SCScreenshotManager.captureImage`、带光标、JPEG 输出），而不是 `/usr/sbin/screencapture`。可分享内容里缺少 overlay 窗口会使捕获失败；不会回退到 `screencapture`。id 列表为空的 CLI 和其他宿主仍用 `screencapture`。
+当 `excludeWindowIds` 非空时，Computer Use 捕获运行 Darwin 的 ScreenCaptureKit helper，而不是 `/usr/sbin/screencapture`。可分享内容里缺少 overlay 窗口会使捕获失败；不会回退到 `screencapture`。id 列表为空的 CLI 和其他宿主仍用 `screencapture`。[Computer Use 焦点窗口观察](../feature/2026-09-16-computer-use-focused-window-observation.zh.md) 拥有 `--window=` 与 `SCContentFilter(desktopIndependentWindow:)`。
 
-Computer Use 保持对 Electron 无感知：`wrapDesktopBackend` 把 `capture` 包进 `withCapture`（把 id 存给 macOS 后端），把 HID 包进 `withInput`；`listScreens`、`openInBrowser` 与 `openInFinder` 不包装。生产 `apply` 使用 `ctx.get('computerUseOverlayGuard')`，没有该服务时跳过包装。Desktop 拷贝已构建的 `lib/index.js` extra，并拒绝缺少该 wrap 的包。`start:desktop --skip-build` 仍会重建 Desktop Host、Electron 壳和这个实验包，`withCapture` 不能在没有窗口 id 的情况下调用 `run()`。Desktop Host overlay YAML 插入 `computer-use-overlay-guard`，由它提供该服务，且不得导入该实验包。只有 Computer Use 把该可选 Context 键声明合并进去，这样 Host 类型检查不会撞上两份 `ComputerUseOverlayGuard` 类型。Index 与 YAML 插件共享同一份 overlay-guard 模块实例，待确认表不会拆到两份 bundle 里。见 [桌面悬浮球](../feature/2026-09-14-desktop-floating-orb.zh.md)。
+Computer Use 保持对 Electron 无感知：`wrapDesktopBackend` 把 `listScreens`、`capture` 与 inspect 包进 `withCapture`（把 id 存给 macOS 后端），把 HID 与 `openApp` 包进 `withInput`；`listApps`、`openInBrowser` 与 `openInFinder` 不包装。[Computer Use 焦点窗口观察](../feature/2026-09-16-computer-use-focused-window-observation.zh.md) 拥有把 `listScreens` 包进去。生产 `apply` 使用 `ctx.get('computerUseOverlayGuard')`，没有该服务时跳过包装。Desktop 拷贝已构建的 `lib/index.js` extra，并拒绝缺少该 wrap 的包。`start:desktop --skip-build` 仍会重建 Desktop Host、Electron 壳和这个实验包，`withCapture` 不能在没有窗口 id 的情况下调用 `run()`。Desktop Host overlay YAML 插入 `computer-use-overlay-guard`，由它提供该服务，且不得导入该实验包。只有 Computer Use 把该可选 Context 键声明合并进去，这样 Host 类型检查不会撞上两份 `ComputerUseOverlayGuard` 类型。Index 与 YAML 插件共享同一份 overlay-guard 模块实例，待确认表不会拆到两份 bundle 里。见 [桌面悬浮球](../feature/2026-09-14-desktop-floating-orb.zh.md)。
 
 ## 考虑过的替代方案
 
@@ -36,8 +36,8 @@ Computer Use 保持对 Electron 无感知：`wrapDesktopBackend` 把 `capture` �
 
 ## 后果
 
-混用的 Electron/Host 壳在 `ready` 时失败，而不是第一次遮蔽时失败。丢失的 `end` 在 Host 子进程退出时恢复。并发 Computer Use 会话共享 overlay 引用计数。键盘焦点仍可能在 `input` 区间之外落到 overlay；`input_text` 的点击穿透负责把焦点交给下面的窗口。Web 与 CLI 的 Computer Use 保持不遮蔽。Darwin Desktop extra 在已编译 helper 时包含 `lib/macos-sck-capture`。
+混用的 Electron/Host 壳在 `ready` 时失败，而不是第一次遮蔽时失败。丢失的 `end` 在 Host 子进程退出时恢复。并发 Computer Use 会话共享 overlay 引用计数。键盘焦点仍可能在 `input` 区间之外落到 overlay；`open_app` 与 HID 走 `withInput`，overlay 会在激活或投递事件前 `blur()`。Web 与 CLI 的 Computer Use 保持不遮蔽。Darwin Desktop extra 在已编译 helper 时包含 `lib/macos-sck-capture`。
 
 ## 测试
 
-Electron 测试钉住捕获 begin 时默认 `contentProtection === false`、捕获确认上的 overlay `getMediaSourceId` 窗口 id、input begin 的 `ignoreMouseEvents({ forward: false })`、异步 overlay-guard 回调只在 Promise 完成后确认、Host 停止时恢复、overlay-guard IPC 不是 fatal，以及协议 4 的 ready 被拒绝。Desktop Host 测试钉住 overlay YAML 插入、没有 sender 时直通、begin 确认的窗口 id 到达 `withCapture`、抛错后恢复、中止后恢复、确认超时、`withInput` 在 `end` 前排空，以及 `apply` 加上已安装 transport。Computer Use 测试钉住 `wrapDesktopBackend` 对 capture、HID、`listScreens` 与不包装的 `open_*` 的区别、转发的 exclude id、抛错后恢复、子 context 上的 `apply` 包装、设置 id 时的 helper argv、不回退到 `screencapture`，以及缺少 wrap 时 extra 拷贝被拒绝。
+Electron 测试钉住捕获 begin 时默认 `contentProtection === false`、捕获确认上的 overlay `getMediaSourceId` 窗口 id、input begin 的 `ignoreMouseEvents({ forward: false })`、异步 overlay-guard 回调只在 Promise 完成后确认、Host 停止时恢复、overlay-guard IPC 不是 fatal，以及协议 4 的 ready 被拒绝。Desktop Host 测试钉住 overlay YAML 插入、没有 sender 时直通、begin 确认的窗口 id 到达 `withCapture`、抛错后恢复、中止后恢复、确认超时、`withInput` 在 `end` 前排空，以及 `apply` 加上已安装 transport。Computer Use 测试钉住 `wrapDesktopBackend` 对 capture、HID、被遮蔽的 `listScreens` 与 `openApp`、以及不包装的 `listApps` / `openInBrowser` / `openInFinder` 的区别、转发的 exclude id、抛错后恢复、子 context 上的 `apply` 包装、设置 id 时的 helper `--window=` argv、不回退到 `screencapture`，以及缺少 wrap 时 extra 拷贝被拒绝。

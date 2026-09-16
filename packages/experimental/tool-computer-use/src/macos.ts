@@ -4,9 +4,13 @@
  * so mouse/hotkey/scroll use numeric event types with a retained event source
  * and intra-event sleeps, and `input_text` pastes via NSPasteboard + Cmd+V.
  * Tests inject a {@link CommandRunner}; production uses `/usr/bin/osascript`
- * and `/usr/sbin/screencapture`, or the ScreenCaptureKit helper when overlay
- * window ids are active. Foreground inspect uses CGWindowList (skip overlay
- * ids only) plus Finder AppleScript for the current folder. `open_in_browser` and
+ * and `/usr/sbin/screencapture -l -o`, or the ScreenCaptureKit helper with
+ * `--window=` when overlay window ids are active. Foreground inspect uses
+ * CGWindowList (skip overlay ids only) plus Finder AppleScript for the current
+ * folder. JXA does not bridge `CGWindowListCopyWindowInfo` to `NSArray` unless
+ * `ObjC.bindFunction` declares the return type as `id`; without that bind,
+ * `ObjC.deepUnwrap` is a non-array and the walk finds no window. `list_apps` /
+ * `open_app` use NSWorkspace. `open_in_browser` and
  * `open_in_finder` use `/usr/bin/open`. `screenshot` writes Desktop files in Node
  * and copies the image through NSPasteboard.
  * @module @deepseek-ai/dsh-experimental-tool-computer-use/src/macos
@@ -25,9 +29,12 @@ import {
   type ClickInput,
   type CopyImageToClipboardInput,
   type DesktopBackend,
+  type DesktopForeground,
   type DragInput,
   type HotkeyInput,
   type LongPressInput,
+  type OpenAppInput,
+  type OpenAppResult,
   type OpenInBrowserInput,
   type OpenInFinderInput,
   type ScreenInfo,
@@ -69,25 +76,22 @@ export function macosSckCaptureHelperPath(): string {
   return fileURLToPath(new URL('../lib/macos-sck-capture', import.meta.url))
 }
 
-/** JXA that lists NSScreen frames converted to top-left Quartz coordinates. */
-export const LIST_SCREENS_SCRIPT = `ObjC.import('AppKit')
-const screens = $.NSScreen.screens.js
-const primary = $.NSScreen.screens.objectAtIndex(0).frame
-const primaryHeight = primary.size.height
-const result = []
-for (let i = 0; i < screens.length; i++) {
-  const s = screens[i]
-  const f = s.frame
-  result.push({
-    index: i,
-    x: f.origin.x,
-    y: primaryHeight - f.origin.y - f.size.height,
-    width: f.size.width,
-    height: f.size.height,
-    scale: s.backingScaleFactor,
-  })
+/** JXA that lists localized names of running regular applications. */
+export const LIST_APPS_SCRIPT = `ObjC.import('AppKit')
+const apps = $.NSWorkspace.sharedWorkspace.runningApplications.js
+const names = []
+const seen = {}
+for (var i = 0; i < apps.length; i++) {
+  var app = apps[i]
+  if (app.activationPolicy !== 0) continue
+  var name = ObjC.unwrap(app.localizedName)
+  if (typeof name !== 'string') continue
+  name = name.trim()
+  if (name.length === 0 || seen[name]) continue
+  seen[name] = true
+  names.push(name)
 }
-JSON.stringify(result)
+JSON.stringify(names)
 `
 
 /** AppleScript that returns Finder's front-window folder POSIX path, or empty. */
@@ -122,32 +126,112 @@ export function sanitizeExcludeWindowIds(excludeWindowIds: readonly number[]): n
   return excludeWindowIds.filter(id => Number.isInteger(id) && id > 0)
 }
 
+/** Smallest logical edge, in points, for a layer-0 window that can be the observation. */
+export const MIN_LAYER0_WINDOW_EDGE = 64
+
 /**
- * JXA that reports the first on-screen layer-0 window owner after skipping overlay ids.
+ * JXA that reports the first on-screen layer-0 window after skipping overlay ids.
+ * Binds `CGWindowListCopyWindowInfo` as returning `id` so `ObjC.deepUnwrap` is an array.
+ * Skips remaining windows with an edge below {@link MIN_LAYER0_WINDOW_EDGE}.
  * @param excludeWindowIds - overlay CGWindowIDs omitted from the remaining z-order.
- * @returns a script that prints `{ appName }` JSON or `null`.
+ * @returns a script that prints window JSON or `null`.
  */
 export function inspectForegroundScript(excludeWindowIds: readonly number[]): string {
   const ids = sanitizeExcludeWindowIds(excludeWindowIds)
   const excludeLiteral = ids.length === 0 ? '{}' : `{ ${ids.map(id => `${String(id)}: true`).join(', ')} }`
-  return `ObjC.import('CoreGraphics')
+  return `ObjC.import('AppKit')
+ObjC.import('CoreGraphics')
+ObjC.bindFunction('CGWindowListCopyWindowInfo', ['@', ['I', 'I']])
 const exclude = ${excludeLiteral}
-const list = $.CGWindowListCopyWindowInfo(1, 0)
-const windows = ObjC.deepUnwrap(list) || []
-var appName = ''
+const windows = ObjC.deepUnwrap($.CGWindowListCopyWindowInfo(1, 0)) || []
+const primary = $.NSScreen.screens.objectAtIndex(0).frame
+const primaryHeight = primary.size.height
+function screenScale(x, y, w, h) {
+  var cx = x + w / 2
+  var cy = y + h / 2
+  var screens = $.NSScreen.screens.js
+  for (var i = 0; i < screens.length; i++) {
+    var f = screens[i].frame
+    var sx = f.origin.x
+    var sy = primaryHeight - f.origin.y - f.size.height
+    if (cx >= sx && cx < sx + f.size.width && cy >= sy && cy < sy + f.size.height) {
+      return Number(screens[i].backingScaleFactor)
+    }
+  }
+  var main = $.NSScreen.mainScreen
+  var fallback = main ? Number(main.backingScaleFactor) : 1
+  return fallback > 0 ? fallback : 1
+}
+var found = null
+var minEdge = ${String(MIN_LAYER0_WINDOW_EDGE)}
 for (var i = 0; i < windows.length; i++) {
   var w = windows[i]
   if (!w) continue
-  var id = w.kCGWindowNumber
-  if (exclude[id]) continue
-  var layer = w.kCGWindowLayer
-  if (layer !== 0) continue
+  var id = Number(w.kCGWindowNumber)
+  if (!(id > 0) || exclude[id]) continue
+  if (Number(w.kCGWindowLayer) !== 0) continue
   var name = w.kCGWindowOwnerName
   if (typeof name !== 'string' || name.length === 0) continue
-  appName = name
+  var b = w.kCGWindowBounds
+  var x = b ? Number(b.X) : NaN
+  var y = b ? Number(b.Y) : NaN
+  var width = b ? Number(b.Width) : NaN
+  var height = b ? Number(b.Height) : NaN
+  var scale = screenScale(x, y, width, height)
+  if (!(width >= minEdge) || !(height >= minEdge) || !(scale > 0)) continue
+  found = {
+    appName: name,
+    windowId: id,
+    x: x,
+    y: y,
+    width: width,
+    height: height,
+    scale: scale,
+  }
+  var title = w.kCGWindowName
+  if (typeof title === 'string' && title.trim().length > 0) found.windowTitle = title.trim()
   break
 }
-JSON.stringify(appName ? { appName: appName } : null)
+JSON.stringify(found)
+`
+}
+
+/**
+ * JXA that activates a running regular app by display name or bundle id, or reports launch.
+ * @param name - localized name or bundle identifier.
+ * @returns a script that prints `{ kind, name }` or `{ kind: 'ambiguous', names }`.
+ */
+export function openAppScript(name: string): string {
+  return `ObjC.import('AppKit')
+const needle = ${JSON.stringify(name)}
+const needleLower = needle.toLowerCase()
+const apps = $.NSWorkspace.sharedWorkspace.runningApplications.js
+const matches = []
+const seen = {}
+for (var i = 0; i < apps.length; i++) {
+  var app = apps[i]
+  if (app.activationPolicy !== 0) continue
+  var localized = ObjC.unwrap(app.localizedName)
+  var bundle = ObjC.unwrap(app.bundleIdentifier)
+  var nameOk = typeof localized === 'string' && localized.trim().toLowerCase() === needleLower
+  var bundleOk = typeof bundle === 'string' && bundle.trim().toLowerCase() === needleLower
+  if (!nameOk && !bundleOk) continue
+  var key = typeof bundle === 'string' && bundle.length > 0 ? bundle : ('name:' + String(localized))
+  if (seen[key]) continue
+  seen[key] = true
+  matches.push({
+    app: app,
+    name: typeof localized === 'string' && localized.trim().length > 0 ? localized.trim() : needle,
+  })
+}
+if (matches.length > 1) {
+  JSON.stringify({ kind: 'ambiguous', names: matches.map(function (m) { return m.name }) })
+} else if (matches.length === 1) {
+  matches[0].app.activateWithOptions_(2)
+  JSON.stringify({ kind: 'activated', name: matches[0].name })
+} else {
+  JSON.stringify({ kind: 'launch', name: needle })
+}
 `
 }
 
@@ -216,18 +300,67 @@ function mediaTypeOf(data: Uint8Array): CapturedScreen['mediaType'] {
   throw new Error('computer-use: capture produced an unsupported image')
 }
 
-function parseForegroundAppName(stdout: string): string | undefined {
+interface ParsedFrontmost {
+  readonly appName: string
+  readonly windowTitle?: string
+  readonly windowId?: number
+  readonly bounds?: ScreenInfo['bounds']
+  readonly scale?: number
+}
+
+function parseFrontmost(stdout: string): ParsedFrontmost | undefined {
   const trimmed = stdout.trim()
-  if (trimmed === '') return undefined
+  if (trimmed === '' || trimmed === 'null') return undefined
   try {
     const parsed: unknown = JSON.parse(trimmed)
     if (typeof parsed !== 'object' || parsed === null) return undefined
-    const name = (parsed as { appName?: unknown }).appName
-    if (typeof name !== 'string') return undefined
-    const appName = name.trim()
-    return appName === '' ? undefined : appName
+    const row = parsed as Record<string, unknown>
+    if (typeof row.appName !== 'string') return undefined
+    const appName = row.appName.trim()
+    if (appName === '') return undefined
+    const windowTitle = typeof row.windowTitle === 'string' ? row.windowTitle.trim() : ''
+    const windowId = Number(row.windowId)
+    const x = Number(row.x)
+    const y = Number(row.y)
+    const width = Number(row.width)
+    const height = Number(row.height)
+    const scale = Number(row.scale)
+    const hasSurface = Number.isInteger(windowId)
+      && windowId > 0
+      && [x, y, width, height, scale].every(Number.isFinite)
+      && width > 0
+      && height > 0
+      && scale > 0
+    return {
+      appName,
+      ...windowTitle === '' ? {} : { windowTitle },
+      ...hasSurface ? {
+        windowId,
+        bounds: { x, y, width, height },
+        scale,
+      } : {},
+    }
   } catch {
     return undefined
+  }
+}
+
+function screenFromFrontmost(parsed: ParsedFrontmost): ScreenInfo | undefined {
+  if (parsed.windowId === undefined || parsed.bounds === undefined || parsed.scale === undefined) {
+    return undefined
+  }
+  return {
+    index: 0,
+    bounds: parsed.bounds,
+    scale: parsed.scale,
+    windowId: parsed.windowId,
+  }
+}
+
+function foregroundFromFrontmost(parsed: ParsedFrontmost): DesktopForeground {
+  return {
+    appName: parsed.appName,
+    ...parsed.windowTitle === undefined ? {} : { windowTitle: parsed.windowTitle },
   }
 }
 
@@ -255,33 +388,59 @@ function isAbortError(error: unknown, signal?: AbortSignal): boolean {
   return error instanceof Error && error.name === 'AbortError'
 }
 
-function parseScreens(stdout: string): ScreenInfo[] {
+function parseAppNames(stdout: string): string[] {
   let parsed: unknown
   try {
     parsed = JSON.parse(stdout) as unknown
   } catch {
-    throw new Error('computer-use: failed to list displays')
+    throw new Error('computer-use: failed to list apps')
   }
-  if (!Array.isArray(parsed)) throw new Error('computer-use: failed to list displays')
-  return parsed.map((entry, index) => {
-    if (typeof entry !== 'object' || entry === null) {
-      throw new Error('computer-use: failed to list displays')
-    }
-    const row = entry as Record<string, unknown>
-    const x = Number(row.x)
-    const y = Number(row.y)
-    const width = Number(row.width)
-    const height = Number(row.height)
-    const scale = Number(row.scale)
-    if (![x, y, width, height, scale].every(Number.isFinite) || width <= 0 || height <= 0) {
-      throw new Error('computer-use: failed to list displays')
-    }
-    return {
-      index: typeof row.index === 'number' ? row.index : index,
-      bounds: { x, y, width, height },
-      scale,
-    }
-  })
+  if (!Array.isArray(parsed)) throw new Error('computer-use: failed to list apps')
+  const names: string[] = []
+  const seen = new Set<string>()
+  for (const entry of parsed) {
+    if (typeof entry !== 'string') throw new Error('computer-use: failed to list apps')
+    const name = entry.trim()
+    if (name === '' || seen.has(name)) continue
+    seen.add(name)
+    names.push(name)
+  }
+  return names
+}
+
+function looksLikeBundleId(name: string): boolean {
+  return /^[A-Za-z0-9-]+\.[A-Za-z0-9.-]+$/u.test(name)
+}
+
+function parseOpenAppDecision(stdout: string): { kind: 'activated' | 'launch'; name: string } | { kind: 'ambiguous'; names: string[] } {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(stdout.trim()) as unknown
+  } catch {
+    throw new Error('computer-use: open_app failed: unreadable activate result')
+  }
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new Error('computer-use: open_app failed: unreadable activate result')
+  }
+  const row = parsed as Record<string, unknown>
+  if (row.kind === 'ambiguous') {
+    const names = Array.isArray(row.names)
+      ? row.names.filter((entry): entry is string => typeof entry === 'string' && entry.trim() !== '')
+      : []
+    return { kind: 'ambiguous', names }
+  }
+  if ((row.kind === 'activated' || row.kind === 'launch') && typeof row.name === 'string' && row.name.trim() !== '') {
+    return { kind: row.kind, name: row.name.trim() }
+  }
+  throw new Error('computer-use: open_app failed: unreadable activate result')
+}
+
+function requireWindowId(screen: ScreenInfo): number {
+  const windowId = screen.windowId
+  if (windowId === undefined || !Number.isInteger(windowId) || windowId < 1) {
+    throw new Error('computer-use: capture requires a window id')
+  }
+  return windowId
 }
 
 function keyCode(token: string): number {
@@ -503,10 +662,15 @@ export function createMacosDesktopBackend(run: CommandRunner = runCommand): Desk
 
   return {
     async listScreens(signal) {
-      const result = await run(OSASCRIPT, jxa(LIST_SCREENS_SCRIPT), { signal })
-      const screens = parseScreens(result.stdout.trim())
-      if (screens.length === 0) throw new Error('computer-use: no displays available')
-      return screens
+      const result = await run(
+        OSASCRIPT,
+        jxa(inspectForegroundScript(activeCaptureExcludeWindowIds())),
+        { signal },
+      )
+      const parsed = parseFrontmost(result.stdout)
+      if (parsed === undefined) return []
+      const screen = screenFromFrontmost(parsed)
+      return screen === undefined ? [] : [screen]
     },
 
     async capture(screen, signal) {
@@ -514,14 +678,13 @@ export function createMacosDesktopBackend(run: CommandRunner = runCommand): Desk
       const file = join(dir, 'screen.jpg')
       const excludeWindowIds = activeCaptureExcludeWindowIds()
       try {
-        const { x, y, width, height } = screen.bounds
-        const rect = `${Math.round(x)},${Math.round(y)},${Math.round(width)},${Math.round(height)}`
+        const windowId = requireWindowId(screen)
         if (excludeWindowIds.length === 0) {
-          await run(SCREENCAPTURE, ['-x', '-C', '-t', 'jpg', '-R', rect, file], { signal })
+          await run(SCREENCAPTURE, ['-x', '-o', '-t', 'jpg', '-l', String(windowId), file], { signal })
         } else {
           try {
             await run(macosSckCaptureHelperPath(), [
-              `--rect=${rect}`,
+              `--window=${String(windowId)}`,
               `--exclude=${excludeWindowIds.join(',')}`,
               `--out=${file}`,
             ], { signal })
@@ -550,20 +713,47 @@ export function createMacosDesktopBackend(run: CommandRunner = runCommand): Desk
           jxa(inspectForegroundScript(activeCaptureExcludeWindowIds())),
           { signal },
         )
-        const appName = parseForegroundAppName(result.stdout)
-        if (appName === undefined) return FOCUS_FALLBACK_FOREGROUND
-        if (!isFinderApp(appName)) return { appName }
+        const parsed = parseFrontmost(result.stdout)
+        if (parsed === undefined) return FOCUS_FALLBACK_FOREGROUND
+        const foreground = foregroundFromFrontmost(parsed)
+        if (!isFinderApp(parsed.appName)) return foreground
         try {
           const folder = await run(OSASCRIPT, ['-e', FINDER_FOLDER_SCRIPT], { signal })
           const finderFolder = parseFinderFolder(folder.stdout)
-          return finderFolder === undefined ? { appName } : { appName, finderFolder }
+          return finderFolder === undefined ? foreground : { ...foreground, finderFolder }
         } catch (error: unknown) {
           if (isAbortError(error, signal)) throw error
-          return { appName }
+          return foreground
         }
       } catch (error: unknown) {
         if (isAbortError(error, signal)) throw error
         return FOCUS_FALLBACK_FOREGROUND
+      }
+    },
+
+    async listApps(signal) {
+      const result = await run(OSASCRIPT, jxa(LIST_APPS_SCRIPT), { signal })
+      return parseAppNames(result.stdout.trim())
+    },
+
+    async openApp(input: OpenAppInput, signal): Promise<OpenAppResult> {
+      const name = input.name.trim()
+      if (name === '') throw new Error('computer-use: open_app requires a name')
+      try {
+        const result = await run(OSASCRIPT, jxa(openAppScript(name)), { signal })
+        const decision = parseOpenAppDecision(result.stdout)
+        if (decision.kind === 'ambiguous') {
+          const listed = decision.names.length === 0 ? name : decision.names.join(', ')
+          throw new Error(`computer-use: app name "${name}" matches multiple applications: ${listed}`)
+        }
+        if (decision.kind === 'activated') {
+          return { kind: 'activated', name: decision.name }
+        }
+        await run(OPEN, looksLikeBundleId(name) ? ['-b', name] : ['-a', name], { signal })
+        return { kind: 'launched', name }
+      } catch (error: unknown) {
+        if (error instanceof Error && error.message.startsWith('computer-use:')) throw error
+        throw new Error(`computer-use: open_app failed for ${name}: ${errorDetail(error)}`)
       }
     },
 
