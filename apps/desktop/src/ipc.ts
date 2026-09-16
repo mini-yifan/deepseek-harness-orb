@@ -38,6 +38,8 @@ export const DESKTOP_IPC = {
   selectionExplain: 'dsh-desktop:selection-explain',
   selectionSetLanguage: 'dsh-desktop:selection-set-language',
   selectionState: 'dsh-desktop:selection-state',
+  selectionInteract: 'dsh-desktop:selection-interact',
+  selectionSetContentSize: 'dsh-desktop:selection-set-content-size',
 } as const
 
 /** User-message text the overlay renderer prompts onto the Computer Use session. */
@@ -96,6 +98,8 @@ export interface DshDesktopApi {
     translate(): Promise<void>
     explain(): Promise<void>
     setLanguage(language: SelectionTranslateLanguage): Promise<void>
+    interact(): Promise<void>
+    setContentSize(size: { width: number; height: number }): Promise<{ menuAbove: boolean }>
     onState(listener: (state: SelectionToolbarState) => void): () => void
   }
 }

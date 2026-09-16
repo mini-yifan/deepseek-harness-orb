@@ -51,6 +51,43 @@ export function selectionToolbarBounds(
 }
 
 /**
+ * Resize the toolbar around the compact bar origin so a language menu can paint.
+ * Grows down when the work area has room; otherwise grows up so the bar bottom stays put.
+ * @param barOrigin - compact toolbar top-left from {@link selectionToolbarBounds}.
+ * @param contentSize - renderer-measured bar plus optional menu.
+ * @param workArea - containing display work area.
+ * @returns window bounds. `y < barOrigin.y` means the menu is above the bar.
+ */
+export function selectionToolbarMenuBounds(
+  barOrigin: { readonly x: number; readonly y: number },
+  contentSize: { readonly width: number; readonly height: number },
+  workArea: OverlayRect = workAreaOf(barOrigin),
+): OverlayRect {
+  const width = Math.max(1, Math.round(contentSize.width))
+  const height = Math.max(1, Math.round(contentSize.height))
+  const x = clamp(barOrigin.x, workArea.x, workArea.x + workArea.width - width)
+  const fitsBelow = barOrigin.y + height <= workArea.y + workArea.height
+  if (fitsBelow || height <= SELECTION_TOOLBAR_SIZE.height) {
+    return {
+      x,
+      y: clamp(barOrigin.y, workArea.y, workArea.y + workArea.height - height),
+      width,
+      height,
+    }
+  }
+  return {
+    x,
+    y: clamp(
+      barOrigin.y + SELECTION_TOOLBAR_SIZE.height - height,
+      workArea.y,
+      workArea.y + workArea.height - height,
+    ),
+    width,
+    height,
+  }
+}
+
+/**
  * Construct the selection-toolbar panel. The caller loads `dsh-app://shell/selection-toolbar.html`.
  * @param preload - context-isolated shell preload.
  * @returns a hidden, non-activating overlay.

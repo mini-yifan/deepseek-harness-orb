@@ -30,6 +30,7 @@ const harness = await vi.hoisted(async () => {
     visibleOnAllWorkspacesOptions: { visibleOnFullScreen?: boolean; skipTransformProcessType?: boolean } | undefined = undefined
     bounds = { x: 0, y: 0, width: 72, height: 72 }
     visible = false
+    focused = false
     readonly mediaSourceId: string
     readonly urls: string[] = []
     readonly webContents = Object.assign(new EventEmitter(), {
@@ -41,11 +42,11 @@ const harness = await vi.hoisted(async () => {
         if (channel === 'dsh-desktop:backend-state' && state.phase === 'error') errorPublished.resolve()
       }),
     })
-    readonly show = vi.fn(() => { this.visible = true })
+    readonly show = vi.fn(() => { this.visible = true; this.focused = true })
     readonly showInactive = vi.fn(() => { this.visible = true })
     readonly hide = vi.fn(() => { this.visible = false })
-    readonly focus = vi.fn()
-    readonly blur = vi.fn()
+    readonly focus = vi.fn(() => { this.focused = true })
+    readonly blur = vi.fn(() => { this.focused = false })
     readonly restore = vi.fn()
     constructor(readonly options: {
       show?: boolean
@@ -65,6 +66,7 @@ const harness = await vi.hoisted(async () => {
     isDestroyed() { return this.destroyed }
     isMinimized() { return false }
     isVisible() { return this.visible }
+    isFocused() { return this.focused }
     setContentProtection(value: boolean) { this.contentProtection = value }
     setIgnoreMouseEvents(value: boolean, options?: { forward?: boolean }) {
       this.ignoreMouseEvents = value
@@ -138,8 +140,15 @@ const harness = await vi.hoisted(async () => {
     dock: { show: vi.fn() },
     setActivationPolicy: vi.fn(),
   })
+  const selectionMonitor = {
+    onEvent: undefined as ((event: { type: string; text?: string; x?: number; y?: number }) => void) | undefined,
+    start(handlers: { onEvent: (event: { type: string; text?: string; x?: number; y?: number }) => void }) {
+      selectionMonitor.onEvent = handlers.onEvent
+      return { stop: vi.fn(), setExcludePids: vi.fn() }
+    },
+  }
   return {
-    windows, hosts, handlers, app, FakeWindow, FakeHost,
+    windows, hosts, handlers, app, FakeWindow, FakeHost, selectionMonitor,
     dialog: { showErrorBox: vi.fn(), showMessageBox: vi.fn() },
     applyRelease: vi.fn(() => { preparing.resolve(); return prepared.promise }),
     assertProfileRuntime: vi.fn(),
@@ -155,6 +164,7 @@ const harness = await vi.hoisted(async () => {
       app.isPackaged = true
       pluginsEnabled = false
       nextMediaSourceId = 4242
+      selectionMonitor.onEvent = undefined
       preparing = deferred(); prepared = deferred(); hostStarted = deferred()
       navigated = deferred(); errorPublished = deferred(); quitCompleted = deferred()
     },
@@ -199,6 +209,11 @@ vi.mock('../src/project-manager.ts', () => ({
 }))
 vi.mock('../src/host-process.ts', () => ({ DesktopHostProcess: harness.FakeHost }))
 vi.mock('../src/update-coordinator.ts', () => ({ DesktopUpdateCoordinator: vi.fn() }))
+vi.mock('../src/selection-monitor.ts', () => ({
+  startSelectionMonitor: (
+    handlers: { onEvent: (event: { type: string; text?: string; x?: number; y?: number }) => void },
+  ) => harness.selectionMonitor.start(handlers),
+}))
 
 function invoke(channel: string, ...args: unknown[]): unknown {
   const handler = harness.handlers.get(channel)
@@ -212,6 +227,14 @@ function invokeFloating(channel: string, ...args: unknown[]): unknown {
   const window = harness.windows.find(entry => entry.options.type === 'panel')
   if (window === undefined) throw new Error('missing floating window')
   return handler({ sender: window.webContents, senderFrame: { url: 'dsh-app://shell/floating.html' } }, ...args)
+}
+
+function invokeSelection(channel: string, ...args: unknown[]): unknown {
+  const handler = harness.handlers.get(channel)
+  if (handler === undefined) throw new Error(`missing handler ${channel}`)
+  const window = harness.windows.find(entry => entry.options.focusable === false)
+  if (window === undefined) throw new Error('missing selection toolbar')
+  return handler({ sender: window.webContents, senderFrame: { url: 'dsh-app://shell/selection-toolbar.html' } }, ...args)
 }
 
 function appWindows(): typeof harness.windows {
@@ -571,6 +594,50 @@ describe('desktop floating overlay', () => {
     expect(appWindows()[0]?.contentProtection).toBe(false)
     expect(harness.app.dock.show).not.toHaveBeenCalled()
     expect(harness.app.setActivationPolicy).not.toHaveBeenCalled()
+  })
+
+  it('does not show the main window when the selection toolbar translates or explains', async () => {
+    vi.setSystemTime(1_000)
+    vi.stubGlobal('process', { ...process, platform: 'darwin', resourcesPath: 'desktop-test-resources' })
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    harness.prepared.resolve()
+    await harness.hostStarted.promise
+    harness.hosts[0]!.ready.resolve()
+    await harness.navigated.promise
+    const main = appWindows()[0]!
+    const overlay = harness.windows.find(window => window.options.type === 'panel')
+    const toolbar = harness.windows.find(window => window.options.focusable === false)
+    main.focus()
+    main.show.mockClear()
+    main.focus.mockClear()
+    if (harness.selectionMonitor.onEvent === undefined) throw new Error('missing selection monitor')
+    harness.selectionMonitor.onEvent({ type: 'selection', text: 'hello', x: 40, y: 50 })
+    invokeSelection(DESKTOP_IPC.selectionTranslate)
+    expect(overlay?.webContents.send).toHaveBeenCalledWith(
+      DESKTOP_IPC.selectionPrompt,
+      expect.objectContaining({ text: expect.stringContaining('Translate the following into Chinese') }),
+    )
+    expect(overlay?.showInactive).toHaveBeenCalled()
+    expect(toolbar?.hide).toHaveBeenCalled()
+    expect(main.blur).toHaveBeenCalled()
+    expect(main.show).not.toHaveBeenCalled()
+    expect(main.focus).not.toHaveBeenCalled()
+    invokeSelection(DESKTOP_IPC.selectionExplain)
+    expect(main.show).not.toHaveBeenCalled()
+    expect(main.focus).not.toHaveBeenCalled()
+    invokeSelection(DESKTOP_IPC.selectionInteract)
+    invokeSelection(DESKTOP_IPC.selectionSetContentSize, { width: 280, height: 120 })
+    expect(toolbar?.bounds).toMatchObject({ width: 280, height: 120 })
+    invokeFloating(DESKTOP_IPC.floatingSetExpanded, true)
+    expect(overlay?.showInactive).toHaveBeenCalled()
+    harness.app.emit('activate')
+    expect(main.show).not.toHaveBeenCalled()
+    expect(main.focus).not.toHaveBeenCalled()
+    vi.setSystemTime(3_500)
+    harness.app.emit('activate')
+    expect(main.show).toHaveBeenCalled()
+    expect(main.focus).toHaveBeenCalled()
   })
 
   it('installs the standard Edit and Window menus so clipboard shortcuts reach inputs', async () => {

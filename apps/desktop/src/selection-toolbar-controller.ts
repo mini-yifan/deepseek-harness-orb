@@ -14,6 +14,7 @@ import {
   hideSelectionToolbar,
   pointInWindow,
   selectionToolbarBounds,
+  selectionToolbarMenuBounds,
   showSelectionToolbar,
 } from './selection-toolbar-window.ts'
 import {
@@ -50,6 +51,7 @@ export class SelectionToolbarController {
   private lastText = ''
   private lastBounds: SelectionBounds | undefined
   private lastAnchor = { x: 0, y: 0 }
+  private lastBarOrigin = { x: 0, y: 0 }
   private lastDedupe: { key: string; at: number } | undefined
   private sessionRunning = false
   private hidInput = false
@@ -157,6 +159,20 @@ export class SelectionToolbarController {
     await this.host.openExternal(selectionSearchUrl(this.lastText))
   }
 
+  /**
+   * Grow or shrink the toolbar window to the renderer-measured content.
+   * Extra height exists only while the language menu is open so transparent chrome does not eat clicks.
+   * @param width - content width in CSS pixels.
+   * @param height - content height in CSS pixels, including an open language menu.
+   * @returns whether the menu is laid out above the bar.
+   */
+  setContentSize(width: number, height: number): { menuAbove: boolean } {
+    if (this.toolbar === undefined || this.toolbar.isDestroyed()) return { menuAbove: false }
+    const bounds = selectionToolbarMenuBounds(this.lastBarOrigin, { width, height })
+    this.toolbar.setBounds(bounds)
+    return { menuAbove: bounds.y < this.lastBarOrigin.y }
+  }
+
   /** Prompt the overlay Computer Use session to translate the last selection. */
   translate(): void {
     this.promptSelection(composeSelectionTranslatePrompt(this.lastText, this.config.translateTargetLanguage))
@@ -207,7 +223,6 @@ export class SelectionToolbarController {
 
   private promptSelection(text: string): void {
     if (this.lastText === '') return
-    hideSelectionToolbar(this.toolbar)
     this.host.promptOverlay(text)
   }
 
@@ -222,7 +237,9 @@ export class SelectionToolbarController {
     this.lastText = event.text
     this.lastBounds = event.bounds
     if (event.x !== undefined && event.y !== undefined) this.lastAnchor = { x: event.x, y: event.y }
-    showSelectionToolbar(this.toolbar, selectionToolbarBounds(this.lastAnchor, this.lastBounds))
+    const bounds = selectionToolbarBounds(this.lastAnchor, this.lastBounds)
+    this.lastBarOrigin = { x: bounds.x, y: bounds.y }
+    showSelectionToolbar(this.toolbar, bounds)
     this.publishState()
   }
 }

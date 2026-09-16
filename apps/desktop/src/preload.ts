@@ -56,6 +56,8 @@ const api: DshDesktopApi = {
     translate: () => ipcRenderer.invoke(DESKTOP_IPC.selectionTranslate) as Promise<void>,
     explain: () => ipcRenderer.invoke(DESKTOP_IPC.selectionExplain) as Promise<void>,
     setLanguage: language => ipcRenderer.invoke(DESKTOP_IPC.selectionSetLanguage, language) as Promise<void>,
+    interact: () => ipcRenderer.invoke(DESKTOP_IPC.selectionInteract) as Promise<void>,
+    setContentSize: size => ipcRenderer.invoke(DESKTOP_IPC.selectionSetContentSize, size) as Promise<{ menuAbove: boolean }>,
     onState(listener) {
       const handle = (_event: Electron.IpcRendererEvent, state: SelectionToolbarState): void => {
         listener(state)
