@@ -520,6 +520,7 @@ async function main(): Promise<void> {
     if (overlayOwnedActivationActive()) {
       noteOverlayOwnedActivation()
       window.showInactive()
+      selection?.restoreFrontApp()
     }
     return state
   })

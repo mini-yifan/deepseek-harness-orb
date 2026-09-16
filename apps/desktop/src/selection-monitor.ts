@@ -39,6 +39,11 @@ export interface SelectionMonitorHandlers {
 export interface SelectionMonitor {
   stop(): void
   setExcludePids(pids: readonly number[]): void
+  /**
+   * Re-activate the process that owned the last selection.
+   * @param pid - target process id. Electron and helper pids are ignored by the helper.
+   */
+  activatePid(pid: number): void
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -143,12 +148,19 @@ export function startSelectionMonitor(handlers: SelectionMonitorHandlers): Selec
       child.kill()
     },
     setExcludePids(pids) {
-      if (child.killed || child.stdin.destroyed) return
-      try {
-        child.stdin.write(`${JSON.stringify({ type: 'exclude-pids', pids: [...pids] })}\n`)
-      } catch {
-        // Helper already exited; stop() owns teardown.
-      }
+      writeHelperCommand(child, { type: 'exclude-pids', pids: [...pids] })
     },
+    activatePid(pid) {
+      writeHelperCommand(child, { type: 'activate-pid', pid })
+    },
+  }
+}
+
+function writeHelperCommand(child: ChildProcessWithoutNullStreams, command: unknown): void {
+  if (child.killed || child.stdin.destroyed) return
+  try {
+    child.stdin.write(`${JSON.stringify(command)}\n`)
+  } catch {
+    // Helper already exited; stop() owns teardown.
   }
 }

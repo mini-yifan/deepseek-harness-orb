@@ -60,6 +60,24 @@ private final class SelectionMonitor: @unchecked Sendable {
         lock.lock()
         excludePids = next
         lock.unlock()
+        continue
+      }
+      if object["type"] as? String == "activate-pid", let number = object["pid"] as? NSNumber {
+        let pid = pid_t(truncatingIfNeeded: number.intValue)
+        lock.lock()
+        let excluded = excludePids
+        lock.unlock()
+        if excluded.contains(pid) { continue }
+        DispatchQueue.main.async {
+          guard let application = NSRunningApplication(processIdentifier: pid), !application.isTerminated else {
+            return
+          }
+          if #available(macOS 14.0, *) {
+            _ = application.activate()
+          } else {
+            _ = application.activate(options: [.activateIgnoringOtherApps])
+          }
+        }
       }
     }
   }

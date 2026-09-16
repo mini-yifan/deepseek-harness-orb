@@ -16,7 +16,7 @@ helper 是应用包内已签名的子进程（`asarUnpack: lib/macos-selection`�
 
 第三扇 `type: 'panel'` 窗口加载 `dsh-app://shell/selection-toolbar.html`，且不激活 Desktop。文案由 locale 拥有。偏好与 `floating-session.json` 并列存为 `selection-toolbar.json`（默认 `enabled: true`，`translateTargetLanguage: 'zh'`）。overlay 右键切换启用。
 
-搜索在默认浏览器打开 `https://www.bing.com/search?q=` 加上编码后的选区，不提示 agent。翻译和讲解隐藏工具条、展开球，并对当前 overlay Computer Use 会话执行 `session/prompt` `mode: 'queue'`。它们不得显示或聚焦主窗口：工具条 IPC 在 2 秒内忽略 `app` 的 `activate`，overlay 用 `showInactive` 展开，发送后再隐藏工具条，已聚焦的主窗口会 `blur()`。该间隔之后的 Dock `activate` 仍会显示主窗口。打开语言菜单时，工具条面板绕紧凑条原点改尺寸（向下，或在工作区会裁切时向上），关闭后恢复紧凑尺寸，避免透明区域吞掉点击。用户消息第一行恰好是 `Desktop selection. Answer in this chat only. Do not call GUI tools or code_agent.` Desktop 与 Computer Use 各自保存该字符串；Desktop 不得导入该实验包。
+搜索在默认浏览器打开 `https://www.bing.com/search?q=` 加上编码后的选区，不提示 agent。翻译和讲解隐藏工具条、展开球，并对当前 overlay Computer Use 会话执行 `session/prompt` `mode: 'queue'`。它们不得显示或聚焦主窗口，也不得让 Desktop 保持前台：工具条 IPC 在 2 秒内忽略 `app` 的 `activate`，overlay 用 `showInactive` 展开，发送后再隐藏工具条，已聚焦的主窗口会 `blur()`，Darwin helper 通过 stdin `activate-pid` 重新激活划词所在进程（跳过 Electron 与 helper 的 pid）。搜索把焦点留给浏览器。该间隔之后的 Dock `activate` 仍会显示主窗口。打开语言菜单时，工具条面板绕紧凑条原点改尺寸（向下，或在工作区会裁切时向上），关闭后恢复紧凑尺寸，避免透明区域吞掉点击。用户消息第一行恰好是 `Desktop selection. Answer in this chat only. Do not call GUI tools or code_agent.` Desktop 与 Computer Use 各自保存该字符串；Desktop 不得导入该实验包。
 
 [实验 Computer Use](2026-09-13-experimental-computer-use.zh.md) 仍拥有首帧附件。`agent/pre-step` 的 `next()` 之后，当已领取批次里 `source.kind === 'user'` 的消息以该前导开头时，Computer Use 跳过 `observeDesktop`。POLICY 增加一段：该轮只在本聊天用文本回答；不调用 GUI 工具、`code_agent` 或 `screenshot`。schema 仍注册。`SESSION_FORMAT_VERSION` 不变。没有 OCR 路径，讲解也不走后台 `code_agent`。
 
@@ -42,4 +42,4 @@ helper 是应用包内已签名的子进程（`asarUnpack: lib/macos-selection`�
 
 ## 测试
 
-Desktop 测试覆盖配置读写、Bing URL、提示词拼接、helper NDJSON 解析、工具条几何（含语言菜单向下增高与向上翻转）、控制器的搜索/翻译/讲解/去重/暂停、可见 overlay 窗口的 overlay 排除 id、darwin 工具条构造、linux 跳过、overlay IPC `session/prompt`、翻译/讲解时抑制 activate、interact 与 setContentSize IPC，以及 locale 拥有的工具条文案。Computer Use pre-step 测试在钉死的前导上跳过，并在普通用户轮次仍附加首帧；`tools.spec.ts` 与 `snapshots/session/computer-use/system-prompt.expected.md` 钉住 POLICY 段落。
+Desktop 测试覆盖配置读写、Bing URL、提示词拼接、helper NDJSON 解析、工具条几何（含语言菜单向下增高与向上翻转）、控制器的搜索/翻译/讲解/去重/暂停、翻译/讲解后恢复划词 pid 并跳过 Electron pid、可见 overlay 窗口的 overlay 排除 id、darwin 工具条构造、linux 跳过、overlay IPC `session/prompt`、翻译/讲解时抑制 activate、interact 与 setContentSize IPC，以及 locale 拥有的工具条文案。Computer Use pre-step 测试在钉死的前导上跳过，并在普通用户轮次仍附加首帧；`tools.spec.ts` 与 `snapshots/session/computer-use/system-prompt.expected.md` 钉住 POLICY 段落。
