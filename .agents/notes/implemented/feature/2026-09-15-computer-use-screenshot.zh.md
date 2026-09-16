@@ -10,9 +10,9 @@ Status: implemented
 
 ## 决策
 
-`screenshot` 是互斥 GUI 导出。它按与观察相同的 overlay-skip 管道捕获当前显示器，把每张栅格写到用户桌面，文件名采用 macOS 风格的 `Screenshot YYYY-MM-DD at HH.MM.SS`，把第 0 屏复制到系统剪贴板，并在工具结果文本里返回这些路径，外加常规观察图片。缺写或空写会响亮失败。工具不接受参数。刷新加载仍用 1 秒的 `wait`。
+`screenshot` 是互斥 GUI 导出。它按与观察相同的 overlay-skip 管道捕获当前最前窗口，把该栅格写到用户桌面，文件名采用 macOS 风格的 `Screenshot YYYY-MM-DD at HH.MM.SS`，把它复制到系统剪贴板，并在工具结果文本里返回这些路径，外加常规观察图片。缺写或空写会响亮失败。工具不接受参数。刷新加载仍用 1 秒的 `wait`。
 
-策略要求模型不要只为看桌面而调用 `screenshot`。`copyImageToClipboard` 不是 HID，overlay-guard 不包它。剪贴板是替换，不是恢复。
+策略要求模型不要只为看窗口而调用 `screenshot`。`copyImageToClipboard` 不是 HID，overlay-guard 不包它。剪贴板是替换，不是恢复。[Computer Use 焦点窗口观察](2026-09-16-computer-use-focused-window-observation.zh.md) 拥有窗口捕获。
 
 ## 考虑过的替代方案
 
@@ -26,7 +26,7 @@ Status: implemented
 
 ## 影响
 
-Computer Use 目录是十一个互斥 GUI 工具加 `code_agent`。多屏捕获每屏一个文件，并复制第 0 屏。`screenshot` 之后再 `input_text` 会用字符串盖掉那张图。overlay-guard 的 HID 路径不变。
+Computer Use 目录是十三个互斥 GUI 工具加 `code_agent`。窗口捕获写一个文件并复制该图。`screenshot` 之后再 `input_text` 会用字符串盖掉那张图。overlay-guard 的 HID 路径不变。
 
 ## 测试
 

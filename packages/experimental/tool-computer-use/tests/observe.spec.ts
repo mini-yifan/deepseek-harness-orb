@@ -1,11 +1,10 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
 import { FOCUS_FALLBACK_FOREGROUND } from '../src/backend.ts'
-import { resolveComputerUseConfig } from '../src/config.ts'
 import { createFakeDesktopBackend } from '../src/fake.ts'
 import {
   formatForegroundEnvelope,
@@ -13,6 +12,7 @@ import {
   observeDesktop,
   requireScreen,
 } from '../src/observe.ts'
+import * as waitModule from '../src/wait.ts'
 
 const SIGNAL = new AbortController().signal
 
@@ -20,6 +20,7 @@ let home: string | undefined
 let context: Context | undefined
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await context?.fiber.dispose()
   context = undefined
   if (home !== undefined) await rm(home, { recursive: true, force: true })
@@ -27,23 +28,18 @@ afterEach(async () => {
 })
 
 describe('observeDesktop', () => {
-  it('captures at most maxScreens displays and omits filesystem paths', async () => {
+  it('captures one frontmost-window screenshot and omits filesystem paths', async () => {
     home = await mkdtemp(join(tmpdir(), 'dsh-cu-obs-'))
     const ctx = new Context()
     context = ctx
     await ctx.plugin(LocalAttachmentStore, { dshHome: home })
     const backend = createFakeDesktopBackend({
       screens: [
-        { index: 0, bounds: { x: 0, y: 0, width: 100, height: 80 }, scale: 1 },
-        { index: 1, bounds: { x: 100, y: 0, width: 50, height: 80 }, scale: 2 },
+        { index: 0, bounds: { x: 12, y: 34, width: 100, height: 80 }, scale: 1, windowId: 9 },
       ],
+      foreground: { appName: 'Pages', windowTitle: 'Untitled' },
     })
-    const observation = await observeDesktop(
-      ctx,
-      backend,
-      resolveComputerUseConfig({ maxScreens: 1 }),
-      SIGNAL,
-    )
+    const observation = await observeDesktop(ctx, backend, SIGNAL)
     expect(observation.screens).toHaveLength(1)
     expect(observation.captures).toHaveLength(1)
     expect(observation.captures[0]?.mediaType).toBe('image/png')
@@ -51,6 +47,9 @@ describe('observeDesktop', () => {
     expect(observation.blocks.some(block => block.type === 'image')).toBe(true)
     expect(observation.blocks.some(block =>
       block.type === 'text' && 'text' in block && block.text.includes('<frontmost_app>Pages</frontmost_app>'),
+    )).toBe(true)
+    expect(observation.blocks.some(block =>
+      block.type === 'text' && 'text' in block && block.text.includes('<frontmost_window>Untitled</frontmost_window>'),
     )).toBe(true)
     expect(observation.blocks.some(block =>
       block.type === 'text' && 'text' in block && block.text.includes('<path>'),
@@ -85,24 +84,67 @@ describe('observeDesktop', () => {
     })
   })
 
-  it('rejects an empty display list and honors abort', async () => {
+  it('waits settleMs after inspect and before capture', async () => {
+    home = await mkdtemp(join(tmpdir(), 'dsh-cu-obs-settle-'))
+    const ctx = new Context()
+    context = ctx
+    await ctx.plugin(LocalAttachmentStore, { dshHome: home })
+    const order: string[] = []
+    const delay = vi.spyOn(waitModule, 'delay').mockImplementation(async () => {
+      order.push('delay')
+    })
+    const fake = createFakeDesktopBackend({
+      screens: [
+        { index: 0, bounds: { x: 0, y: 0, width: 100, height: 80 }, scale: 1, windowId: 9 },
+      ],
+    })
+    const observation = await observeDesktop(ctx, {
+      ...fake,
+      inspectForeground: async () => {
+        order.push('inspect')
+        return fake.inspectForeground()
+      },
+      capture: async (screen, signal) => {
+        order.push('capture')
+        return fake.capture(screen, signal)
+      },
+    }, SIGNAL, { settleMs: 600 })
+    expect(observation.screens).toHaveLength(1)
+    expect(delay).toHaveBeenCalledWith(600, SIGNAL)
+    expect(order).toEqual(['inspect', 'delay', 'capture'])
+  })
+
+  it('returns focus tags without a panorama when no window remains', async () => {
     home = await mkdtemp(join(tmpdir(), 'dsh-cu-obs-empty-'))
     const ctx = new Context()
     context = ctx
     await ctx.plugin(LocalAttachmentStore, { dshHome: home })
-    const empty = createFakeDesktopBackend({ screens: [] })
-    await expect(observeDesktop(
+    const empty = createFakeDesktopBackend({
+      screens: [],
+      foreground: FOCUS_FALLBACK_FOREGROUND,
+    })
+    const delay = vi.spyOn(waitModule, 'delay')
+    const observation = await observeDesktop(
       ctx,
       empty,
-      resolveComputerUseConfig({}),
       SIGNAL,
-    )).rejects.toThrow(/no displays available/u)
+      { settleMs: 600 },
+    )
+    expect(delay).not.toHaveBeenCalled()
+    expect(observation.screens).toEqual([])
+    expect(observation.captures).toEqual([])
+    expect(observation.blocks.some(block => block.type === 'image')).toBe(false)
+    expect(observation.blocks.some(block =>
+      block.type === 'text' && 'text' in block && block.text.includes('<frontmost_app>none</frontmost_app>'),
+    )).toBe(true)
+    expect(observation.blocks.some(block =>
+      block.type === 'text' && 'text' in block && block.text.includes('<focus_note>'),
+    )).toBe(true)
     const abort = new AbortController()
     abort.abort(new Error('stopped'))
     await expect(observeDesktop(
       ctx,
       createFakeDesktopBackend(),
-      resolveComputerUseConfig({}),
       abort.signal,
     )).rejects.toThrow('stopped')
   })
@@ -119,7 +161,6 @@ describe('observeDesktop', () => {
         ...fake,
         inspectForeground: () => Promise.reject(new Error('ax failed')),
       },
-      resolveComputerUseConfig({}),
       SIGNAL,
     )
     expect(observation.foreground).toEqual(FOCUS_FALLBACK_FOREGROUND)
@@ -142,7 +183,6 @@ describe('observeDesktop', () => {
         ...fake,
         inspectForeground: () => Promise.reject(abort),
       },
-      resolveComputerUseConfig({}),
       SIGNAL,
     )).rejects.toThrow('stopped')
 
@@ -156,7 +196,6 @@ describe('observeDesktop', () => {
           return Promise.reject(new Error('ax failed'))
         },
       },
-      resolveComputerUseConfig({}),
       controller.signal,
     )).rejects.toThrow('ax failed')
   })
@@ -164,6 +203,9 @@ describe('observeDesktop', () => {
 
 describe('formatForegroundEnvelope', () => {
   it('omits empty folder and note tags', () => {
+    expect(formatForegroundEnvelope({ appName: 'Pages', windowTitle: 'Untitled' })).toBe(
+      '<frontmost_app>Pages</frontmost_app>\n<frontmost_window>Untitled</frontmost_window>',
+    )
     expect(formatForegroundEnvelope({ appName: 'Pages' })).toBe(
       '<frontmost_app>Pages</frontmost_app>',
     )

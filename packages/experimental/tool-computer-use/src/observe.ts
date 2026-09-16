@@ -1,5 +1,5 @@
 /**
- * Capture attached displays, persist them, and build model-facing image content.
+ * Capture the frontmost window, persist it, and build model-facing image content.
  * @module @deepseek-ai/dsh-experimental-tool-computer-use/src/observe
  */
 
@@ -9,7 +9,7 @@ import type { ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attach
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { CapturedScreen, DesktopBackend, DesktopForeground, ScreenInfo } from './backend.ts'
 import { FOCUS_FALLBACK_FOREGROUND } from './backend.ts'
-import type { ResolvedComputerUseConfig } from './config.ts'
+import { delay } from './wait.ts'
 
 /** Canonical image metadata stored beside one captured screen. */
 export interface ObservedImage {
@@ -84,13 +84,17 @@ function envelopeValue(value: string): string {
 
 /**
  * Format OS foreground metadata as one observation-level envelope.
- * Empty folder and note fields are omitted. Screenshot filesystem paths are never included.
+ * Empty folder, title, and note fields are omitted. Screenshot filesystem paths are never included.
  * @param foreground - inspect result after overlay-window skip.
- * @returns model-facing tags for app name, optional Finder folder, or focus fallback.
+ * @returns model-facing tags for app name, optional window title, optional Finder folder, or focus fallback.
  */
 export function formatForegroundEnvelope(foreground: DesktopForeground): string {
   const appName = envelopeValue(foreground.appName) || 'none'
   const lines = [`<frontmost_app>${appName}</frontmost_app>`]
+  if (foreground.windowTitle !== undefined) {
+    const title = envelopeValue(foreground.windowTitle)
+    if (title !== '') lines.push(`<frontmost_window>${title}</frontmost_window>`)
+  }
   if (foreground.focusNote !== undefined) {
     const note = envelopeValue(foreground.focusNote)
     if (note !== '') lines.push(`<focus_note>${note}</focus_note>`)
@@ -111,6 +115,7 @@ export function formatForegroundEnvelope(foreground: DesktopForeground): string 
 export function compactForeground(foreground: DesktopForeground): DesktopForeground {
   return {
     appName: foreground.appName,
+    ...foreground.windowTitle === undefined ? {} : { windowTitle: foreground.windowTitle },
     ...foreground.finderFolder === undefined ? {} : { finderFolder: foreground.finderFolder },
     ...foreground.focusNote === undefined ? {} : { focusNote: foreground.focusNote },
   }
@@ -158,23 +163,23 @@ export function observationContent(
 }
 
 /**
- * Capture up to `config.maxScreens` displays, persist each image, and build content blocks.
+ * Capture the overlay-skipped frontmost window, persist the image, and build content blocks.
+ * When no operable window remains, returns focus tags with no screenshot.
  * @param ctx - plugin context with `attachments`.
  * @param backend - desktop capture implementation.
- * @param config - resolved wait and screen limits.
  * @param signal - cooperative cancellation.
+ * @param options - optional settle wait applied after inspect and immediately before capture.
  * @returns canonical screens, foreground metadata, and model-facing blocks.
  */
 export async function observeDesktop(
   ctx: Context,
   backend: DesktopBackend,
-  config: ResolvedComputerUseConfig,
   signal: AbortSignal,
+  options: { settleMs?: number } = {},
 ): Promise<DesktopObservation> {
   signal.throwIfAborted()
   const listed = await backend.listScreens(signal)
-  const selected = listed.slice(0, config.maxScreens)
-  if (selected.length === 0) throw new Error('computer-use: no displays available')
+  const selected = listed.slice(0, 1)
   let foreground = FOCUS_FALLBACK_FOREGROUND
   try {
     foreground = await backend.inspectForeground(signal)
@@ -183,6 +188,8 @@ export async function observeDesktop(
   }
   const screens: ObservedScreen[] = []
   const captures: CapturedScreen[] = []
+  const settleMs = options.settleMs ?? 0
+  if (selected.length > 0 && settleMs > 0) await delay(settleMs, signal)
   for (const screen of selected) {
     signal.throwIfAborted()
     const captured = await backend.capture(screen, signal)
@@ -216,8 +223,8 @@ export async function observeDesktop(
 }
 
 /**
- * Resolve a screen_index against the current display list.
- * @param screens - backend display list.
+ * Resolve a screen_index against the current observation surface list.
+ * @param screens - backend surface list.
  * @param screenIndex - model-supplied index.
  * @returns the matching screen.
  * @throws when the index is missing.

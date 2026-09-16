@@ -14,7 +14,7 @@ Four more exclusive GUI tools follow the existing one-action-then-recapture path
 
 `long_press` takes `screen_index`, `position` in 0–1000, and optional `duration_seconds` (default 3, inclusive 1–10). The bound is a HID safety invariant, not a cordis Config. macOS posts `longPressAt` (left down, sleep, left up).
 
-`drag` takes start and end screen indexes and 0–1000 positions. Cross-screen is allowed. macOS posts `dragFromTo`: move, left down, ten LeftMouseDragged (type 6) steps, left up. Step count stays inside [`HID_RUNTIME`](../../../../packages/experimental/tool-computer-use/src/macos.ts).
+`drag` takes start and end screen indexes and 0–1000 positions. Both indexes are 0 for the one attached window. macOS posts `dragFromTo`: move, left down, ten LeftMouseDragged (type 6) steps, left up. Step count stays inside [`HID_RUNTIME`](../../../../packages/experimental/tool-computer-use/src/macos.ts). [Computer Use focused-window observation](2026-09-16-computer-use-focused-window-observation.md) owns that single surface.
 
 `open_in_browser` and `open_in_finder` launch through `/usr/bin/open`, not HID. Omit `url` to launch the default HTTP handler (`open -b` after LaunchServices lookup). A present URL must be http(s); a missing scheme becomes `https://`; userinfo is rejected; CJK in path or query must be plain text, never multi-byte percent-encoding such as `%E5...` / `%E8...`. This is the user-visible browser. `web_search` / `web_fetch` stay model-side text.
 
@@ -34,13 +34,13 @@ Policy tells the model: known path → `open_in_finder`; visible site → `open_
 
 **HID click on Dock or Desktop icons.** Opening a known path or URL does not need pixel hunting, and overlay chrome would interfere.
 
-**`launch_app`, `capture_screen`, and `manage_files` in this cut.** Those are separate CoView tools. Observation is already first-frame plus every GUI result; app launch and file management stay deferred.
+**`launch_app`, `capture_screen`, and `manage_files` in this cut.** `list_apps` / `open_app` are owned by [Computer Use focused-window observation](2026-09-16-computer-use-focused-window-observation.md). File management stays deferred.
 
 **cordis Config for hold duration or drag steps.** The 1–10 hold bound is a HID safety invariant. Drag step count is an implementation constant in `HID_RUNTIME`.
 
 ## Consequences
 
-The Computer Use catalog is eleven exclusive GUI tools plus `code_agent`. `open_*` can raise windows the overlay does not cloak. The path blacklist includes `/private`, so macOS `/tmp` after `realpath` is forbidden. CJK percent-encoding fails at execute with a model-facing diagnostic.
+The Computer Use catalog is thirteen exclusive GUI tools plus `code_agent`. `open_*` can raise windows the overlay does not cloak. The path blacklist includes `/private`, so macOS `/tmp` after `realpath` is forbidden. CJK percent-encoding fails at execute with a model-facing diagnostic.
 
 ## Testing
 

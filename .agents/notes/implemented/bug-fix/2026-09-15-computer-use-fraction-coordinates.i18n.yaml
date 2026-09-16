@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-15-computer-use-fraction-coordinates.md
-2026-09-15-computer-use-fraction-coordinates.md: 1174b17c750adbc8febcffe5e412b4c0144f2339
-2026-09-15-computer-use-fraction-coordinates.zh.md: 1e8fa6ebddcbde0ee4ae844d8eeab4277ff6ab68
+2026-09-15-computer-use-fraction-coordinates.md: a9cdb6facd8c2ff732f89ccb433de19c52fb494e
+2026-09-15-computer-use-fraction-coordinates.zh.md: df587d12afee8bc3e939e9a12eb7bca053ce1668

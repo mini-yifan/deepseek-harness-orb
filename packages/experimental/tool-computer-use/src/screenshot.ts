@@ -7,7 +7,7 @@ import * as fs from 'node:fs/promises'
 import { join } from 'node:path'
 import type { ImageMediaType } from '@deepseek-ai/dsh-attachment'
 
-/** One captured display to persist as a user-visible file. */
+/** One captured window raster to persist as a user-visible file. */
 export interface DesktopScreenshotFile {
   readonly data: Uint8Array
   readonly mediaType: ImageMediaType
@@ -28,8 +28,8 @@ function pad2(value: number): string {
 /**
  * macOS-style Screenshot stamp used as the Desktop filename stem.
  * @param now - local time used in the stamp.
- * @param screenIndex - display index from the observation.
- * @param screenCount - how many displays this capture wrote.
+ * @param screenIndex - observation surface index (0 for the attached window).
+ * @param screenCount - how many surfaces this capture wrote.
  * @returns filename stem without extension.
  */
 export function screenshotFileStem(

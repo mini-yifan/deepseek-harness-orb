@@ -85,6 +85,7 @@ async function setup(options: {
   model?: LlmModelInfo
   foreground?: DesktopForeground
   screens?: readonly ScreenInfo[]
+  postActionWaitMs?: number
 } = {}) {
   const home = await mkdtemp(join(tmpdir(), 'dsh-cu-'))
   homes.push(home)
@@ -107,7 +108,9 @@ async function setup(options: {
     ...options.foreground === undefined ? {} : { foreground: options.foreground },
     ...options.screens === undefined ? {} : { screens: options.screens },
   })
-  applyComputerUse(ctx, backend, resolveComputerUseConfig({ postActionWaitMs: 0, maxScreens: 4 }))
+  applyComputerUse(ctx, backend, resolveComputerUseConfig({
+    postActionWaitMs: options.postActionWaitMs ?? 0,
+  }))
   return { ctx, backend }
 }
 
@@ -115,11 +118,9 @@ describe('plugin metadata', () => {
   it('exports loader identity without a default export', () => {
     expect(name).toBe('tool-computer-use')
     expect(inject).toEqual(['tools', 'systemPrompt', 'attachments'])
-    expect(Config({}).postActionWaitMs).toBe(500)
-    expect(resolveComputerUseConfig({}).maxScreens).toBe(4)
+    expect(Config({}).postActionWaitMs).toBe(600)
+    expect(resolveComputerUseConfig({}).postActionWaitMs).toBe(600)
     expect(() => resolveComputerUseConfig({ postActionWaitMs: -1 })).toThrow(/postActionWaitMs/u)
-    expect(() => resolveComputerUseConfig({ maxScreens: 0 })).toThrow(/maxScreens/u)
-    expect(() => resolveComputerUseConfig({ maxScreens: 1.5 })).toThrow(/maxScreens/u)
     expect('default' in ComputerUse).toBe(false)
   })
 })
@@ -189,6 +190,12 @@ describe('computer-use tools', () => {
     expect(ctx.tools.executionMode({
       signal: SIGNAL, callId: ToolCallId('mode-finder'), name: 'open_in_finder', arguments: {},
     })).toEqual({ kind: 'exclusive' })
+    expect(ctx.tools.executionMode({
+      signal: SIGNAL, callId: ToolCallId('mode-list-apps'), name: 'list_apps', arguments: {},
+    })).toEqual({ kind: 'exclusive' })
+    expect(ctx.tools.executionMode({
+      signal: SIGNAL, callId: ToolCallId('mode-open-app'), name: 'open_app', arguments: { name: 'Pages' },
+    })).toEqual({ kind: 'exclusive' })
     expect(ctx.tools.get('click')?.presentCall?.({
       screen_index: 0, position: [0, 0],
     })).toMatchObject({ card: 'generic', kind: 'execute', title: 'Click' })
@@ -240,6 +247,18 @@ describe('computer-use tools', () => {
       .toMatchObject({ card: 'generic', title: 'Wait' })
   })
 
+  it('settles postActionWaitMs after inspect and before recapture', async () => {
+    const { ctx, backend } = await setup({ postActionWaitMs: 600 })
+    const result = await execute(ctx, 'click', { screen_index: 0, position: [100, 200] })
+    expect(result.isError).toBe(false)
+    expect(backend.actions[0]).toMatchObject({ type: 'click' })
+    expect(waitModule.delay).toHaveBeenCalledWith(600, SIGNAL)
+    await execute(ctx, 'scroll', {
+      screen_index: 0, position: [0, 0], direction: 'down', scroll_level: 1,
+    })
+    expect(waitModule.delay).toHaveBeenCalledWith(600, SIGNAL)
+  })
+
   it('saves a desktop screenshot and copies it to the clipboard', async () => {
     const home = await mkdtemp(join(tmpdir(), 'dsh-cu-shot-home-'))
     homes.push(home)
@@ -272,34 +291,51 @@ describe('computer-use tools', () => {
     }
   })
 
-  it('saves one file per display and copies screen 0', async () => {
-    const home = await mkdtemp(join(tmpdir(), 'dsh-cu-shot-multi-'))
-    homes.push(home)
-    const originalWrite = screenshotModule.writeDesktopScreenshots
-    const write = vi.spyOn(screenshotModule, 'writeDesktopScreenshots').mockImplementation(
-      (files, options) => originalWrite(files, {
-        ...options,
-        home,
-        now: new Date(2026, 8, 15, 20, 10, 0),
-      }),
-    )
-    try {
-      const { ctx, backend } = await setup({
-        screens: [
-          { index: 0, bounds: { x: 0, y: 0, width: 100, height: 80 }, scale: 1 },
-          { index: 1, bounds: { x: 100, y: 0, width: 50, height: 80 }, scale: 1 },
-        ],
-      })
-      const result = await execute(ctx, 'screenshot', {})
-      expect(result.isError).toBe(false)
-      expect(text(result)).toContain('Saved screenshots:')
-      expect(text(result)).toContain('(screen 0).png')
-      expect(text(result)).toContain('(screen 1).png')
-      expect(text(result)).toContain('Copied screen 0 to the clipboard')
-      expect(backend.actions.at(-1)?.type).toBe('copyImageToClipboard')
-    } finally {
-      write.mockRestore()
-    }
+  it('lists apps and activates or reports open_app failure without a desktop panorama', async () => {
+    const { ctx, backend } = await setup()
+    const listed = await execute(ctx, 'list_apps', {})
+    expect(listed.isError).toBe(false)
+    expect(text(listed)).toContain('Running apps: Pages, Safari')
+    expect(text(listed)).toContain('<frontmost_app>Pages</frontmost_app>')
+    expect(text(listed)).toContain('<screen_index>0</screen_index>')
+    expect(ctx.tools.get('list_apps')?.presentCall?.({})).toMatchObject({
+      card: 'generic', title: 'List apps',
+    })
+    const opened = await execute(ctx, 'open_app', { name: 'Safari' })
+    expect(opened.isError).toBe(false)
+    expect(text(opened)).toContain('Opened Safari (activated)')
+    expect(backend.actions.at(-1)).toMatchObject({
+      type: 'openApp',
+      input: { name: 'Safari' },
+    })
+    expect(ctx.tools.get('open_app')?.presentCall?.({ name: 'Safari' }))
+      .toMatchObject({ card: 'generic', title: 'Open app' })
+    const blank = await execute(ctx, 'open_app', { name: '   ' })
+    expect(blank.isError).toBe(true)
+    expect(text(blank)).toContain('non-empty')
+    const failingHome = await mkdtemp(join(tmpdir(), 'dsh-cu-open-fail-'))
+    homes.push(failingHome)
+    const failingCtx = new Context()
+    contexts.push(failingCtx)
+    await failingCtx.plugin(SystemPrompt)
+    await failingCtx.plugin(ToolRuntime)
+    await failingCtx.plugin(LocalAttachmentStore, { dshHome: failingHome })
+    await failingCtx.plugin(LlmRuntime)
+    failingCtx.llm.registerAdapter(['visual'], new CatalogAdapter([
+      { provider: 'visual', id: 'vision-model', name: 'Vision', inputModalities: ['text', 'image'] },
+    ]))
+    applyComputerUse(failingCtx, createFakeDesktopBackend({
+      screens: [],
+      foreground: FOCUS_FALLBACK_FOREGROUND,
+      openAppError: new Error('computer-use: app name "Paint" matches multiple applications: Paint, Paintbrush'),
+    }), resolveComputerUseConfig({ postActionWaitMs: 0 }))
+    const failed = await execute(failingCtx, 'open_app', { name: 'Paint' })
+    expect(failed.isError).toBe(false)
+    expect(text(failed)).toContain('Could not open Paint')
+    expect(text(failed)).toContain('matches multiple applications')
+    expect(text(failed)).toContain('<frontmost_app>none</frontmost_app>')
+    expect(text(failed)).toContain('<focus_note>')
+    expect(failed.content.some(block => block.type === 'image')).toBe(false)
   })
 
   it('fails loud when screenshot writing returns no paths', async () => {
@@ -480,6 +516,9 @@ describe('computer-use tools', () => {
     const { ctx } = await setup()
     const assembled = await ctx.systemPrompt.assemble()
     expect(assembled.sections.some(section => section.text === POLICY)).toBe(true)
+    expect(POLICY).toContain('trust only the attached frontmost-window screenshot')
+    expect(POLICY).toContain('Do not click the Dock')
+    expect(POLICY).toContain('call list_apps or open_app')
     expect(POLICY).toContain('Map the target as a fraction of the screenshot you see')
     expect(POLICY).toContain('Do not send raw pixel coordinates')
     expect(POLICY).toContain('Ignore pixel widths and any other image-handle dimensions')
@@ -493,7 +532,7 @@ describe('computer-use tools', () => {
     expect(POLICY).toContain('call wait')
     expect(POLICY).toContain('call long_wait with the smallest of 10, 30, 60, or 120')
     expect(POLICY).toContain('Do not use long_wait for ordinary page load')
-    expect(POLICY).toContain('Do not call screenshot merely to see the desktop')
+    expect(POLICY).toContain('Do not call screenshot merely to see the window')
     expect(POLICY).toContain('Call screenshot when the user asked for a screenshot file')
     expect(POLICY).toContain('Do not call wait, long_wait, or bash sleep')
   })
@@ -514,8 +553,8 @@ describe('computer-use tools', () => {
     )
     const fiber = await ctx.plugin(computerUse)
     expect(ctx.tools.schemas().map(schema => schema.name).sort()).toEqual([
-      'click', 'drag', 'hotkey', 'input_text', 'long_press', 'long_wait',
-      'open_in_browser', 'open_in_finder', 'screenshot', 'scroll', 'wait',
+      'click', 'drag', 'hotkey', 'input_text', 'list_apps', 'long_press', 'long_wait',
+      'open_app', 'open_in_browser', 'open_in_finder', 'screenshot', 'scroll', 'wait',
     ])
     expect(ctx.tools.schemas().map(schema => schema.name)).not.toContain('code_agent')
     await fiber.dispose()
@@ -545,8 +584,8 @@ describe('computer-use tools', () => {
     ]))
     apply(host, { postActionWaitMs: 0 })
     expect(host.tools.schemas().map(schema => schema.name).sort()).toEqual([
-      'click', 'drag', 'hotkey', 'input_text', 'long_press', 'long_wait',
-      'open_in_browser', 'open_in_finder', 'screenshot', 'scroll', 'wait',
+      'click', 'drag', 'hotkey', 'input_text', 'list_apps', 'long_press', 'long_wait',
+      'open_app', 'open_in_browser', 'open_in_finder', 'screenshot', 'scroll', 'wait',
     ])
     expect(host.tools.schemas().map(schema => schema.name)).not.toContain('code_agent')
     if (process.platform === 'darwin') return
@@ -621,5 +660,20 @@ describe('screen envelopes', () => {
     const fallback = await execute(fallbackCtx, 'wait', {})
     expect(text(fallback)).toContain('<frontmost_app>none</frontmost_app>')
     expect(text(fallback)).toContain('<focus_note>')
+  })
+
+  it('maps click coordinates through current window bounds', async () => {
+    const { ctx, backend } = await setup({
+      screens: [{ index: 0, bounds: { x: 100, y: 200, width: 400, height: 300 }, scale: 2, windowId: 8 }],
+    })
+    const result = await execute(ctx, 'click', { screen_index: 0, position: [0, 0] })
+    expect(result.isError).toBe(false)
+    expect(backend.actions[0]).toMatchObject({
+      type: 'click',
+      input: {
+        screen: { bounds: { x: 100, y: 200, width: 400, height: 300 } },
+        position: [0, 0],
+      },
+    })
   })
 })

@@ -47,13 +47,13 @@
     },
     {
       "name": "click",
-      "description": "Click at a 0–1000 position on one desktop screen, then return the post-action screenshot. Use left (default) or right button; count 2 is a double-click. Exclusive: do not combine with other GUI tools in the same step.",
+      "description": "Click at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. Use left (default) or right button; count 2 is a double-click. Exclusive: do not combine with other GUI tools in the same step.",
       "parameters": {
         "type": "object",
         "properties": {
           "screen_index": {
             "type": "integer",
-            "description": "Zero-based display index from the latest screenshot envelope."
+            "description": "0 for the attached frontmost-window screenshot."
           },
           "position": {
             "type": "array",
@@ -133,13 +133,13 @@
     },
     {
       "name": "drag",
-      "description": "Drag from a start 0–1000 position to an end 0–1000 position, including across screens, then return the post-action screenshot. Exclusive.",
+      "description": "Drag from a start 0–1000 position to an end 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. Exclusive.",
       "parameters": {
         "type": "object",
         "properties": {
           "start_screen_index": {
             "type": "integer",
-            "description": "Zero-based display index for the drag start."
+            "description": "0 for the attached frontmost-window screenshot."
           },
           "start_position": {
             "type": "array",
@@ -150,7 +150,7 @@
           },
           "end_screen_index": {
             "type": "integer",
-            "description": "Zero-based display index for the drag end."
+            "description": "0 for the attached frontmost-window screenshot."
           },
           "end_position": {
             "type": "array",
@@ -299,13 +299,13 @@
     },
     {
       "name": "input_text",
-      "description": "Click to focus a 0–1000 position, type text, optionally replace existing content and press Enter, then return the post-action screenshot. Exclusive.",
+      "description": "Click to focus a 0–1000 position on the attached frontmost-window screenshot, type text, optionally replace existing content and press Enter, then return the post-action screenshot. Exclusive.",
       "parameters": {
         "type": "object",
         "properties": {
           "screen_index": {
             "type": "integer",
-            "description": "Zero-based display index from the latest screenshot envelope."
+            "description": "0 for the attached frontmost-window screenshot."
           },
           "position": {
             "type": "array",
@@ -422,14 +422,22 @@
       }
     },
     {
+      "name": "list_apps",
+      "description": "List running regular (Dock-visible) applications by display name, then return the current frontmost-window screenshot. Use this when the attached window is the wrong app. Exclusive.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
       "name": "long_press",
-      "description": "Press and hold the left button at a 0–1000 position on one desktop screen, then return the post-action screenshot. duration_seconds defaults to 3 and must be 1–10. Exclusive.",
+      "description": "Press and hold the left button at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. duration_seconds defaults to 3 and must be 1–10. Exclusive.",
       "parameters": {
         "type": "object",
         "properties": {
           "screen_index": {
             "type": "integer",
-            "description": "Zero-based display index from the latest screenshot envelope."
+            "description": "0 for the attached frontmost-window screenshot."
           },
           "position": {
             "type": "array",
@@ -452,7 +460,7 @@
     },
     {
       "name": "long_wait",
-      "description": "Pause 10, 30, 60, or 120 seconds, then return a fresh desktop screenshot without moving the pointer. Only for a visible long job such as a download, installer, export, or on-screen generation. Pick the smallest wait_seconds that covers remaining progress; 120 only when the screenshot already shows a minutes-long job. Ordinary loading uses wait. Do not use for code_agent. Exclusive.",
+      "description": "Pause 10, 30, 60, or 120 seconds, then return a fresh frontmost-window screenshot without moving the pointer. Only for a visible long job such as a download, installer, export, or on-screen generation. Pick the smallest wait_seconds that covers remaining progress; 120 only when the screenshot already shows a minutes-long job. Ordinary loading uses wait. Do not use for code_agent. Exclusive.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -469,6 +477,22 @@
         },
         "required": [
           "wait_seconds"
+        ]
+      }
+    },
+    {
+      "name": "open_app",
+      "description": "Activate a running application or launch it by display name or bundle id, then return the post-action screenshot. Use this when the attached window is the wrong app. Do not click the Dock. Exclusive.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Localized application name or bundle identifier, for example Pages or com.apple.TextEdit."
+          }
+        },
+        "required": [
+          "name"
         ]
       }
     },
@@ -565,7 +589,7 @@
     },
     {
       "name": "screenshot",
-      "description": "Save the current desktop screenshot to the user Desktop and copy it to the clipboard. Returns the saved file path. Do not use this to see the screen — the first user turn and every GUI result already attach screens. Use when the user asked for a screenshot file or needs the image on the clipboard to paste. Exclusive.",
+      "description": "Save the current frontmost-window screenshot to the user Desktop and copy it to the clipboard. Returns the saved file path. Do not use this to see the screen — the first user turn and every GUI result already attach the frontmost window. Use when the user asked for a screenshot file or needs the image on the clipboard to paste. Exclusive.",
       "parameters": {
         "type": "object",
         "properties": {}
@@ -573,13 +597,13 @@
     },
     {
       "name": "scroll",
-      "description": "Scroll up or down at a 0–1000 position on one desktop screen, then return the post-action screenshot. scroll_level is 1–10. Exclusive.",
+      "description": "Scroll up or down at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. scroll_level is 1–10. Exclusive.",
       "parameters": {
         "type": "object",
         "properties": {
           "screen_index": {
             "type": "integer",
-            "description": "Zero-based display index from the latest screenshot envelope."
+            "description": "0 for the attached frontmost-window screenshot."
           },
           "position": {
             "type": "array",
@@ -778,7 +802,7 @@
     },
     {
       "name": "wait",
-      "description": "Pause 1 second, then return a fresh desktop screenshot without moving the pointer. Use for page refresh, a loader, or a control that has not appeared yet. Do not use for code_agent. Exclusive.",
+      "description": "Pause 1 second, then return a fresh frontmost-window screenshot without moving the pointer. Use for page refresh, a loader, or a control that has not appeared yet. Do not use for code_agent. Exclusive.",
       "parameters": {
         "type": "object",
         "properties": {}

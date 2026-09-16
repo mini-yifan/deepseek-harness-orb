@@ -18,6 +18,8 @@ export function createUnsupportedDesktopBackend(): DesktopBackend {
     listScreens: fail,
     capture: fail,
     inspectForeground: fail,
+    listApps: fail,
+    openApp: fail,
     click: fail,
     typeText: fail,
     scroll: fail,

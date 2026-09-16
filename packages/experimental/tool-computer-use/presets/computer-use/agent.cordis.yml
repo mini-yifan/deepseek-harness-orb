@@ -1,4 +1,4 @@
-# The `computer-use` agent preset: Shell, web, eleven GUI tools, and ask_user_question.
+# The `computer-use` agent preset: Shell, web, thirteen GUI tools, and ask_user_question.
 #
 # This file is an AGENT-PLANE composition. The roster mounts it ONCE under a
 # standing scope; every session naming it joins by scope parentage. The host
@@ -79,6 +79,8 @@
 # Packaged Desktop copies rewrite these entries to `../../lib/*.js`.
 - id: tool-computer-use
   name: '../../src/index.ts'
+  config:
+    postActionWaitMs: 600
 
 - id: tool-code-agent
   name: '../../src/code-agent.ts'

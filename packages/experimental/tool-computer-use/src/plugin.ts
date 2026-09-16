@@ -94,6 +94,7 @@ const FOREGROUND_FIELD = {
   required: true,
   properties: {
     appName: { type: 'string', required: true },
+    windowTitle: { type: 'string' },
     finderFolder: { type: 'string' },
     focusNote: { type: 'string' },
   },
@@ -114,14 +115,14 @@ function resultBlocks(
 async function recapture(
   ctx: Context,
   backend: DesktopBackend,
-  config: ResolvedComputerUseConfig,
   signal: AbortSignal,
+  settleMs = 0,
 ): Promise<{
   screens: ObservedScreen[]
   foreground: DesktopForeground
   captures: CapturedScreen[]
 }> {
-  const observation = await observeDesktop(ctx, backend, config, signal)
+  const observation = await observeDesktop(ctx, backend, signal, { settleMs })
   return {
     screens: [...observation.screens],
     foreground: compactForeground(observation.foreground),
@@ -157,10 +158,10 @@ export function applyComputerUse(
   ctx.tools.register(defineTool({
     name: 'click',
     description:
-      'Click at a 0–1000 position on one desktop screen, then return the post-action screenshot. '
+      'Click at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. '
       + 'Use left (default) or right button; count 2 is a double-click. Exclusive: do not combine with other GUI tools in the same step.',
     parameters: {
-      screen_index: { type: 'integer', required: true, description: 'Zero-based display index from the latest screenshot envelope.' },
+      screen_index: { type: 'integer', required: true, description: '0 for the attached frontmost-window screenshot.' },
       position: {
         type: 'array',
         required: true,
@@ -212,8 +213,7 @@ export function applyComputerUse(
       const screens = await backend.listScreens(exec.signal)
       const screen = requireScreen(screens, args.screen_index)
       await backend.click({ screen, position, button, count }, exec.signal)
-      await delay(config.postActionWaitMs, exec.signal)
-      const observation = await recapture(ctx, backend, config, exec.signal)
+      const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
       return {
         screenIndex: args.screen_index,
         position,
@@ -228,9 +228,9 @@ export function applyComputerUse(
   ctx.tools.register(defineTool({
     name: 'input_text',
     description:
-      'Click to focus a 0–1000 position, type text, optionally replace existing content and press Enter, then return the post-action screenshot. Exclusive.',
+      'Click to focus a 0–1000 position on the attached frontmost-window screenshot, type text, optionally replace existing content and press Enter, then return the post-action screenshot. Exclusive.',
     parameters: {
-      screen_index: { type: 'integer', required: true, description: 'Zero-based display index from the latest screenshot envelope.' },
+      screen_index: { type: 'integer', required: true, description: '0 for the attached frontmost-window screenshot.' },
       position: {
         type: 'array',
         required: true,
@@ -279,8 +279,7 @@ export function applyComputerUse(
       const screens = await backend.listScreens(exec.signal)
       const screen = requireScreen(screens, args.screen_index)
       await backend.typeText({ screen, position, text: args.text, replace, submit }, exec.signal)
-      await delay(config.postActionWaitMs, exec.signal)
-      const observation = await recapture(ctx, backend, config, exec.signal)
+      const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
       return {
         screenIndex: args.screen_index,
         position,
@@ -296,9 +295,9 @@ export function applyComputerUse(
   ctx.tools.register(defineTool({
     name: 'scroll',
     description:
-      'Scroll up or down at a 0–1000 position on one desktop screen, then return the post-action screenshot. scroll_level is 1–10. Exclusive.',
+      'Scroll up or down at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. scroll_level is 1–10. Exclusive.',
     parameters: {
-      screen_index: { type: 'integer', required: true, description: 'Zero-based display index from the latest screenshot envelope.' },
+      screen_index: { type: 'integer', required: true, description: '0 for the attached frontmost-window screenshot.' },
       position: {
         type: 'array',
         required: true,
@@ -356,8 +355,7 @@ export function applyComputerUse(
         direction: args.direction,
         scrollLevel: args.scroll_level,
       }, exec.signal)
-      await delay(config.postActionWaitMs, exec.signal)
-      const observation = await recapture(ctx, backend, config, exec.signal)
+      const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
       return {
         screenIndex: args.screen_index,
         position,
@@ -405,8 +403,7 @@ export function applyComputerUse(
       if (args.keys.length === 0) throw new Error('keys must contain at least one key')
       assertAllowedHotkey(args.keys)
       await backend.hotkey({ keys: args.keys }, exec.signal)
-      await delay(config.postActionWaitMs, exec.signal)
-      const observation = await recapture(ctx, backend, config, exec.signal)
+      const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
       return {
         keys: args.keys,
         screens: observation.screens,
@@ -418,7 +415,7 @@ export function applyComputerUse(
   ctx.tools.register(defineTool({
     name: 'wait',
     description:
-      'Pause 1 second, then return a fresh desktop screenshot without moving the pointer. '
+      'Pause 1 second, then return a fresh frontmost-window screenshot without moving the pointer. '
       + 'Use for page refresh, a loader, or a control that has not appeared yet. '
       + 'Do not use for code_agent. Exclusive.',
     parameters: {},
@@ -443,7 +440,7 @@ export function applyComputerUse(
     async execute(_args, exec) {
       await assertImageCapableRoute(ctx, exec)
       await delay(WAIT_SECONDS * 1000, exec.signal)
-      const observation = await recapture(ctx, backend, config, exec.signal)
+      const observation = await recapture(ctx, backend, exec.signal)
       return {
         waitSeconds: WAIT_SECONDS,
         screens: observation.screens,
@@ -455,7 +452,7 @@ export function applyComputerUse(
   ctx.tools.register(defineTool({
     name: 'long_wait',
     description:
-      'Pause 10, 30, 60, or 120 seconds, then return a fresh desktop screenshot without moving the pointer. '
+      'Pause 10, 30, 60, or 120 seconds, then return a fresh frontmost-window screenshot without moving the pointer. '
       + 'Only for a visible long job such as a download, installer, export, or on-screen generation. '
       + 'Pick the smallest wait_seconds that covers remaining progress; 120 only when the screenshot already shows a minutes-long job. '
       + 'Ordinary loading uses wait. Do not use for code_agent. Exclusive.',
@@ -489,7 +486,7 @@ export function applyComputerUse(
       await assertImageCapableRoute(ctx, exec)
       const waitSeconds = requireLongWaitSeconds(args.wait_seconds)
       await delay(waitSeconds * 1000, exec.signal)
-      const observation = await recapture(ctx, backend, config, exec.signal)
+      const observation = await recapture(ctx, backend, exec.signal)
       return {
         waitSeconds,
         screens: observation.screens,
@@ -501,8 +498,8 @@ export function applyComputerUse(
   ctx.tools.register(defineTool({
     name: 'screenshot',
     description:
-      'Save the current desktop screenshot to the user Desktop and copy it to the clipboard. '
-      + 'Returns the saved file path. Do not use this to see the screen — the first user turn and every GUI result already attach screens. '
+      'Save the current frontmost-window screenshot to the user Desktop and copy it to the clipboard. '
+      + 'Returns the saved file path. Do not use this to see the screen — the first user turn and every GUI result already attach the frontmost window. '
       + 'Use when the user asked for a screenshot file or needs the image on the clipboard to paste. Exclusive.',
     parameters: {},
     output: {
@@ -526,7 +523,7 @@ export function applyComputerUse(
     presentCall: () => genericExecute('Screenshot', {}),
     async execute(_args, exec) {
       await assertImageCapableRoute(ctx, exec)
-      const observation = await recapture(ctx, backend, config, exec.signal)
+      const observation = await recapture(ctx, backend, exec.signal)
       const files = pairScreenshotFiles(observation.captures, observation.screens)
       const paths = await writeDesktopScreenshots(files, { home: homedir() })
       const first = files[0]
@@ -550,10 +547,10 @@ export function applyComputerUse(
   ctx.tools.register(defineTool({
     name: 'long_press',
     description:
-      'Press and hold the left button at a 0–1000 position on one desktop screen, then return the post-action screenshot. '
+      'Press and hold the left button at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. '
       + 'duration_seconds defaults to 3 and must be 1–10. Exclusive.',
     parameters: {
-      screen_index: { type: 'integer', required: true, description: 'Zero-based display index from the latest screenshot envelope.' },
+      screen_index: { type: 'integer', required: true, description: '0 for the attached frontmost-window screenshot.' },
       position: {
         type: 'array',
         required: true,
@@ -597,8 +594,7 @@ export function applyComputerUse(
       const screens = await backend.listScreens(exec.signal)
       const screen = requireScreen(screens, args.screen_index)
       await backend.longPress({ screen, position, durationSeconds }, exec.signal)
-      await delay(config.postActionWaitMs, exec.signal)
-      const observation = await recapture(ctx, backend, config, exec.signal)
+      const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
       return {
         screenIndex: args.screen_index,
         position,
@@ -612,12 +608,12 @@ export function applyComputerUse(
   ctx.tools.register(defineTool({
     name: 'drag',
     description:
-      'Drag from a start 0–1000 position to an end 0–1000 position, including across screens, then return the post-action screenshot. Exclusive.',
+      'Drag from a start 0–1000 position to an end 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. Exclusive.',
     parameters: {
       start_screen_index: {
         type: 'integer',
         required: true,
-        description: 'Zero-based display index for the drag start.',
+        description: '0 for the attached frontmost-window screenshot.',
       },
       start_position: {
         type: 'array',
@@ -628,7 +624,7 @@ export function applyComputerUse(
       end_screen_index: {
         type: 'integer',
         required: true,
-        description: 'Zero-based display index for the drag end.',
+        description: '0 for the attached frontmost-window screenshot.',
       },
       end_position: {
         type: 'array',
@@ -670,8 +666,7 @@ export function applyComputerUse(
       const startScreen = requireScreen(screens, args.start_screen_index)
       const endScreen = requireScreen(screens, args.end_screen_index)
       await backend.drag({ startScreen, startPosition, endScreen, endPosition }, exec.signal)
-      await delay(config.postActionWaitMs, exec.signal)
-      const observation = await recapture(ctx, backend, config, exec.signal)
+      const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
       return {
         startScreenIndex: args.start_screen_index,
         startPosition,
@@ -719,8 +714,7 @@ export function applyComputerUse(
       await assertImageCapableRoute(ctx, exec)
       const url = args.url === undefined || args.url.trim() === '' ? undefined : requireBrowserUrl(args.url)
       await backend.openInBrowser(url === undefined ? {} : { url }, exec.signal)
-      await delay(config.postActionWaitMs, exec.signal)
-      const observation = await recapture(ctx, backend, config, exec.signal)
+      const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
       return {
         ...url === undefined ? {} : { url },
         screens: observation.screens,
@@ -777,11 +771,110 @@ export function applyComputerUse(
       const info = await stat(target.path)
       const revealOnly = target.revealOnly && info.isFile()
       await backend.openInFinder({ path: target.path, revealOnly }, exec.signal)
-      await delay(config.postActionWaitMs, exec.signal)
-      const observation = await recapture(ctx, backend, config, exec.signal)
+      const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
       return {
         path: target.path,
         revealOnly,
+        screens: observation.screens,
+        foreground: observation.foreground,
+      }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'list_apps',
+    description:
+      'List running regular (Dock-visible) applications by display name, then return the current frontmost-window screenshot. '
+      + 'Use this when the attached window is the wrong app. Exclusive.',
+    parameters: {},
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          apps: { type: 'array', required: true, items: { type: 'string' } },
+          screens: SCREENS_FIELD,
+          foreground: FOREGROUND_FIELD,
+        },
+      },
+      render: (_args, value) => resultBlocks(
+        value.apps.length === 0
+          ? 'No running regular applications. Coordinates remain 0–1000.'
+          : `Running apps: ${value.apps.join(', ')}. Coordinates remain 0–1000.`,
+        value.screens,
+        value.foreground,
+      ),
+    },
+    isConcurrencySafe: () => false,
+    presentCall: () => genericExecute('List apps', {}),
+    async execute(_args, exec) {
+      await assertImageCapableRoute(ctx, exec)
+      const apps = await backend.listApps(exec.signal)
+      const observation = await recapture(ctx, backend, exec.signal)
+      return {
+        apps: [...apps],
+        screens: observation.screens,
+        foreground: observation.foreground,
+      }
+    },
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'open_app',
+    description:
+      'Activate a running application or launch it by display name or bundle id, then return the post-action screenshot. '
+      + 'Use this when the attached window is the wrong app. Do not click the Dock. Exclusive.',
+    parameters: {
+      name: {
+        type: 'string',
+        required: true,
+        description: 'Localized application name or bundle identifier, for example Pages or com.apple.TextEdit.',
+      },
+    },
+    output: {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          name: { type: 'string', required: true },
+          ok: { type: 'boolean', required: true },
+          action: { type: 'string', enum: ['activated', 'launched'] },
+          error: { type: 'string' },
+          screens: SCREENS_FIELD,
+          foreground: FOREGROUND_FIELD,
+        },
+      },
+      render: (_args, value) => resultBlocks(
+        value.ok
+          ? `Opened ${value.name} (${value.action ?? 'activated'}). Coordinates remain 0–1000.`
+          : `Could not open ${value.name}: ${value.error ?? 'unknown error'}. Coordinates remain 0–1000.`,
+        value.screens,
+        value.foreground,
+      ),
+    },
+    isConcurrencySafe: () => false,
+    presentCall: args => genericExecute('Open app', { name: args.name }),
+    async execute(args, exec) {
+      await assertImageCapableRoute(ctx, exec)
+      const name = args.name.trim()
+      if (name === '') throw new Error('name must be a non-empty application name or bundle id')
+      let action: 'activated' | 'launched' | undefined
+      let error: string | undefined
+      let settleMs = 0
+      try {
+        const result = await backend.openApp({ name }, exec.signal)
+        action = result.kind
+        settleMs = config.postActionWaitMs
+      } catch (caught: unknown) {
+        if (exec.signal.aborted || (caught instanceof Error && caught.name === 'AbortError')) throw caught
+        error = caught instanceof Error ? caught.message : String(caught)
+      }
+      const observation = await recapture(ctx, backend, exec.signal, settleMs)
+      return {
+        name,
+        ok: error === undefined,
+        ...action === undefined ? {} : { action },
+        ...error === undefined ? {} : { error },
         screens: observation.screens,
         foreground: observation.foreground,
       }
@@ -797,13 +890,13 @@ export function applyComputerUse(
     if (!messages.some(message => message.source.kind === 'user')) return decision
     if (!await routeAcceptsImages(ctx, agent, signal)) return decision
     signal.throwIfAborted()
-    const observation = await observeDesktop(ctx, backend, config, signal)
+    const observation = await observeDesktop(ctx, backend, signal)
     signal.throwIfAborted()
     const notice = createUserMessage({
       content: [
         {
           type: 'text',
-          text: 'Current desktop screens. Coordinates use a 0–1000 space per screenshot ([0, 0] top-left, [1000, 1000] bottom-right of that image; not pixels).',
+          text: 'Current frontmost window. Coordinates use a 0–1000 space of that screenshot ([0, 0] top-left, [1000, 1000] bottom-right of that image; not pixels).',
         },
         ...observation.blocks,
       ],
@@ -811,7 +904,7 @@ export function applyComputerUse(
         kind: 'plugin',
         plugin: PLUGIN_NAME,
         form: 'notice',
-        summary: 'Desktop screens attached',
+        summary: 'Frontmost window attached',
       },
     })
     return { ...decision, messages: [...decision.messages, notice] }

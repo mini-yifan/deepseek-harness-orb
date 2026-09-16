@@ -19,8 +19,8 @@ import * as PresetRoot from '../src/preset-root.ts'
 import { apply, name, PRESET_ROOT } from '../src/preset-root.ts'
 
 const GUI_TOOLS = [
-  'click', 'drag', 'hotkey', 'input_text', 'long_press', 'long_wait',
-  'open_in_browser', 'open_in_finder', 'screenshot', 'scroll', 'wait',
+  'click', 'drag', 'hotkey', 'input_text', 'list_apps', 'long_press', 'long_wait',
+  'open_app', 'open_in_browser', 'open_in_finder', 'screenshot', 'scroll', 'wait',
 ]
 
 const SOURCE_OVERLAY = fileURLToPath(new URL('../cordis.source.patch.yml', import.meta.url))
@@ -87,6 +87,7 @@ describe('computer-use overlay and extra root', () => {
   it('discovers a computer-use preset whose composition is the slim catalog', async () => {
     const composition = await readFile(COMPOSITION, 'utf8')
     expect(composition).toContain('name: \'../../src/index.ts\'')
+    expect(composition).toContain('postActionWaitMs: 600')
     expect(composition).toContain('name: \'../../src/code-agent.ts\'')
     expect(composition).toContain('@deepseek-ai/dsh-tool-bash')
     expect(composition).toContain('@deepseek-ai/dsh-tool-web')
@@ -126,7 +127,6 @@ describe('computer-use scoped registration', () => {
     const { scope, key } = await mintAgentScope(ctx, 'computer-use-scope')
     applyComputerUse(scope.ctx, createFakeDesktopBackend(), resolveComputerUseConfig({
       postActionWaitMs: 0,
-      maxScreens: 4,
     }))
     expect(ctx.tools.schemas().map(schema => schema.name).some(tool => GUI_TOOLS.includes(tool)))
       .toBe(false)

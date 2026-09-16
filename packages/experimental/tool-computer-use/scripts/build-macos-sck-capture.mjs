@@ -22,6 +22,8 @@ const result = spawnSync('swiftc', [
   output,
   source,
   '-framework',
+  'AppKit',
+  '-framework',
   'ScreenCaptureKit',
   '-framework',
   'CoreGraphics',

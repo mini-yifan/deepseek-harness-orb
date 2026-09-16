@@ -10,9 +10,9 @@ Users ask Computer Use to take a screenshot they can paste or keep. Observation 
 
 ## Decision
 
-`screenshot` is an exclusive GUI export. It captures the current displays (same overlay-skip pipeline as observation), writes each raster onto the user's Desktop with a macOS-style `Screenshot YYYY-MM-DD at HH.MM.SS` name, copies screen 0 onto the system pasteboard, and returns those paths in the tool result text together with the usual observation images. Missing or empty writes fail loud. The tool takes no arguments. 1s `wait` remains how the model refreshes a loader.
+`screenshot` is an exclusive GUI export. It captures the current frontmost window (same overlay-skip pipeline as observation), writes that raster onto the user's Desktop with a macOS-style `Screenshot YYYY-MM-DD at HH.MM.SS` name, copies it onto the system pasteboard, and returns those paths in the tool result text together with the usual observation images. Missing or empty writes fail loud. The tool takes no arguments. 1s `wait` remains how the model refreshes a loader.
 
-Policy tells the model not to call `screenshot` merely to see the desktop. `copyImageToClipboard` is not HID and stays unwrapped by overlay-guard. The pasteboard is replaced, not restored.
+Policy tells the model not to call `screenshot` merely to see the window. `copyImageToClipboard` is not HID and stays unwrapped by overlay-guard. The pasteboard is replaced, not restored. [Computer Use focused-window observation](2026-09-16-computer-use-focused-window-observation.md) owns the window capture.
 
 ## Alternatives considered
 
@@ -26,7 +26,7 @@ Policy tells the model not to call `screenshot` merely to see the desktop. `copy
 
 ## Consequences
 
-The Computer Use catalog is eleven exclusive GUI tools plus `code_agent`. Multi-display captures write one file per screen and copy screen 0. `input_text` after `screenshot` overwrites that image with a string. Overlay-guard is unchanged for HID.
+The Computer Use catalog is thirteen exclusive GUI tools plus `code_agent`. Window capture writes one file and copies that image. `input_text` after `screenshot` overwrites that image with a string. Overlay-guard is unchanged for HID.
 
 ## Testing
 

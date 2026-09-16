@@ -22,13 +22,13 @@ Computer Use `wait` took a free `wait_seconds` number defaulting to 1 and clampe
 
 **A 5–15 second middle tool.** That reopens short “insurance” pauses. The gap is filled by repeating `wait` or paying the 10-second `long_wait` cost.
 
-**CoView `page_loading` pixel settle.** This package keeps a fixed `postActionWaitMs` after HID/open and does not stall on pixel diff.
+**CoView `page_loading` pixel settle.** This package keeps a fixed `postActionWaitMs` (default 600) after HID/open, immediately before recapture pixels, and does not stall on pixel diff.
 
 **Default `long_wait` to 60 or omit seconds.** Omitting must fail. A default of 60 would recreate ceiling-seeking.
 
 ## Consequences
 
-The Computer Use catalog is eleven exclusive GUI tools plus `code_agent`. Ordinary loaders cannot request 3–5 seconds. A remaining 8-second download either loops `wait` or overshoots with `long_wait` 10. Overlay-guard is unchanged: neither tool posts HID.
+The Computer Use catalog is thirteen exclusive GUI tools plus `code_agent`. Ordinary loaders cannot request 3–5 seconds. A remaining 8-second download either loops `wait` or overshoots with `long_wait` 10. Overlay-guard is unchanged: neither tool posts HID.
 
 ## Testing
 

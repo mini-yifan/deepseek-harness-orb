@@ -7,22 +7,24 @@ import type { ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import { createMacosDesktopBackend } from './macos.ts'
 import { createUnsupportedDesktopBackend } from './unsupported.ts'
 
-/** One display's logical bounds and backing scale. */
+/** One observation surface: the overlay-skipped frontmost window's logical bounds. */
 export interface ScreenInfo {
-  /** Zero-based index in the backend's current display list. */
+  /** Zero-based index in the backend's current surface list. Always `0` in this cut. */
   readonly index: number
-  /** Logical global rectangle used for 0–1000 mapping and capture. */
+  /** Logical global rectangle of the captured window, used for 0–1000 mapping. */
   readonly bounds: {
     readonly x: number
     readonly y: number
     readonly width: number
     readonly height: number
   }
-  /** Backing-store scale (`1` on a non-retina display). */
+  /** Backing-store scale of the `NSScreen` that contains the window (`1` on non-retina). */
   readonly scale: number
+  /** CGWindowID used to capture this window. Omit on fake/unsupported backends. */
+  readonly windowId?: number
 }
 
-/** Encoded raster returned by one display capture. */
+/** Encoded raster returned by one window capture. */
 export interface CapturedScreen {
   readonly data: Uint8Array
   readonly mediaType: ImageMediaType
@@ -30,13 +32,29 @@ export interface CapturedScreen {
 
 /**
  * OS metadata attached once per observation, after skipping overlay window ids.
+ * `windowTitle` is present when the remaining window has a nonempty title.
  * `finderFolder` is present only when the remaining frontmost app is Finder.
  * `focusNote` is present only when no remaining window has an owner name.
  */
 export interface DesktopForeground {
   readonly appName: string
+  readonly windowTitle?: string
   readonly finderFolder?: string
   readonly focusNote?: string
+}
+
+/** Activate a running app or launch it by display name or bundle id. */
+export interface OpenAppInput {
+  /** Localized display name or bundle identifier. */
+  readonly name: string
+}
+
+/** Outcome of {@link DesktopBackend.openApp}. */
+export interface OpenAppResult {
+  /** `activated` when a running process was brought forward; `launched` when the app was started. */
+  readonly kind: 'activated' | 'launched'
+  /** Display name or requested identifier used for the action. */
+  readonly name: string
 }
 
 /** Model-facing copy when inspect finds no remaining window after overlay skip. */
@@ -125,14 +143,14 @@ export interface CopyImageToClipboardInput {
  */
 export interface DesktopBackend {
   /**
-   * List currently attached displays.
+   * List the current observation surface (0 or 1 frontmost window after overlay skip).
    * @param signal - cooperative cancellation.
-   * @returns screens in backend index order.
+   * @returns screens in backend index order; empty when no operable window remains.
    */
   listScreens(signal?: AbortSignal): Promise<readonly ScreenInfo[]>
   /**
-   * Capture one display, including the cursor when the platform supports it.
-   * @param screen - display selected from {@link listScreens}.
+   * Capture one window, including the cursor when the platform supports it.
+   * @param screen - surface selected from {@link listScreens}.
    * @param signal - cooperative cancellation.
    * @returns encoded image bytes and media type.
    */
@@ -144,6 +162,19 @@ export interface DesktopBackend {
    * @returns structured foreground metadata for the observation envelope.
    */
   inspectForeground(signal?: AbortSignal): Promise<DesktopForeground>
+  /**
+   * List localized names of running regular (Dock-visible) applications.
+   * @param signal - cooperative cancellation.
+   * @returns unique display names in the order the workspace reports them.
+   */
+  listApps(signal?: AbortSignal): Promise<readonly string[]>
+  /**
+   * Activate a running app or launch it by display name or bundle id.
+   * @param input - name or bundle identifier.
+   * @param signal - cooperative cancellation.
+   * @returns whether the app was activated or launched.
+   */
+  openApp(input: OpenAppInput, signal?: AbortSignal): Promise<OpenAppResult>
   /**
    * Click at a 0–1000 position on `input.screen`.
    * @param input - screen, position, button, and click count.
