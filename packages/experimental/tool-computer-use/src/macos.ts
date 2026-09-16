@@ -133,18 +133,15 @@ export function sanitizeExcludeWindowIds(excludeWindowIds: readonly number[]): n
 export const MIN_LAYER0_WINDOW_EDGE = 64
 
 /**
- * CGWindow layers treated as menus, popovers, floating panels, or modal sheets.
+ * Popup-menu layer included from an unrelated PID when it intersects the owner window.
  * 101 is `kCGPopUpMenuWindowLevel` (NSPopUpButton / NSMenu on this host).
  */
-export const TRANSIENT_WINDOW_LAYERS = [3, 8, 19, 101, 102] as const
-
-/** Popup-menu layer included from another PID when it intersects the owner window. */
 export const CROSS_PID_TRANSIENT_LAYERS = [101] as const
 
-/** Dock, menu bar, and status-item layers omitted from observation. */
-export const CHROME_WINDOW_LAYERS = [20, 24, 25] as const
+/** Dock and menu-bar layers omitted from observation. Status-item layer 25 is not chrome. */
+export const CHROME_WINDOW_LAYERS = [20, 24] as const
 
-/** Extra points around the owner window when matching a WindowServer popup. */
+/** Extra points around the owner window when matching a popup of the same app. */
 export const CROSS_PID_TRANSIENT_PAD = 48
 
 /** Owner names that are never menus of the frontmost app. */
@@ -168,7 +165,9 @@ function jxaKeySet(keys: readonly (number | string)[]): string {
  * JXA that reports the first on-screen layer-0 window after skipping overlay ids.
  * Binds `CGWindowListCopyWindowInfo` as returning `id` so `ObjC.deepUnwrap` is an array.
  * Skips remaining windows with an edge below {@link MIN_LAYER0_WINDOW_EDGE}.
- * Then unions same-screen popup/menu windows into `x`/`y`/`width`/`height`.
+ * Then unions same-screen popup/menu windows of that app into `x`/`y`/`width`/`height`.
+ * Same-PID and Helper-named windows join at any non-chrome layer, including layer 0 and 25.
+ * Unrelated PIDs join only at layer 101 when they intersect the owner.
  * @param excludeWindowIds - overlay CGWindowIDs omitted from the remaining z-order.
  * @returns a script that prints window JSON or `null`.
  */
@@ -179,7 +178,6 @@ export function inspectForegroundScript(excludeWindowIds: readonly number[]): st
 ObjC.import('CoreGraphics')
 ObjC.bindFunction('CGWindowListCopyWindowInfo', ['@', ['I', 'I']])
 const exclude = ${excludeLiteral}
-const transientLayers = ${jxaKeySet(TRANSIENT_WINDOW_LAYERS)}
 const crossPidLayers = ${jxaKeySet(CROSS_PID_TRANSIENT_LAYERS)}
 const chromeLayers = ${jxaKeySet(CHROME_WINDOW_LAYERS)}
 const chromeOwners = ${jxaKeySet(CHROME_WINDOW_OWNERS)}
@@ -211,6 +209,11 @@ function screenScale(x, y, w, h) {
 function overlaps(ax, ay, aw, ah, bx, by, bw, bh, extra) {
   return ax - extra < bx + bw && ax + aw + extra > bx
     && ay - extra < by + bh && ay + ah + extra > by
+}
+function relatedOwner(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length === 0 || b.length === 0) return false
+  if (a === b) return true
+  return b.indexOf(a + ' ') === 0 || a.indexOf(b + ' ') === 0
 }
 var found = null
 var ownerPid = 0
@@ -258,7 +261,7 @@ if (found) {
     var tid = Number(t.kCGWindowNumber)
     if (!(tid > 0) || exclude[tid] || tid === found.windowId) continue
     var tLayer = Number(t.kCGWindowLayer)
-    if (chromeLayers[tLayer] || tLayer < 0 || !transientLayers[tLayer]) continue
+    if (chromeLayers[tLayer] || tLayer < 0) continue
     var tOwner = t.kCGWindowOwnerName
     if (typeof tOwner === 'string' && chromeOwners[tOwner]) continue
     var tb = t.kCGWindowBounds
@@ -269,10 +272,9 @@ if (found) {
     if (!(tw > 0) || !(th > 0) || Number(t.kCGWindowAlpha) === 0) continue
     if (screenIndex(tx, ty, tw, th) !== ownerScreen) continue
     var samePid = Number(t.kCGWindowOwnerPID) === ownerPid
-    if (!samePid && !crossPidLayers[tLayer]) continue
-    if (!samePid && !overlaps(found.x, found.y, found.width, found.height, tx, ty, tw, th, pad)) {
-      continue
-    }
+    var related = samePid || relatedOwner(found.appName, tOwner)
+    if (!related && !crossPidLayers[tLayer]) continue
+    if (!overlaps(found.x, found.y, found.width, found.height, tx, ty, tw, th, pad)) continue
     transients.push(tid)
     if (tx < minX) minX = tx
     if (ty < minY) minY = ty
@@ -798,6 +800,7 @@ export function createMacosDesktopBackend(run: CommandRunner = runCommand): Desk
   }
 
   return {
+    withGuiTurn: run => run(),
     async listScreens(signal) {
       const result = await run(
         OSASCRIPT,

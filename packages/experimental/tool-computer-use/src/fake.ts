@@ -129,5 +129,6 @@ export function createFakeDesktopBackend(options: FakeDesktopOptions = {}): Fake
       actions.push({ type: 'copyImageToClipboard', input })
       return Promise.resolve()
     },
+    withGuiTurn: run => run(),
   }
 }

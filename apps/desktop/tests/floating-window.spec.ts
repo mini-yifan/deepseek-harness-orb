@@ -233,6 +233,20 @@ describe('floating overlay guard', () => {
     expect(window.ignoreMouseEvents).toBe(false)
   })
 
+  it('does not blur again for nested capture while input is held', () => {
+    const window = overlayWindow()
+    applyFloatingOverlayGuard(window as never, 'input', 'begin')
+    expect(window.blur).toHaveBeenCalledTimes(1)
+    applyFloatingOverlayGuard(window as never, 'capture', 'begin')
+    applyFloatingOverlayGuard(window as never, 'input', 'begin')
+    applyFloatingOverlayGuard(window as never, 'capture', 'end')
+    applyFloatingOverlayGuard(window as never, 'input', 'end')
+    expect(window.blur).toHaveBeenCalledTimes(1)
+    expect(window.ignoreMouseEvents).toBe(true)
+    applyFloatingOverlayGuard(window as never, 'input', 'end')
+    expect(window.ignoreMouseEvents).toBe(false)
+  })
+
   it('resets both modes so Host exit cannot leave the overlay cloaked', () => {
     const window = overlayWindow()
     applyFloatingOverlayGuard(window as never, 'capture', 'begin')

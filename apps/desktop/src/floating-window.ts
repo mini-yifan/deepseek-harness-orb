@@ -311,6 +311,7 @@ interface OverlayGuardCounts {
 }
 
 const overlayGuardCounts = new WeakMap<BrowserWindow, OverlayGuardCounts>()
+const overlayClickThrough = new WeakMap<BrowserWindow, boolean>()
 
 function countsOf(window: BrowserWindow): OverlayGuardCounts {
   const existing = overlayGuardCounts.get(window)
@@ -360,7 +361,10 @@ export const OVERLAY_GUARD_INPUT_APPLY_MS = 80
 
 function syncOverlayGuard(window: BrowserWindow, counts: OverlayGuardCounts): void {
   if (window.isDestroyed()) return
-  if (counts.input > 0) {
+  const clickThrough = counts.input > 0
+  if (overlayClickThrough.get(window) === clickThrough) return
+  overlayClickThrough.set(window, clickThrough)
+  if (clickThrough) {
     window.setIgnoreMouseEvents(true, { forward: false })
     window.blur()
     return
@@ -373,7 +377,8 @@ function syncOverlayGuard(window: BrowserWindow, counts: OverlayGuardCounts): vo
  * Capture begin still refcounts so overlapping sessions stay paired with their ends;
  * ScreenCaptureKit exclusion uses {@link overlayWindowExcludeIds} rather than `contentProtection`.
  * HID click-through does not forward mouse events into the overlay renderer.
- * Overlapping begins are refcounted.
+ * Overlapping begins are refcounted. Click-through and blur apply only when the
+ * input count crosses zero, so nested capture IPC during a HID turn does not flash the overlay.
  * @param window - floating overlay.
  * @param mode - capture exclusion or HID click-through.
  * @param action - increment or decrement that mode's count.
@@ -397,6 +402,7 @@ export function applyFloatingOverlayGuard(
  */
 export function resetFloatingOverlayGuard(window: BrowserWindow): void {
   overlayGuardCounts.delete(window)
+  overlayClickThrough.delete(window)
   if (window.isDestroyed()) return
-  syncOverlayGuard(window, { capture: 0, input: 0 })
+  window.setIgnoreMouseEvents(false)
 }

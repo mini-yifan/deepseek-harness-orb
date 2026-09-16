@@ -48,6 +48,7 @@ describe('unsupported desktop', () => {
     await expect(backend.copyImageToClipboard({
       path: '/tmp/shot.png', mediaType: 'image/png',
     })).rejects.toThrow(UNSUPPORTED_DESKTOP_MESSAGE)
+    await expect(backend.withGuiTurn(() => Promise.resolve(3))).resolves.toBe(3)
   })
 
   it('selects the unsupported backend off Darwin without capturing', async () => {

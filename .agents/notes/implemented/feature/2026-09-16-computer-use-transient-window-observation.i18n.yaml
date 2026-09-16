@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-16-computer-use-transient-window-observation.md
-2026-09-16-computer-use-transient-window-observation.md: ba62b9e4ad6ed012f48cb866f6f4aa9fec1edacb
-2026-09-16-computer-use-transient-window-observation.zh.md: 50064ac5adde8cc8a1ce4c4f325a1fe7c0be256f
+2026-09-16-computer-use-transient-window-observation.md: 9dfba8668f7b9a250544c464b4116ad83d5b73a9
+2026-09-16-computer-use-transient-window-observation.zh.md: 6a38e088b3e6a7e01fe5f704dcee1c580729a886

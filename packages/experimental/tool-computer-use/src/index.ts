@@ -53,7 +53,7 @@ export const inject = ['tools', 'systemPrompt', 'attachments']
 
 /**
  * Mount Computer Use with the host-platform backend.
- * When Desktop Host provides `computerUseOverlayGuard`, capture, inspect, listScreens, and HID run
+ * When Desktop Host provides `computerUseOverlayGuard`, capture, inspect, listScreens, HID, and withGuiTurn run
  * inside overlay-guard intervals.
  * @param ctx - registration scope; `inject` must already be satisfied.
  * @param config - optional tunables; omitted fields use schema defaults.

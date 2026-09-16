@@ -131,12 +131,23 @@ async function recapture(
   }
 }
 
+/**
+ * Hold overlay click-through across one HID or activate call and its recapture.
+ * @param backend - desktop backend; Desktop wrap maps this to overlay-guard `withInput`.
+ * @param signal - cooperative cancellation.
+ * @param run - HID plus recapture.
+ * @returns the value `run` resolves to.
+ */
+function guiTurn<T>(
+  backend: DesktopBackend,
+  signal: AbortSignal,
+  run: () => Promise<T>,
+): Promise<T> {
+  return backend.withGuiTurn(run, signal)
+}
+
 function screenshotIntro(paths: readonly string[]): string {
-  if (paths.length === 1) {
-    return `Saved screenshot to ${paths[0]} and copied it to the clipboard. The image is ready to paste. Coordinates remain 0–1000.`
-  }
-  const list = paths.map(path => `- ${path}`).join('\n')
-  return `Saved screenshots:\n${list}\nCopied screen 0 to the clipboard. The image is ready to paste. Coordinates remain 0–1000.`
+  return `Saved screenshot to ${paths[0]} and copied it to the clipboard. The image is ready to paste. Coordinates remain 0–1000.`
 }
 
 /**
@@ -211,18 +222,20 @@ export function applyComputerUse(
       const position = requireNormalizedPosition(args.position)
       const button: ClickButton = args.button === 'right' ? 'right' : 'left'
       const count: 1 | 2 = args.count === 2 ? 2 : 1
-      const screens = await backend.listScreens(exec.signal)
-      const screen = requireScreen(screens, args.screen_index)
-      await backend.click({ screen, position, button, count }, exec.signal)
-      const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
-      return {
-        screenIndex: args.screen_index,
-        position,
-        button,
-        count,
-        screens: observation.screens,
-        foreground: observation.foreground,
-      }
+      return guiTurn(backend, exec.signal, async () => {
+        const screens = await backend.listScreens(exec.signal)
+        const screen = requireScreen(screens, args.screen_index)
+        await backend.click({ screen, position, button, count }, exec.signal)
+        const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
+        return {
+          screenIndex: args.screen_index,
+          position,
+          button,
+          count,
+          screens: observation.screens,
+          foreground: observation.foreground,
+        }
+      })
     },
   }))
 
@@ -277,19 +290,21 @@ export function applyComputerUse(
       const position = requireNormalizedPosition(args.position)
       const replace = args.replace ?? false
       const submit = args.submit ?? false
-      const screens = await backend.listScreens(exec.signal)
-      const screen = requireScreen(screens, args.screen_index)
-      await backend.typeText({ screen, position, text: args.text, replace, submit }, exec.signal)
-      const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
-      return {
-        screenIndex: args.screen_index,
-        position,
-        text: args.text,
-        replace,
-        submit,
-        screens: observation.screens,
-        foreground: observation.foreground,
-      }
+      return guiTurn(backend, exec.signal, async () => {
+        const screens = await backend.listScreens(exec.signal)
+        const screen = requireScreen(screens, args.screen_index)
+        await backend.typeText({ screen, position, text: args.text, replace, submit }, exec.signal)
+        const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
+        return {
+          screenIndex: args.screen_index,
+          position,
+          text: args.text,
+          replace,
+          submit,
+          screens: observation.screens,
+          foreground: observation.foreground,
+        }
+      })
     },
   }))
 
@@ -348,23 +363,25 @@ export function applyComputerUse(
       if (!Number.isInteger(args.scroll_level) || args.scroll_level < 1 || args.scroll_level > 10) {
         throw new Error('scroll_level must be an integer from 1 to 10')
       }
-      const screens = await backend.listScreens(exec.signal)
-      const screen = requireScreen(screens, args.screen_index)
-      await backend.scroll({
-        screen,
-        position,
-        direction: args.direction,
-        scrollLevel: args.scroll_level,
-      }, exec.signal)
-      const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
-      return {
-        screenIndex: args.screen_index,
-        position,
-        direction: args.direction,
-        scrollLevel: args.scroll_level,
-        screens: observation.screens,
-        foreground: observation.foreground,
-      }
+      return guiTurn(backend, exec.signal, async () => {
+        const screens = await backend.listScreens(exec.signal)
+        const screen = requireScreen(screens, args.screen_index)
+        await backend.scroll({
+          screen,
+          position,
+          direction: args.direction,
+          scrollLevel: args.scroll_level,
+        }, exec.signal)
+        const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
+        return {
+          screenIndex: args.screen_index,
+          position,
+          direction: args.direction,
+          scrollLevel: args.scroll_level,
+          screens: observation.screens,
+          foreground: observation.foreground,
+        }
+      })
     },
   }))
 
@@ -403,13 +420,15 @@ export function applyComputerUse(
       await assertImageCapableRoute(ctx, exec)
       if (args.keys.length === 0) throw new Error('keys must contain at least one key')
       assertAllowedHotkey(args.keys)
-      await backend.hotkey({ keys: args.keys }, exec.signal)
-      const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
-      return {
-        keys: args.keys,
-        screens: observation.screens,
-        foreground: observation.foreground,
-      }
+      return guiTurn(backend, exec.signal, async () => {
+        await backend.hotkey({ keys: args.keys }, exec.signal)
+        const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
+        return {
+          keys: args.keys,
+          screens: observation.screens,
+          foreground: observation.foreground,
+        }
+      })
     },
   }))
 
@@ -592,17 +611,19 @@ export function applyComputerUse(
       await assertImageCapableRoute(ctx, exec)
       const position = requireNormalizedPosition(args.position)
       const durationSeconds = requireLongPressDuration(args.duration_seconds)
-      const screens = await backend.listScreens(exec.signal)
-      const screen = requireScreen(screens, args.screen_index)
-      await backend.longPress({ screen, position, durationSeconds }, exec.signal)
-      const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
-      return {
-        screenIndex: args.screen_index,
-        position,
-        durationSeconds,
-        screens: observation.screens,
-        foreground: observation.foreground,
-      }
+      return guiTurn(backend, exec.signal, async () => {
+        const screens = await backend.listScreens(exec.signal)
+        const screen = requireScreen(screens, args.screen_index)
+        await backend.longPress({ screen, position, durationSeconds }, exec.signal)
+        const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
+        return {
+          screenIndex: args.screen_index,
+          position,
+          durationSeconds,
+          screens: observation.screens,
+          foreground: observation.foreground,
+        }
+      })
     },
   }))
 
@@ -663,19 +684,21 @@ export function applyComputerUse(
       await assertImageCapableRoute(ctx, exec)
       const startPosition = requireNormalizedPosition(args.start_position)
       const endPosition = requireNormalizedPosition(args.end_position)
-      const screens = await backend.listScreens(exec.signal)
-      const startScreen = requireScreen(screens, args.start_screen_index)
-      const endScreen = requireScreen(screens, args.end_screen_index)
-      await backend.drag({ startScreen, startPosition, endScreen, endPosition }, exec.signal)
-      const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
-      return {
-        startScreenIndex: args.start_screen_index,
-        startPosition,
-        endScreenIndex: args.end_screen_index,
-        endPosition,
-        screens: observation.screens,
-        foreground: observation.foreground,
-      }
+      return guiTurn(backend, exec.signal, async () => {
+        const screens = await backend.listScreens(exec.signal)
+        const startScreen = requireScreen(screens, args.start_screen_index)
+        const endScreen = requireScreen(screens, args.end_screen_index)
+        await backend.drag({ startScreen, startPosition, endScreen, endPosition }, exec.signal)
+        const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
+        return {
+          startScreenIndex: args.start_screen_index,
+          startPosition,
+          endScreenIndex: args.end_screen_index,
+          endPosition,
+          screens: observation.screens,
+          foreground: observation.foreground,
+        }
+      })
     },
   }))
 
@@ -859,26 +882,28 @@ export function applyComputerUse(
       await assertImageCapableRoute(ctx, exec)
       const name = args.name.trim()
       if (name === '') throw new Error('name must be a non-empty application name or bundle id')
-      let action: 'activated' | 'launched' | undefined
-      let error: string | undefined
-      let settleMs = 0
-      try {
-        const result = await backend.openApp({ name }, exec.signal)
-        action = result.kind
-        settleMs = config.postActionWaitMs
-      } catch (caught: unknown) {
-        if (exec.signal.aborted || (caught instanceof Error && caught.name === 'AbortError')) throw caught
-        error = caught instanceof Error ? caught.message : String(caught)
-      }
-      const observation = await recapture(ctx, backend, exec.signal, settleMs)
-      return {
-        name,
-        ok: error === undefined,
-        ...action === undefined ? {} : { action },
-        ...error === undefined ? {} : { error },
-        screens: observation.screens,
-        foreground: observation.foreground,
-      }
+      return guiTurn(backend, exec.signal, async () => {
+        let action: 'activated' | 'launched' | undefined
+        let error: string | undefined
+        let settleMs = 0
+        try {
+          const result = await backend.openApp({ name }, exec.signal)
+          action = result.kind
+          settleMs = config.postActionWaitMs
+        } catch (caught: unknown) {
+          if (exec.signal.aborted || (caught instanceof Error && caught.name === 'AbortError')) throw caught
+          error = caught instanceof Error ? caught.message : String(caught)
+        }
+        const observation = await recapture(ctx, backend, exec.signal, settleMs)
+        return {
+          name,
+          ok: error === undefined,
+          ...action === undefined ? {} : { action },
+          ...error === undefined ? {} : { error },
+          screens: observation.screens,
+          foreground: observation.foreground,
+        }
+      })
     },
   }))
 
