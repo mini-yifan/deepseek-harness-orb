@@ -517,6 +517,7 @@ describe('computer-use tools', () => {
     const assembled = await ctx.systemPrompt.assemble()
     expect(assembled.sections.some(section => section.text === POLICY)).toBe(true)
     expect(POLICY).toContain('trust only the attached frontmost-window screenshot')
+    expect(POLICY).toContain('includes open menus and popovers of that window')
     expect(POLICY).toContain('Do not click the Dock')
     expect(POLICY).toContain('call list_apps or open_app')
     expect(POLICY).toContain('Map the target as a fraction of the screenshot you see')

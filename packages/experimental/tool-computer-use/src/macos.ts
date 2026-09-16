@@ -5,7 +5,9 @@
  * and intra-event sleeps, and `input_text` pastes via NSPasteboard + Cmd+V.
  * Tests inject a {@link CommandRunner}; production uses `/usr/bin/osascript`
  * and `/usr/sbin/screencapture -l -o`, or the ScreenCaptureKit helper with
- * `--window=` when overlay window ids are active. Foreground inspect uses
+ * `--window=` when overlay window ids are active. Open menus use helper
+ * `--region=` when overlay ids are set, or a full `screencapture` plus `sips`
+ * crop when they are not (`screencapture -R` fails on this OS). Foreground inspect uses
  * CGWindowList (skip overlay ids only) plus Finder AppleScript for the current
  * folder. JXA does not bridge `CGWindowListCopyWindowInfo` to `NSArray` unless
  * `ObjC.bindFunction` declares the return type as `id`; without that bind,
@@ -66,6 +68,7 @@ export type CommandRunner = (
 const SCREENCAPTURE = '/usr/sbin/screencapture'
 const OSASCRIPT = '/usr/bin/osascript'
 const OPEN = '/usr/bin/open'
+const SIPS = '/usr/bin/sips'
 
 /**
  * Absolute path of the Darwin ScreenCaptureKit overlay-exclude helper.
@@ -130,9 +133,42 @@ export function sanitizeExcludeWindowIds(excludeWindowIds: readonly number[]): n
 export const MIN_LAYER0_WINDOW_EDGE = 64
 
 /**
+ * CGWindow layers treated as menus, popovers, floating panels, or modal sheets.
+ * 101 is `kCGPopUpMenuWindowLevel` (NSPopUpButton / NSMenu on this host).
+ */
+export const TRANSIENT_WINDOW_LAYERS = [3, 8, 19, 101, 102] as const
+
+/** Popup-menu layer included from another PID when it intersects the owner window. */
+export const CROSS_PID_TRANSIENT_LAYERS = [101] as const
+
+/** Dock, menu bar, and status-item layers omitted from observation. */
+export const CHROME_WINDOW_LAYERS = [20, 24, 25] as const
+
+/** Extra points around the owner window when matching a WindowServer popup. */
+export const CROSS_PID_TRANSIENT_PAD = 48
+
+/** Owner names that are never menus of the frontmost app. */
+export const CHROME_WINDOW_OWNERS = [
+  'Dock',
+  '程序坞',
+  'Control Center',
+  '控制中心',
+  'Notification Center',
+  'Notification Centre',
+  '通知中心',
+  'Wallpaper',
+  '墙纸',
+] as const
+
+function jxaKeySet(keys: readonly (number | string)[]): string {
+  return `{ ${keys.map(key => `${JSON.stringify(key)}: true`).join(', ')} }`
+}
+
+/**
  * JXA that reports the first on-screen layer-0 window after skipping overlay ids.
  * Binds `CGWindowListCopyWindowInfo` as returning `id` so `ObjC.deepUnwrap` is an array.
  * Skips remaining windows with an edge below {@link MIN_LAYER0_WINDOW_EDGE}.
+ * Then unions same-screen popup/menu windows into `x`/`y`/`width`/`height`.
  * @param excludeWindowIds - overlay CGWindowIDs omitted from the remaining z-order.
  * @returns a script that prints window JSON or `null`.
  */
@@ -143,10 +179,15 @@ export function inspectForegroundScript(excludeWindowIds: readonly number[]): st
 ObjC.import('CoreGraphics')
 ObjC.bindFunction('CGWindowListCopyWindowInfo', ['@', ['I', 'I']])
 const exclude = ${excludeLiteral}
+const transientLayers = ${jxaKeySet(TRANSIENT_WINDOW_LAYERS)}
+const crossPidLayers = ${jxaKeySet(CROSS_PID_TRANSIENT_LAYERS)}
+const chromeLayers = ${jxaKeySet(CHROME_WINDOW_LAYERS)}
+const chromeOwners = ${jxaKeySet(CHROME_WINDOW_OWNERS)}
+const pad = ${String(CROSS_PID_TRANSIENT_PAD)}
 const windows = ObjC.deepUnwrap($.CGWindowListCopyWindowInfo(1, 0)) || []
 const primary = $.NSScreen.screens.objectAtIndex(0).frame
 const primaryHeight = primary.size.height
-function screenScale(x, y, w, h) {
+function screenIndex(x, y, w, h) {
   var cx = x + w / 2
   var cy = y + h / 2
   var screens = $.NSScreen.screens.js
@@ -155,14 +196,25 @@ function screenScale(x, y, w, h) {
     var sx = f.origin.x
     var sy = primaryHeight - f.origin.y - f.size.height
     if (cx >= sx && cx < sx + f.size.width && cy >= sy && cy < sy + f.size.height) {
-      return Number(screens[i].backingScaleFactor)
+      return i
     }
   }
+  return -1
+}
+function screenScale(x, y, w, h) {
+  var index = screenIndex(x, y, w, h)
+  if (index >= 0) return Number($.NSScreen.screens.js[index].backingScaleFactor)
   var main = $.NSScreen.mainScreen
   var fallback = main ? Number(main.backingScaleFactor) : 1
   return fallback > 0 ? fallback : 1
 }
+function overlaps(ax, ay, aw, ah, bx, by, bw, bh, extra) {
+  return ax - extra < bx + bw && ax + aw + extra > bx
+    && ay - extra < by + bh && ay + ah + extra > by
+}
 var found = null
+var ownerPid = 0
+var ownerScreen = -1
 var minEdge = ${String(MIN_LAYER0_WINDOW_EDGE)}
 for (var i = 0; i < windows.length; i++) {
   var w = windows[i]
@@ -179,6 +231,8 @@ for (var i = 0; i < windows.length; i++) {
   var height = b ? Number(b.Height) : NaN
   var scale = screenScale(x, y, width, height)
   if (!(width >= minEdge) || !(height >= minEdge) || !(scale > 0)) continue
+  ownerPid = Number(w.kCGWindowOwnerPID)
+  ownerScreen = screenIndex(x, y, width, height)
   found = {
     appName: name,
     windowId: id,
@@ -191,6 +245,47 @@ for (var i = 0; i < windows.length; i++) {
   var title = w.kCGWindowName
   if (typeof title === 'string' && title.trim().length > 0) found.windowTitle = title.trim()
   break
+}
+if (found) {
+  var transients = []
+  var minX = found.x
+  var minY = found.y
+  var maxX = found.x + found.width
+  var maxY = found.y + found.height
+  for (var j = 0; j < windows.length; j++) {
+    var t = windows[j]
+    if (!t) continue
+    var tid = Number(t.kCGWindowNumber)
+    if (!(tid > 0) || exclude[tid] || tid === found.windowId) continue
+    var tLayer = Number(t.kCGWindowLayer)
+    if (chromeLayers[tLayer] || tLayer < 0 || !transientLayers[tLayer]) continue
+    var tOwner = t.kCGWindowOwnerName
+    if (typeof tOwner === 'string' && chromeOwners[tOwner]) continue
+    var tb = t.kCGWindowBounds
+    var tx = tb ? Number(tb.X) : NaN
+    var ty = tb ? Number(tb.Y) : NaN
+    var tw = tb ? Number(tb.Width) : NaN
+    var th = tb ? Number(tb.Height) : NaN
+    if (!(tw > 0) || !(th > 0) || Number(t.kCGWindowAlpha) === 0) continue
+    if (screenIndex(tx, ty, tw, th) !== ownerScreen) continue
+    var samePid = Number(t.kCGWindowOwnerPID) === ownerPid
+    if (!samePid && !crossPidLayers[tLayer]) continue
+    if (!samePid && !overlaps(found.x, found.y, found.width, found.height, tx, ty, tw, th, pad)) {
+      continue
+    }
+    transients.push(tid)
+    if (tx < minX) minX = tx
+    if (ty < minY) minY = ty
+    if (tx + tw > maxX) maxX = tx + tw
+    if (ty + th > maxY) maxY = ty + th
+  }
+  if (transients.length > 0) {
+    found.x = minX
+    found.y = minY
+    found.width = maxX - minX
+    found.height = maxY - minY
+    found.transients = transients
+  }
 }
 JSON.stringify(found)
 `
@@ -306,6 +401,18 @@ interface ParsedFrontmost {
   readonly windowId?: number
   readonly bounds?: ScreenInfo['bounds']
   readonly scale?: number
+  readonly transientWindowIds?: readonly number[]
+}
+
+function parseTransientIds(value: unknown): number[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const ids: number[] = []
+  for (const entry of value) {
+    const id = Number(entry)
+    if (!Number.isInteger(id) || id < 1) continue
+    ids.push(id)
+  }
+  return ids.length === 0 ? undefined : ids
 }
 
 function parseFrontmost(stdout: string): ParsedFrontmost | undefined {
@@ -325,6 +432,7 @@ function parseFrontmost(stdout: string): ParsedFrontmost | undefined {
     const width = Number(row.width)
     const height = Number(row.height)
     const scale = Number(row.scale)
+    const transientWindowIds = parseTransientIds(row.transients)
     const hasSurface = Number.isInteger(windowId)
       && windowId > 0
       && [x, y, width, height, scale].every(Number.isFinite)
@@ -338,6 +446,7 @@ function parseFrontmost(stdout: string): ParsedFrontmost | undefined {
         windowId,
         bounds: { x, y, width, height },
         scale,
+        ...transientWindowIds === undefined ? {} : { transientWindowIds },
       } : {},
     }
   } catch {
@@ -354,6 +463,7 @@ function screenFromFrontmost(parsed: ParsedFrontmost): ScreenInfo | undefined {
     bounds: parsed.bounds,
     scale: parsed.scale,
     windowId: parsed.windowId,
+    ...parsed.transientWindowIds === undefined ? {} : { transientWindowIds: parsed.transientWindowIds },
   }
 }
 
@@ -441,6 +551,33 @@ function requireWindowId(screen: ScreenInfo): number {
     throw new Error('computer-use: capture requires a window id')
   }
   return windowId
+}
+
+function usesRegionCapture(screen: ScreenInfo): boolean {
+  return (screen.transientWindowIds?.length ?? 0) > 0
+}
+
+function regionCaptureSpec(bounds: ScreenInfo['bounds']): string {
+  const x = Math.round(bounds.x)
+  const y = Math.round(bounds.y)
+  const width = Math.max(1, Math.round(bounds.width))
+  const height = Math.max(1, Math.round(bounds.height))
+  return `${String(x)},${String(y)},${String(width)},${String(height)}`
+}
+
+function regionCropPixels(screen: ScreenInfo): {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+} {
+  const scale = screen.scale
+  return {
+    x: Math.max(0, Math.round(screen.bounds.x * scale)),
+    y: Math.max(0, Math.round(screen.bounds.y * scale)),
+    width: Math.max(1, Math.round(screen.bounds.width * scale)),
+    height: Math.max(1, Math.round(screen.bounds.height * scale)),
+  }
 }
 
 function keyCode(token: string): number {
@@ -677,19 +814,48 @@ export function createMacosDesktopBackend(run: CommandRunner = runCommand): Desk
       const dir = await mkdtemp(join(tmpdir(), 'dsh-computer-use-'))
       const file = join(dir, 'screen.jpg')
       const excludeWindowIds = activeCaptureExcludeWindowIds()
+      const overlayCapture = async (argv: readonly string[]): Promise<void> => {
+        try {
+          await run(macosSckCaptureHelperPath(), argv, { signal })
+        } catch (error: unknown) {
+          throw new Error(`computer-use: overlay-exclude capture failed: ${errorDetail(error)}`)
+        }
+      }
       try {
-        const windowId = requireWindowId(screen)
-        if (excludeWindowIds.length === 0) {
-          await run(SCREENCAPTURE, ['-x', '-o', '-t', 'jpg', '-l', String(windowId), file], { signal })
+        if (usesRegionCapture(screen)) {
+          const region = regionCaptureSpec(screen.bounds)
+          if (excludeWindowIds.length === 0) {
+            const full = join(dir, 'full.jpg')
+            await run(SCREENCAPTURE, ['-x', '-t', 'jpg', full], { signal })
+            const crop = regionCropPixels(screen)
+            await run(SIPS, [
+              '--cropOffset',
+              String(crop.y),
+              String(crop.x),
+              '-c',
+              String(crop.height),
+              String(crop.width),
+              full,
+              '--out',
+              file,
+            ], { signal })
+          } else {
+            await overlayCapture([
+              `--region=${region}`,
+              `--exclude=${excludeWindowIds.join(',')}`,
+              `--out=${file}`,
+            ])
+          }
         } else {
-          try {
-            await run(macosSckCaptureHelperPath(), [
+          const windowId = requireWindowId(screen)
+          if (excludeWindowIds.length === 0) {
+            await run(SCREENCAPTURE, ['-x', '-o', '-t', 'jpg', '-l', String(windowId), file], { signal })
+          } else {
+            await overlayCapture([
               `--window=${String(windowId)}`,
               `--exclude=${excludeWindowIds.join(',')}`,
               `--out=${file}`,
-            ], { signal })
-          } catch (error: unknown) {
-            throw new Error(`computer-use: overlay-exclude capture failed: ${errorDetail(error)}`)
+            ])
           }
         }
         const data = await readFile(file)

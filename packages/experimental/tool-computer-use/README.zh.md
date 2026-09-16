@@ -62,7 +62,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 
 ### 工具
 
-没有 `observe` 工具。首次用户回合已经包含当前最前窗口，每个 GUI 工具都会在工具结果中以原生图片块返回动作后的窗口。`screenshot` 是导出：把该栅格写到用户桌面，并复制到剪贴板。图像不含 Dock、菜单栏、其他应用或其他显示器。
+没有 `observe` 工具。首次用户回合已经包含当前最前窗口，每个 GUI 工具都会在工具结果中以原生图片块返回动作后的窗口。`screenshot` 是导出：把该栅格写到用户桌面，并复制到剪贴板。图像含该窗口上打开的菜单和弹出层。不含 Dock、菜单栏、其他应用或其他显示器。
 
 | 工具 | 参数 | 动作之后 |
 |---|---|---|
@@ -111,8 +111,8 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 | [`src/observe.ts`](src/observe.ts) | 最前窗口捕获、跳过 overlay 的前台检查，以及面向模型的信封 |
 | [`src/code-agent.ts`](src/code-agent.ts) | 仅 Computer Use 的 `code_agent`：`session.create` / `session.prompt` |
 | [`src/code-agent-completion.ts`](src/code-agent-completion.ts) | Code 会话与 Computer Use 调用方都空闲后投递的插件通知 |
-| [`src/macos.ts`](src/macos.ts) | Darwin 通过 `screencapture -l -o` 捕获，或在设置了 overlay 窗口 id 时走 ScreenCaptureKit `--window=`；click、scroll、hotkey、长按与拖拽走 JXA `CGEvent`；`input_text` 通过 NSPasteboard 粘贴；`list_apps` / `open_app` 走 NSWorkspace；`open_in_browser` / `open_in_finder` 走 `/usr/bin/open`；`inspectForeground` 绑定 `CGWindowListCopyWindowInfo` 再 unwrap（跳过 overlay id）加 Finder AppleScript |
-| [`src/macos-sck-capture.swift`](src/macos-sck-capture.swift) | Darwin helper：针对窗口的捕获，仍省略 overlay CGWindowID；先在主 actor 启动 `NSApplication` |
+| [`src/macos.ts`](src/macos.ts) | Darwin 通过 `screencapture -l -o` 捕获，或在设置了 overlay 窗口 id 时走 ScreenCaptureKit `--window=`；打开的菜单走 helper `--region=` 或整屏 `screencapture` 加 `sips` 裁切；click、scroll、hotkey、长按与拖拽走 JXA `CGEvent`；`input_text` 通过 NSPasteboard 粘贴；`list_apps` / `open_app` 走 NSWorkspace；`open_in_browser` / `open_in_finder` 走 `/usr/bin/open`；`inspectForeground` 绑定 `CGWindowListCopyWindowInfo` 再 unwrap（跳过 overlay id）加 Finder AppleScript |
+| [`src/macos-sck-capture.swift`](src/macos-sck-capture.swift) | Darwin helper：窗口捕获或排除 overlay 后的区域裁切，仍省略 overlay CGWindowID；先在主 actor 启动 `NSApplication` |
 | [`src/open.ts`](src/open.ts) | `long_press` 时长、`open_in_browser` URL 与 `open_in_finder` 路径校验 |
 | [`src/wait-args.ts`](src/wait-args.ts) | 固定 1 秒的 `wait` 与 `long_wait` 的 10/30/60/120 分档 |
 | [`src/screenshot.ts`](src/screenshot.ts) | `screenshot` 的桌面文件名与唯一路径写入 |
@@ -137,6 +137,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 - [Computer Use 把 Code agent 完成通知停到空闲再投递](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-code-agent-completion.zh.md) — 两边都空闲后投递的插件通知。
 - [Computer Use 观察前台元数据](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-observation-foreground.zh.md) — overlay 窗口排除、Finder 文件夹，以及现有 `user/message` / `tool/result` 上的焦点 fallback。
 - [Computer Use 焦点窗口观察](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-focused-window-observation.zh.md) — 跳过 overlay 后的最前窗口、`list_apps` / `open_app`，以及不附整桌面全景。
+- [Computer Use 瞬时窗口观察](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-transient-window-observation.zh.md) — 把打开的菜单和弹出层并进该截图。
 - [Computer Use 0–1000 比例坐标](../../../.agents/notes/implemented/bug-fix/2026-09-15-computer-use-fraction-coordinates.zh.md) — 模型侧 0–1000 是可见截图上的比例，不是捕获像素。
 - [图片句柄省略请求预览像素](../../../.agents/notes/implemented/bug-fix/2026-09-15-omit-request-preview-handle-dimensions.zh.md) — 共用图片句柄只写身份，不写请求预览宽高。
 - [桌面悬浮球](../../../.agents/notes/implemented/feature/2026-09-14-desktop-floating-orb.zh.md) — macOS overlay、runtime extra，以及一等 `code_agent` 会话。
@@ -159,7 +160,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 ```markdown
 Computer Use lets you see the current frontmost application window and operate the GUI.
 
-See: trust only the attached frontmost-window screenshot for windows, buttons, and on-screen text. The image does not include the Dock, menu bar, other applications, or other displays. Do not assume UI that is not visible in the latest image. You may use observation tags <frontmost_app>, <frontmost_window>, <frontmost_folder>, and <focus_note> as OS metadata.
+See: trust only the attached frontmost-window screenshot for windows, buttons, and on-screen text. The image includes open menus and popovers of that window. It does not include the Dock, menu bar, other applications, or other displays. Do not assume UI that is not visible in the latest image. You may use observation tags <frontmost_app>, <frontmost_window>, <frontmost_folder>, and <focus_note> as OS metadata.
 
 Coordinates: the attached screenshot uses a 0–1000 space of that window. [0, 0] is the top-left of that image and [1000, 1000] is the bottom-right. x and y scale independently; do not treat the space as a square overlay. Pass position as [x, y] in that space together with screen_index 0. Map the target as a fraction of the screenshot you see. Ignore pixel widths and any other image-handle dimensions. Do not send raw pixel coordinates.
 
@@ -221,7 +222,7 @@ When a plugin notice reports that a Code agent session finished, tell the user w
 - **仅 macOS** — 捕获与 HID 输入在 Darwin 上实现；其他平台在执行时抛错。
 - **屏幕录制、辅助功能与自动化 TCC** — 捕获需要屏幕录制；点击、输入、滚动、热键、长按与拖拽需要辅助功能；Finder 当前文件夹查询需要访达的自动化权限。插件不会提示授予这些权限。
 - **没有逐次点击批准** — 安装或 patch 插件就是同意门槛；视觉循环不能在每个动作上询问。
-- **宿主 chrome 不是最前窗口时不会进图** — Web 窗口只在它是最前窗口时出现。Desktop 主窗口在 overlay 跳过后仍可被截到。macOS overlay 由 ScreenCaptureKit `desktopIndependentWindow` 加上 exclude id 校验从 Computer Use 截图中省略（整扇 overlay 窗，含展开面板），并在 HID 突发和 `open_app` 期间通过带确认的 overlay-guard IPC 点击穿透。前台检查与 `listScreens` 都跳过这些 overlay 窗口 id，因此主窗口可以出现在 `<frontmost_app>` 里。
+- **宿主 chrome 不是最前窗口时不会进图** — Web 窗口只在它是最前窗口时出现。Desktop 主窗口在 overlay 跳过后仍可被截到。macOS overlay 由 ScreenCaptureKit 的 exclude id 校验从 Computer Use 截图中省略（窗口 filter，或菜单打开时的 display exclude 加裁切），并在 HID 突发和 `open_app` 期间通过带确认的 overlay-guard IPC 点击穿透。前台检查与 `listScreens` 都跳过这些 overlay 窗口 id，因此主窗口可以出现在 `<frontmost_app>` 里。
 - **输入会使用字符串剪贴板** — `input_text` 通过 Cmd+V 粘贴，并在之后恢复先前的字符串剪贴板。其他剪贴板类型不会被恢复。`screenshot` 会用捕获的图片替换剪贴板，不恢复先前内容。
 - **Retina 与附件尺寸** — backing scale 与请求栅格可能和捕获栅格不同；对可见截图使用 0–1000 比例坐标。
 - **固定等待** — 动作后延迟是截取像素之前的 `postActionWaitMs`；没有像素差 stall。

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-16-computer-use-focused-window-observation.md
-2026-09-16-computer-use-focused-window-observation.md: c9d26f4a22cc744f1c58756e594963a847082ff8
-2026-09-16-computer-use-focused-window-observation.zh.md: c105d72ded20ece17fe45394b02c611e70ac3c35
+2026-09-16-computer-use-focused-window-observation.md: 9283b7283e5f40bcbb96a5b3883a23e57ef1fe4a
+2026-09-16-computer-use-focused-window-observation.zh.md: a41bd8b587c3dc7554a5ec86c2eadf52e21e5228

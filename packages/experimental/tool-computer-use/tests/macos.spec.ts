@@ -12,6 +12,8 @@ import {
   DEFAULT_BROWSER_SCRIPT,
   macosSckCaptureHelperPath,
   MIN_LAYER0_WINDOW_EDGE,
+  CROSS_PID_TRANSIENT_PAD,
+  TRANSIENT_WINDOW_LAYERS,
   openAppScript,
   runCommand,
   sanitizeExcludeWindowIds,
@@ -83,11 +85,13 @@ function runner(options: {
       }
       return { stdout: '', stderr: '' }
     }
-    if (file === '/usr/sbin/screencapture' || file === macosSckCaptureHelperPath()) {
+    if (file === '/usr/sbin/screencapture' || file === macosSckCaptureHelperPath() || file === '/usr/bin/sips') {
       if (options.capture instanceof Error) throw options.capture
       const output = file === macosSckCaptureHelperPath()
         ? args.find(arg => arg.startsWith('--out='))?.slice('--out='.length)
-        : args.at(-1)
+        : file === '/usr/bin/sips'
+          ? args[args.indexOf('--out') + 1]
+          : args.at(-1)
       if (typeof output !== 'string') throw new Error('missing capture path')
       await writeCaptureFile(output, options.capture ?? FAKE_DESKTOP_PNG)
       return { stdout: '', stderr: '' }
@@ -141,6 +145,21 @@ describe('macOS backend with an injected runner', () => {
       scale: 1,
       windowId: 7,
     }])
+    await expect(createMacosDesktopBackend(runner({
+      inspect: inspectJson({
+        x: 10,
+        y: 20,
+        width: 400,
+        height: 300,
+        transients: [99, 100],
+      }),
+    })).listScreens()).resolves.toEqual([{
+      index: 0,
+      bounds: { x: 10, y: 20, width: 400, height: 300 },
+      scale: 2,
+      windowId: 42,
+      transientWindowIds: [99, 100],
+    }])
   })
 
   it('captures JPEG bytes written by screencapture -l -o', async () => {
@@ -155,6 +174,29 @@ describe('macOS backend with an injected runner', () => {
     expect(captured.data).toEqual(FAKE_DESKTOP_PNG)
     expect(files).toEqual(['/usr/sbin/screencapture'])
     expect(args[0]?.slice(0, 6)).toEqual(['-x', '-o', '-t', 'jpg', '-l', '42'])
+  })
+
+  it('captures a screen rectangle when inspect reports open menus', async () => {
+    const files: string[] = []
+    const args: string[][] = []
+    const backend = createMacosDesktopBackend(runner({
+      files,
+      args,
+      inspect: inspectJson({
+        x: 10,
+        y: 20,
+        width: 400,
+        height: 300,
+        transients: [99],
+      }),
+    }))
+    const [screen] = await backend.listScreens()
+    files.length = 0
+    args.length = 0
+    await backend.capture(screen!)
+    expect(files).toEqual(['/usr/sbin/screencapture', '/usr/bin/sips'])
+    expect(args[0]?.slice(0, 3)).toEqual(['-x', '-t', 'jpg'])
+    expect(args[1]?.slice(0, 6)).toEqual(['--cropOffset', '40', '20', '-c', '600', '800'])
   })
 
   it('rejects capture when the surface has no window id', async () => {
@@ -189,12 +231,42 @@ describe('macOS backend with an injected runner', () => {
     ])
   })
 
+  it('uses ScreenCaptureKit region capture for menus when overlay ids are active', async () => {
+    const files: string[] = []
+    const args: string[][] = []
+    const backend = createMacosDesktopBackend(runner({
+      files,
+      args,
+      inspect: inspectJson({
+        x: 10,
+        y: 20,
+        width: 400,
+        height: 300,
+        transients: [99],
+      }),
+    }))
+    const [screen] = await backend.listScreens()
+    files.length = 0
+    args.length = 0
+    await runWithCaptureExcludeWindowIds([4242], () => backend.capture(screen!))
+    expect(files).toEqual([macosSckCaptureHelperPath()])
+    expect(args[0]).toEqual([
+      '--region=10,20,400,300',
+      '--exclude=4242',
+      expect.stringMatching(/^--out=/u),
+    ])
+  })
+
   it('starts AppKit on the main actor before ScreenCaptureKit window capture', async () => {
     const source = await readFile(new URL('../src/macos-sck-capture.swift', import.meta.url), 'utf8')
     expect(source).toContain('import AppKit')
     expect(source).toContain('@MainActor')
     expect(source).toContain('NSApplication.shared')
     expect(source).toContain('setActivationPolicy(.prohibited)')
+    expect(source).toContain('desktopIndependentWindow')
+    expect(source).toContain('--region=')
+    expect(source).toContain('excludingWindows')
+    expect(source).toContain('sourceRect')
     const build = await readFile(new URL('../scripts/build-macos-sck-capture.mjs', import.meta.url), 'utf8')
     expect(build).toContain("'AppKit'")
   })
@@ -212,10 +284,34 @@ describe('macOS backend with an injected runner', () => {
     expect(files).toEqual([macosSckCaptureHelperPath()])
   })
 
+  it('does not fall back to screencapture when overlay-exclude region capture fails', async () => {
+    const files: string[] = []
+    const backend = createMacosDesktopBackend(runner({
+      files,
+      capture: new Error('region missing'),
+      inspect: inspectJson({
+        x: 10,
+        y: 20,
+        width: 400,
+        height: 300,
+        transients: [99],
+      }),
+    }))
+    const [screen] = await backend.listScreens()
+    files.length = 0
+    await expect(runWithCaptureExcludeWindowIds([7], () => backend.capture(screen!)))
+      .rejects.toThrow(/overlay-exclude capture failed/u)
+    expect(files).toEqual([macosSckCaptureHelperPath()])
+  })
+
   it('interpolates overlay window ids as integer JXA keys', () => {
     expect(sanitizeExcludeWindowIds([4242, 7, 1.5, -1, 0, Number.NaN])).toEqual([4242, 7])
     expect(inspectForegroundScript([])).toContain("ObjC.bindFunction('CGWindowListCopyWindowInfo', ['@', ['I', 'I']])")
     expect(inspectForegroundScript([])).toContain(`var minEdge = ${String(MIN_LAYER0_WINDOW_EDGE)}`)
+    expect(inspectForegroundScript([])).toContain(`const pad = ${String(CROSS_PID_TRANSIENT_PAD)}`)
+    expect(inspectForegroundScript([])).toContain('found.transients = transients')
+    expect(TRANSIENT_WINDOW_LAYERS).toContain(101)
+    expect(inspectForegroundScript([])).toContain('101: true')
     expect(inspectForegroundScript([4242, 7])).toContain('4242: true')
     expect(inspectForegroundScript([4242, 7])).toContain('7: true')
     expect(inspectForegroundScript([1.5, -1])).toBe(inspectForegroundScript([]))
