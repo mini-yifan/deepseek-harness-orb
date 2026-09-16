@@ -18,13 +18,13 @@ Computer Use 观察是跳过 overlay 之后、最前面的那一扇应用窗口�
 
 [实验性 Computer Use 插件](2026-09-13-experimental-computer-use.zh.md) 仍拥有 GUI 工具、首帧附加和同意门槛。[Computer Use 0–1000 比例坐标](../bug-fix/2026-09-15-computer-use-fraction-coordinates.zh.md) 仍拥有**已附加截图**上的 0–1000 空间。[Computer Use 观察前台元数据](2026-09-15-computer-use-observation-foreground.zh.md) 仍拥有 `<frontmost_app>` / `<frontmost_folder>` / `<focus_note>`（本轮增加可选的 `<frontmost_window>`）。[Desktop overlay-guard IPC](../architecture/2026-09-14-desktop-overlay-guard.zh.md) 仍拥有从捕获中省略悬浮球。
 
-`inspectForeground` 在跳过 `activeCaptureExcludeWindowIds()` 之后遍历屏幕上的 layer-0 `CGWindow`，并返回 `windowId`、全局逻辑边框、可选 `windowTitle`，以及所在 `NSScreen` 的 backing scale。JXA 把 `CGWindowListCopyWindowInfo` 绑定为返回 `id`，这样 `ObjC.deepUnwrap` 才是数组；不绑定的话 unwrap 不是数组，遍历找不到窗口，模型就只有 focus 标签、没有截图。边长小于 64pt 的剩余窗口会被跳过，这样标题栏尺寸的 chrome 不会变成截图。`listScreens` 就是这一块面：0 或 1 条 `ScreenInfo`（`index` 恒为 0；`bounds` 是窗口，或窗口并上打开的菜单）。`wrapDesktopBackend` 把 `listScreens` 放进 `withCapture`，这样 exclude id 是活的；否则空 exclude 列表会把悬浮球当成最前窗口。
+`inspectForeground` 在跳过 `activeCaptureExcludeWindowIds()` 之后遍历屏幕上的 layer-0 `CGWindow`，并返回 `windowId`、全局逻辑边框、可选 `windowTitle`，以及所在 `NSScreen` 的 backing scale。JXA 把 `CGWindowListCopyWindowInfo` 绑定为返回 `id`，这样 `ObjC.deepUnwrap` 才是数组；不绑定的话 unwrap 不是数组，遍历找不到窗口，模型就只有 focus 标签、没有截图。边长小于 64pt 的剩余窗口会被跳过，这样标题栏尺寸的 chrome 不会变成截图。`listScreens` 就是这一块面：0 或 1 条 `ScreenInfo`（`index` 恒为 0；`bounds` 是所有者，或该应用屏幕上的窗口并集）。`wrapDesktopBackend` 把 `listScreens` 放进 `withCapture`，这样 exclude id 是活的；否则空 exclude 列表会把悬浮球当成最前窗口。
 
-没有弹出层时按窗口 id 捕获。没有 overlay id 时，后端跑 `screencapture -x -o -t jpg -l <windowId>`（`-o` 去掉阴影）。有 overlay id 时只走 ScreenCaptureKit helper 的 `--window=` 和 `SCContentFilter(desktopIndependentWindow:)`；该路径没有 `screencapture -R` 回退。helper 在该 filter 之前于主 actor 启动 `NSApplication`，激活策略为 `.prohibited`；否则 CLI `@main` 任务会撞上 CoreGraphics 的 `CGS_REQUIRE_INIT`。打开的菜单由 [Computer Use 瞬时窗口观察](2026-09-16-computer-use-transient-window-observation.zh.md) 拥有。执行时通过现有的 `mapNormalizedToGlobal` 把 0–1000 映射到当前观察边框。`screen_index` 对本面是 0。`maxScreens` 已删除。
+哪扇窗是所有者仍由本笔记拥有。镜头里有什么由 [Computer Use 应用窗口观察](2026-09-16-computer-use-app-window-observation.zh.md) 拥有：该应用族窗口的屏幕并集，始终按显示器矩形裁切。执行时通过现有的 `mapNormalizedToGlobal` 把 0–1000 映射到当前观察边框。`screen_index` 对本面是 0。`maxScreens` 已删除。
 
 `list_apps` 列出 `activationPolicy === regular` 的显示名。`open_app` 接受显示名或 bundle id：已运行则 `NSRunningApplication.activateWithOptions_(NSApplicationActivateIgnoringOtherApps)`；否则 `/usr/bin/open -a` / `-b` 启动。短等的裸 `open -a` 不是已运行应用的激活路径。匹配不唯一或激活失败时，工具结果用文本说明，并带上同样的 focus 标签，不附桌面全景。
 
-当跳过 overlay 后没有 layer-0 所有者时，观察是 `<frontmost_app>none</frontmost_app>` 加上 `<focus_note>`，不附截图。POLICY 告诉模型：只信任附加的最前窗口截图；应用不对就调用 `list_apps` / `open_app`；不要点 Dock。大窗仍压到现有约 169 万像素的请求预算；小窗保持捕获尺寸。
+当跳过 overlay 后没有 layer-0 所有者时，观察是 `<frontmost_app>none</frontmost_app>` 加上 `<focus_note>`，不附截图。POLICY 告诉模型：只信任附加的最前应用截图；应用不对就调用 `list_apps` / `open_app`；不要点 Dock。大窗仍压到现有约 169 万像素的请求预算；小窗保持捕获尺寸。
 
 本轮不加辅助功能 `click_element`、后台虚拟光标、overlay 瞄准网格，也不加 Windows/Linux 生产后端。
 
@@ -44,7 +44,7 @@ Computer Use 观察是跳过 overlay 之后、最前面的那一扇应用窗口�
 
 ## 影响
 
-模型看不见其他窗口，因此不能去点属于另一进程的对话框。被捕获窗口上打开的菜单由 [Computer Use 瞬时窗口观察](2026-09-16-computer-use-transient-window-observation.zh.md) 纳入。另一应用的窗口的恢复路径是激活/打开再重新截取。
+模型看不见其他窗口，因此不能去点属于另一进程的对话框。被捕获应用上打开的菜单和同应用面板由 [Computer Use 应用窗口观察](2026-09-16-computer-use-app-window-observation.zh.md) 纳入。另一应用的窗口的恢复路径是激活/打开再重新截取。
 
 若焦点落在每边至少 64pt 的检视器面板上，且它是剩余 layer-0 窗口里最前面的一扇，它会变成整次观察。模型随后可能去激活同一应用的主文档窗口；`open_app` 按名称瞄准该应用，而不能只瞄准「当前焦点是什么」。
 
@@ -54,4 +54,4 @@ Computer Use 观察是跳过 overlay 之后、最前面的那一扇应用窗口�
 
 ## 测试
 
-包测试钉住单窗口信封、空最前无全景、窗口边框映射、`screencapture -l -o`、有 overlay id 时 SCK `--window=` 且无 `screencapture` 回退、helper 的 AppKit 主 actor 初始化、`list_apps` / `open_app`、激活失败文本，以及 `ObjC.bindFunction` 让 inspect 脚本把 `CGWindowListCopyWindowInfo` unwrap 成数组。overlay-guard 测试在 `withCapture` 里跑 `listScreens`，在 `withInput` 里跑 `openApp`。人工编写的 [`snapshots/session/computer-use/`](../../../../snapshots/session/computer-use/) 场景钉住 POLICY、首帧窗口通知、click 信封、假后端单窗口 fixture 和新工具 schema。
+包测试钉住单窗口信封、空最前无全景、窗口边框映射、`list_apps` / `open_app`、激活失败文本，以及 `ObjC.bindFunction` 让 inspect 脚本把 `CGWindowListCopyWindowInfo` unwrap 成数组。overlay-guard 测试在 `withCapture` 里跑 `listScreens`，在 `withInput` 里跑 `openApp`。捕获 argv 与家族并集匹配由 [Computer Use 应用窗口观察](2026-09-16-computer-use-app-window-observation.zh.md) 拥有。人工编写的 [`snapshots/session/computer-use/`](../../../../snapshots/session/computer-use/) 场景钉住 POLICY、首帧窗口通知、click 信封、假后端单窗口 fixture 和新工具 schema。

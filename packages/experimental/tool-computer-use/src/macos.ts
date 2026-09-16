@@ -4,10 +4,9 @@
  * so mouse/hotkey/scroll use numeric event types with a retained event source
  * and intra-event sleeps, and `input_text` pastes via NSPasteboard + Cmd+V.
  * Tests inject a {@link CommandRunner}; production uses `/usr/bin/osascript`
- * and `/usr/sbin/screencapture -l -o`, or the ScreenCaptureKit helper with
- * `--window=` when overlay window ids are active. Open menus use helper
- * `--region=` when overlay ids are set, or a full `screencapture` plus `sips`
- * crop when they are not (`screencapture -R` fails on this OS). Foreground inspect uses
+ * and `/usr/sbin/screencapture` plus `sips` crop of the frontmost-app window union,
+ * or the ScreenCaptureKit helper `--region=` when overlay window ids are active
+ * (`screencapture -R` fails on this OS). Foreground inspect uses
  * CGWindowList (skip overlay ids only) plus Finder AppleScript for the current
  * folder. JXA does not bridge `CGWindowListCopyWindowInfo` to `NSArray` unless
  * `ObjC.bindFunction` declares the return type as `id`; without that bind,
@@ -141,7 +140,7 @@ export const CROSS_PID_TRANSIENT_LAYERS = [101] as const
 /** Dock and menu-bar layers omitted from observation. Status-item layer 25 is not chrome. */
 export const CHROME_WINDOW_LAYERS = [20, 24] as const
 
-/** Extra points around the owner window when matching a popup of the same app. */
+/** Extra points around the owner window when matching an unrelated layer-101 WindowServer menu. */
 export const CROSS_PID_TRANSIENT_PAD = 48
 
 /** Owner names that are never menus of the frontmost app. */
@@ -165,8 +164,8 @@ function jxaKeySet(keys: readonly (number | string)[]): string {
  * JXA that reports the first on-screen layer-0 window after skipping overlay ids.
  * Binds `CGWindowListCopyWindowInfo` as returning `id` so `ObjC.deepUnwrap` is an array.
  * Skips remaining windows with an edge below {@link MIN_LAYER0_WINDOW_EDGE}.
- * Then unions same-screen popup/menu windows of that app into `x`/`y`/`width`/`height`.
- * Same-PID and Helper-named windows join at any non-chrome layer, including layer 0 and 25.
+ * Then unions every same-screen window of that app family into `x`/`y`/`width`/`height`.
+ * Family PIDs come from NSWorkspace: same process, related localized names, or bundle-id prefix.
  * Unrelated PIDs join only at layer 101 when they intersect the owner.
  * @param excludeWindowIds - overlay CGWindowIDs omitted from the remaining z-order.
  * @returns a script that prints window JSON or `null`.
@@ -215,6 +214,36 @@ function relatedOwner(a, b) {
   if (a === b) return true
   return b.indexOf(a + ' ') === 0 || a.indexOf(b + ' ') === 0
 }
+function relatedBundle(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length === 0 || b.length === 0) return false
+  if (a === b) return true
+  return b.indexOf(a + '.') === 0 || a.indexOf(b + '.') === 0
+}
+function familyPids(ownerPid) {
+  var pids = {}
+  pids[ownerPid] = true
+  var apps = $.NSWorkspace.sharedWorkspace.runningApplications.js
+  var loc = ''
+  var bundle = ''
+  for (var i = 0; i < apps.length; i++) {
+    if (Number(apps[i].processIdentifier) === ownerPid) {
+      loc = ObjC.unwrap(apps[i].localizedName)
+      bundle = ObjC.unwrap(apps[i].bundleIdentifier)
+      break
+    }
+  }
+  if (typeof loc !== 'string') loc = ''
+  if (typeof bundle !== 'string') bundle = ''
+  for (var j = 0; j < apps.length; j++) {
+    var app = apps[j]
+    var pid = Number(app.processIdentifier)
+    if (!(pid > 0) || pids[pid]) continue
+    var n = ObjC.unwrap(app.localizedName)
+    var b = ObjC.unwrap(app.bundleIdentifier)
+    if (relatedOwner(loc, n) || relatedBundle(bundle, b)) pids[pid] = true
+  }
+  return pids
+}
 var found = null
 var ownerPid = 0
 var ownerScreen = -1
@@ -250,6 +279,7 @@ for (var i = 0; i < windows.length; i++) {
   break
 }
 if (found) {
+  var family = familyPids(ownerPid)
   var transients = []
   var minX = found.x
   var minY = found.y
@@ -271,23 +301,23 @@ if (found) {
     var th = tb ? Number(tb.Height) : NaN
     if (!(tw > 0) || !(th > 0) || Number(t.kCGWindowAlpha) === 0) continue
     if (screenIndex(tx, ty, tw, th) !== ownerScreen) continue
-    var samePid = Number(t.kCGWindowOwnerPID) === ownerPid
-    var related = samePid || relatedOwner(found.appName, tOwner)
-    if (!related && !crossPidLayers[tLayer]) continue
-    if (!overlaps(found.x, found.y, found.width, found.height, tx, ty, tw, th, pad)) continue
+    var tPid = Number(t.kCGWindowOwnerPID)
+    var inFamily = family[tPid] || relatedOwner(found.appName, tOwner)
+    if (!inFamily) {
+      if (!crossPidLayers[tLayer]) continue
+      if (!overlaps(found.x, found.y, found.width, found.height, tx, ty, tw, th, pad)) continue
+    }
     transients.push(tid)
     if (tx < minX) minX = tx
     if (ty < minY) minY = ty
     if (tx + tw > maxX) maxX = tx + tw
     if (ty + th > maxY) maxY = ty + th
   }
-  if (transients.length > 0) {
-    found.x = minX
-    found.y = minY
-    found.width = maxX - minX
-    found.height = maxY - minY
-    found.transients = transients
-  }
+  found.x = minX
+  found.y = minY
+  found.width = maxX - minX
+  found.height = maxY - minY
+  if (transients.length > 0) found.transients = transients
 }
 JSON.stringify(found)
 `
@@ -545,18 +575,6 @@ function parseOpenAppDecision(stdout: string): { kind: 'activated' | 'launch'; n
     return { kind: row.kind, name: row.name.trim() }
   }
   throw new Error('computer-use: open_app failed: unreadable activate result')
-}
-
-function requireWindowId(screen: ScreenInfo): number {
-  const windowId = screen.windowId
-  if (windowId === undefined || !Number.isInteger(windowId) || windowId < 1) {
-    throw new Error('computer-use: capture requires a window id')
-  }
-  return windowId
-}
-
-function usesRegionCapture(screen: ScreenInfo): boolean {
-  return (screen.transientWindowIds?.length ?? 0) > 0
 }
 
 function regionCaptureSpec(bounds: ScreenInfo['bounds']): string {
@@ -825,41 +843,28 @@ export function createMacosDesktopBackend(run: CommandRunner = runCommand): Desk
         }
       }
       try {
-        if (usesRegionCapture(screen)) {
-          const region = regionCaptureSpec(screen.bounds)
-          if (excludeWindowIds.length === 0) {
-            const full = join(dir, 'full.jpg')
-            await run(SCREENCAPTURE, ['-x', '-t', 'jpg', full], { signal })
-            const crop = regionCropPixels(screen)
-            await run(SIPS, [
-              '--cropOffset',
-              String(crop.y),
-              String(crop.x),
-              '-c',
-              String(crop.height),
-              String(crop.width),
-              full,
-              '--out',
-              file,
-            ], { signal })
-          } else {
-            await overlayCapture([
-              `--region=${region}`,
-              `--exclude=${excludeWindowIds.join(',')}`,
-              `--out=${file}`,
-            ])
-          }
+        const region = regionCaptureSpec(screen.bounds)
+        if (excludeWindowIds.length === 0) {
+          const full = join(dir, 'full.jpg')
+          await run(SCREENCAPTURE, ['-x', '-t', 'jpg', full], { signal })
+          const crop = regionCropPixels(screen)
+          await run(SIPS, [
+            '--cropOffset',
+            String(crop.y),
+            String(crop.x),
+            '-c',
+            String(crop.height),
+            String(crop.width),
+            full,
+            '--out',
+            file,
+          ], { signal })
         } else {
-          const windowId = requireWindowId(screen)
-          if (excludeWindowIds.length === 0) {
-            await run(SCREENCAPTURE, ['-x', '-o', '-t', 'jpg', '-l', String(windowId), file], { signal })
-          } else {
-            await overlayCapture([
-              `--window=${String(windowId)}`,
-              `--exclude=${excludeWindowIds.join(',')}`,
-              `--out=${file}`,
-            ])
-          }
+          await overlayCapture([
+            `--region=${region}`,
+            `--exclude=${excludeWindowIds.join(',')}`,
+            `--out=${file}`,
+          ])
         }
         const data = await readFile(file)
         return { data, mediaType: mediaTypeOf(data) }

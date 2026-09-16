@@ -7,13 +7,13 @@ import type { ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import { createMacosDesktopBackend } from './macos.ts'
 import { createUnsupportedDesktopBackend } from './unsupported.ts'
 
-/** One observation surface: the overlay-skipped frontmost window's logical bounds. */
+/** One observation surface: the overlay-skipped frontmost app's on-screen window union. */
 export interface ScreenInfo {
   /** Zero-based index in the backend's current surface list. Always `0` in this cut. */
   readonly index: number
   /**
    * Logical global rectangle used for 0–1000 mapping.
-   * The owner window when no menu is open; otherwise that window union its open popups.
+   * Union of the owner window and every same-screen family window included in the shot.
    */
   readonly bounds: {
     readonly x: number
@@ -26,8 +26,8 @@ export interface ScreenInfo {
   /** CGWindowID of the owner window. Omit on fake/unsupported backends. */
   readonly windowId?: number
   /**
-   * Popup/menu CGWindowIDs included in {@link bounds}.
-   * Nonempty means capture is a screen rectangle of `bounds`, not `screencapture -l`.
+   * Extra family or layer-101 CGWindowIDs included in {@link bounds}.
+   * Capture is always a screen rectangle of {@link bounds}.
    */
   readonly transientWindowIds?: readonly number[]
 }
@@ -151,14 +151,14 @@ export interface CopyImageToClipboardInput {
  */
 export interface DesktopBackend {
   /**
-   * List the current observation surface (0 or 1 frontmost window after overlay skip;
-   * bounds include open menus of that window).
+   * List the current observation surface (0 or 1 frontmost app after overlay skip;
+   * bounds are that app's on-screen window union).
    * @param signal - cooperative cancellation.
    * @returns screens in backend index order; empty when no operable window remains.
    */
   listScreens(signal?: AbortSignal): Promise<readonly ScreenInfo[]>
   /**
-   * Capture one window, or the window-plus-menu rectangle when popups are open.
+   * Capture the observation rectangle as a display crop.
    * @param screen - surface selected from {@link listScreens}.
    * @param signal - cooperative cancellation.
    * @returns encoded image bytes and media type.

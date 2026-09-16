@@ -12,13 +12,13 @@ Status: implemented
 
 ## 决策
 
-[瞬时窗口观察](../feature/2026-09-16-computer-use-transient-window-observation.zh.md) 仍拥有 `transientWindowIds` 非空时的区域捕获。本笔记拥有哪些窗口并入该并集、inspect 何时运行，以及 HID 加 recapture 期间的 overlay 点击穿透。
+[瞬时窗口观察](../feature/2026-09-16-computer-use-transient-window-observation.zh.md) 仍拥有区域 helper。[Computer Use 应用窗口观察](../feature/2026-09-16-computer-use-app-window-observation.zh.md) 拥有哪些窗口并入该并集。本笔记拥有 inspect 何时运行，以及 HID 加 recapture 期间的 overlay 点击穿透。
 
-匹配仍从跳过 overlay 后的 layer-0 所有者开始。同一 PID、任意非 chrome layer（含 0 与 25）的窗口，在与所有者外扩 48pt 后相交时并入。另一 PID 在 `kCGWindowOwnerName` 相同、或一方是另一方加空格（`WeChat` / `WeChat Helper (Renderer)`）且同样相交时并入。无亲缘关系的 PID 仍只在 layer 101 且带该 pad 时并入。Dock 与菜单栏 layer 20、24 仍是 chrome；layer 25 不是。
+匹配仍从跳过 overlay 后的 layer-0 所有者开始。家族并入与无亲缘 layer-101 pad 由 [Computer Use 应用窗口观察](../feature/2026-09-16-computer-use-app-window-observation.zh.md) 拥有。
 
 `observeDesktop` 先等待 `postActionWaitMs`，再 `listScreens` / inspect / capture。
 
-HID 工具与 `open_app` 用 `DesktopBackend.withGuiTurn` 包住动作和 recapture。`wrapDesktopBackend` 把它映射到 overlay-guard 的 `withInput`，内层 HID 的 `withInput` 不会在截图返回前恢复球。Desktop Host 对嵌套的 `withInput` / `withCapture` 做引用计数，一回合只发一次 input begin/end；该回合内的捕获复用 input begin 的 `excludeWindowIds`，不切换 overlay 点击穿透。`wait`、`long_wait`、`screenshot` 与 `list_apps` 不调用 `withGuiTurn`。观察仍是一扇窗口并上它的菜单；没有整桌面回退。
+HID 工具与 `open_app` 用 `DesktopBackend.withGuiTurn` 包住动作和 recapture。`wrapDesktopBackend` 把它映射到 overlay-guard 的 `withInput`，内层 HID 的 `withInput` 不会在截图返回前恢复球。Desktop Host 对嵌套的 `withInput` / `withCapture` 做引用计数，一回合只发一次 input begin/end；该回合内的捕获复用 input begin 的 `excludeWindowIds`，不切换 overlay 点击穿透。`wait`、`long_wait`、`screenshot` 与 `list_apps` 不调用 `withGuiTurn`。观察仍是前台应用窗口并集；没有整桌面回退。
 
 ## 考虑过的替代方案
 
@@ -36,4 +36,4 @@ HID 工具与 `open_app` 用 `DesktopBackend.withGuiTurn` 包住动作和 recapt
 
 ## 测试
 
-包测试钉住 inspect JXA 的 `relatedOwner`、layer 0 / Helper 名称匹配、chrome layer 为 20/24 而不含 25、`observeDesktop` 在 `listScreens` 之前 delay、`withGuiTurn` 经 `withInput` 且内层 HID 加 capture、HID 工具调用 `withGuiTurn`，以及 `wait` / `long_wait` / `screenshot` / `list_apps` 跳过它。Desktop Host 测试钉住嵌套 `withInput` 加 `withCapture` 只发一次 input begin/end。Electron 测试钉住 input 保持期间 overlay 不再额外 blur。
+包测试钉住 `observeDesktop` 在 `listScreens` 之前 delay、`withGuiTurn` 经 `withInput` 且内层 HID 加 capture、HID 工具调用 `withGuiTurn`，以及 `wait` / `long_wait` / `screenshot` / `list_apps` 跳过它。家族并入钉在 [应用窗口观察](../feature/2026-09-16-computer-use-app-window-observation.zh.md)。Desktop Host 测试钉住嵌套 `withInput` 加 `withCapture` 只发一次 input begin/end。Electron 测试钉住 input 保持期间 overlay 不再额外 blur。
