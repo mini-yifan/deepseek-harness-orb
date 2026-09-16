@@ -113,6 +113,19 @@ describe('apply', () => {
     expect(b.pending.getSnapshot()).toEqual([])
   })
 
+  it('always next()s the waterfall on the overlay iframe document', async () => {
+    vi.stubGlobal('location', { search: '?surface=overlay' })
+    try {
+      const b = await bench()
+      const next = vi.fn(async () => ANSWER)
+      await expect(b.invoke(b.agent, { questions: QUESTIONS }, next)).resolves.toBe(ANSWER)
+      expect(next).toHaveBeenCalledOnce()
+      expect(b.pending.getSnapshot()).toEqual([])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('projects a scoped request through one stable composer and returns its answer', async () => {
     const b = await bench()
     const next = vi.fn(async () => ANSWER)

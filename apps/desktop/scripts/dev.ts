@@ -97,6 +97,15 @@ async function buildSkipBuildArtifacts(): Promise<void> {
   await buildPackage(join(REPOSITORY_ROOT, 'apps', 'desktop-host'))
   await runPackageScript('build', APP_ROOT)
   await buildComputerUseRuntimeExtra()
+  for (const path of [
+    join(REPOSITORY_ROOT, 'packages', 'api', 'session-controller'),
+    join(REPOSITORY_ROOT, 'packages', 'client', 'ui-layout'),
+    join(REPOSITORY_ROOT, 'packages', 'client', 'ui-chat'),
+    join(REPOSITORY_ROOT, 'packages', 'client', 'ui-user-questions'),
+    join(REPOSITORY_ROOT, 'packages', 'client', 'ui-overlay-chat'),
+  ]) {
+    await buildPackage(path)
+  }
 }
 
 async function main(): Promise<void> {

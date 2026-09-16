@@ -30,6 +30,7 @@ import type { SessionEventSource } from '../contract/events.ts'
 import type { SessionFace } from '../contract/session.ts'
 import type { AgentContext, ISessions } from '../contract/sessions.ts'
 import { createScope, scopeOf as scopeTagOf } from '../scope.ts'
+import { sessionsSelectionPersistName } from '../overlay-surface.ts'
 import { SessionManager } from './manager.ts'
 import type { SessionRemotes } from './remotes.ts'
 import type { SessionListPhase, SessionSearchResultItem, SubagentCatalogSnapshot } from './manager.ts'
@@ -224,7 +225,7 @@ export class ClientSessions implements ISessions {
   ) {
     this.selection = createSnapshotStore<SessionSelection>(
       {},
-      { persist: { name: 'dsh.sessions.current' } })
+      { persist: { name: sessionsSelectionPersistName() } })
     const restored = this.selection.getSnapshot()
     this.manager = new SessionManager(
       remote,

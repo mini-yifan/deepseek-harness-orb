@@ -39,18 +39,10 @@ function pickDefault(catalog) {
   return { provider: DEFAULT_PROVIDER, model: DEFAULT_MODEL }
 }
 
-function eventText(record) {
-  const event = record?.event
-  if (event === undefined) return undefined
-  if (event.type !== 'user/message' && event.type !== 'assistant/message') return undefined
-  const data = event.data ?? {}
-  const source = data.source ?? data.message?.source
-  if (source?.kind === 'plugin' || source?.form === 'notice') return undefined
-  const content = data.content ?? data.message?.content ?? []
-  const text = content.filter(block => block.type === 'text').map(block => block.text).join('\n')
-  if (text === '') return undefined
-  return { role: event.type === 'user/message' ? 'user' : 'assistant', text }
-}
+const OVERLAY_APP_ORIGIN = 'dsh-app://app'
+const OVERLAY_INDEX_HREF = 'dsh-app://app/index.html?surface=overlay'
+const OVERLAY_SESSION_MESSAGE_TYPE = 'dsh.overlay.session'
+const OVERLAY_READY_MESSAGE_TYPE = 'dsh.overlay.ready'
 
 function orbComputerUseItems(items, orbPath) {
   return (items ?? []).filter(item =>
@@ -287,6 +279,7 @@ async function main() {
       panel.hidden = false
       expanded = true
       document.body.classList.add('expanded')
+      ensureTranscriptFrame()
       stop.hidden = !running
       syncGif()
       return
@@ -352,11 +345,35 @@ async function main() {
     return workspaceId
   }
 
+  function postOverlaySession() {
+    const frame = transcript.querySelector('iframe')
+    if (frame === null || sessionId === undefined) return
+    const target = frame.contentWindow
+    if (target === null) return
+    try {
+      target.postMessage({ type: OVERLAY_SESSION_MESSAGE_TYPE, sessionId }, OVERLAY_APP_ORIGIN)
+    } catch (error) {
+      // JSDOM and an iframe that has not yet loaded Compact Chat have no target origin.
+      if (!(error instanceof TypeError)) throw error
+    }
+  }
+
+  function ensureTranscriptFrame() {
+    if (transcript.querySelector('iframe') !== null) return
+    const frame = document.createElement('iframe')
+    frame.title = messages.floatingTitle
+    frame.src = OVERLAY_INDEX_HREF
+    frame.addEventListener('load', postOverlaySession)
+    transcript.append(frame)
+    postOverlaySession()
+  }
+
   async function persistSession(id) {
     sessionId = id
     orbSessionIds.add(id)
     await api.floating.setSessionId(id)
     await selectDefaultModel(id)
+    postOverlaySession()
     syncQuestion()
     return id
   }
@@ -480,25 +497,9 @@ async function main() {
     const showCard = pending !== undefined && !historyOpen
     document.body.classList.toggle('asking', pending !== undefined)
     questionRoot.hidden = !showCard
-    if (historyOpen) {
-      transcript.hidden = true
-    } else {
-      transcript.hidden = showCard
-    }
+    transcript.hidden = historyOpen
     if (showCard) renderQuestion(pending)
     syncGif()
-  }
-
-  function renderTranscript(records) {
-    const bubbles = (records ?? []).map(eventText).filter(entry => entry !== undefined)
-    transcript.replaceChildren()
-    for (const bubble of bubbles) {
-      const node = document.createElement('div')
-      node.className = `bubble ${bubble.role}`
-      node.textContent = bubble.text
-      transcript.append(node)
-    }
-    transcript.scrollTop = transcript.scrollHeight
   }
 
   async function renderHistory(items) {
@@ -547,16 +548,6 @@ async function main() {
         await renderHistory(items)
         return
       }
-      if (sessionId === undefined) return
-      const throughSeq = row?.projections?.asOfSeq ?? -1
-      const page = await rpc('session/page', {
-        request: {
-          address: { kind: 'session', sessionId },
-          throughSeq,
-          maxMessages: 50,
-        },
-      })
-      renderTranscript(page.records)
       syncQuestion()
     } catch {
       status.textContent = messages.floatingDisconnected
@@ -892,9 +883,13 @@ async function main() {
     setHistoryOpen(!historyOpen)
     await refreshOverlay()
   })
+  window.addEventListener('message', (event) => {
+    if (event.origin !== OVERLAY_APP_ORIGIN) return
+    if (event.data?.type !== OVERLAY_READY_MESSAGE_TYPE) return
+    postOverlaySession()
+  })
   document.querySelector('#new-conversation').addEventListener('click', async () => {
     prompt.value = ''
-    transcript.replaceChildren()
     setHistoryOpen(false)
     setRunning(false)
     await createOrbSession()

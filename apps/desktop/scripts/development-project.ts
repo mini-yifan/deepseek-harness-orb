@@ -58,6 +58,17 @@ function removeOwnedPath(path: string): void {
   unlinkSync(path)
 }
 
+/** True when `path` exists, including a dangling symlink. */
+function presentPath(path: string): boolean {
+  try {
+    lstatSync(path)
+    return true
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+    throw error
+  }
+}
+
 function linkDirectory(source: string, destination: string): void {
   mkdirSync(dirname(destination), { recursive: true })
   let resolved: string
@@ -71,7 +82,11 @@ function linkDirectory(source: string, destination: string): void {
   symlinkSync(resolved, destination, process.platform === 'win32' ? 'junction' : 'dir')
 }
 
-function mirrorDependencyLinks(sourceRoot: string, destinationRoot: string): void {
+function mirrorDependencyLinks(
+  sourceRoot: string,
+  destinationRoot: string,
+  options: { readonly skipExisting?: boolean } = {},
+): void {
   for (const entry of readdirSync(sourceRoot, { withFileTypes: true })) {
     if (entry.name === '.bin') continue
     const source = join(sourceRoot, entry.name)
@@ -79,11 +94,41 @@ function mirrorDependencyLinks(sourceRoot: string, destinationRoot: string): voi
       mkdirSync(join(destinationRoot, entry.name), { recursive: true })
       for (const scoped of readdirSync(source, { withFileTypes: true })) {
         if (!scoped.isDirectory() && !scoped.isSymbolicLink()) continue
-        linkDirectory(join(source, scoped.name), join(destinationRoot, entry.name, scoped.name))
+        const destination = join(destinationRoot, entry.name, scoped.name)
+        if (options.skipExisting === true && presentPath(destination)) continue
+        linkDirectory(join(source, scoped.name), destination)
       }
       continue
     }
-    if (entry.isDirectory() || entry.isSymbolicLink()) linkDirectory(source, join(destinationRoot, entry.name))
+    if (entry.isDirectory() || entry.isSymbolicLink()) {
+      const destination = join(destinationRoot, entry.name)
+      if (options.skipExisting === true && presentPath(destination)) continue
+      linkDirectory(source, destination)
+    }
+  }
+}
+
+/** Desktop profile bundles whose nested workspace plugins the virtual hoist may omit. */
+const PROFILE_BUNDLE_PACKAGES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'] as const
+
+/**
+ * Link workspace plugins from profile-bundle `node_modules` that are absent from
+ * the virtual hoist, without replacing names the hoist or the CLI/Host links already own.
+ * @param destinationRoot - generated project's `node_modules`.
+ */
+function supplementProfileBundleLinks(destinationRoot: string): void {
+  for (const name of PROFILE_BUNDLE_PACKAGES) {
+    const bundle = join(destinationRoot, ...name.split('/'))
+    let resolved: string
+    try {
+      resolved = realpathSync(bundle)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
+      throw error
+    }
+    const nested = join(resolved, 'node_modules')
+    if (!existsSync(nested)) continue
+    mirrorDependencyLinks(nested, destinationRoot, { skipExisting: true })
   }
 }
 
@@ -131,6 +176,7 @@ export function prepareDevelopmentProject(options: DevelopmentProjectOptions): s
   const hostLink = join(destinationModules, '@deepseek-ai', 'dsh-desktop-host')
   removeOwnedPath(hostLink)
   linkDirectory(options.hostDir, hostLink)
+  supplementProfileBundleLinks(destinationModules)
   const computerUseSource = join(options.hostDir, '..', '..', 'packages', 'experimental', 'tool-computer-use')
   if (existsSync(join(computerUseSource, 'package.json'))) {
     copyComputerUseRuntimeExtra(computerUseSource, options.projectDir)

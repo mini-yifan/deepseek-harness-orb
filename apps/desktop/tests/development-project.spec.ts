@@ -88,6 +88,34 @@ describe('desktop development project', () => {
     })).toThrow(/excludeWindowIds/u)
   })
 
+  it('adds profile-bundle workspace plugins that the virtual hoist omitted', () => {
+    const root = temporaryRoot()
+    const cli = join(root, 'apps', 'cli')
+    const host = join(root, 'apps', 'desktop-host')
+    const webApp = join(root, 'packages', 'bundle', 'web-app')
+    const overlay = join(webApp, 'node_modules', '@deepseek-ai', 'dsh-client-ui-overlay-chat')
+    const dependencies = join(root, 'workspace-dependencies')
+    mkdirSync(join(cli, 'lib'), { recursive: true })
+    mkdirSync(join(host, 'lib'), { recursive: true })
+    mkdirSync(overlay, { recursive: true })
+    mkdirSync(join(dependencies, '@deepseek-ai'), { recursive: true })
+    writeFileSync(join(cli, 'package.json'), '{"name":"@deepseek-ai/dsh","version":"1.2.3"}\n')
+    writeFileSync(join(host, 'package.json'), '{"name":"@deepseek-ai/dsh-desktop-host","version":"1.2.3"}\n')
+    writeFileSync(join(host, 'lib', 'index.js'), '')
+    writeFileSync(join(webApp, 'package.json'), '{"name":"@deepseek-ai/dsh-web-app","version":"1.2.3"}\n')
+    writeFileSync(join(overlay, 'package.json'), '{"name":"@deepseek-ai/dsh-client-ui-overlay-chat"}\n')
+    symlinkSync(webApp, join(dependencies, '@deepseek-ai', 'dsh-web-app'))
+    const project = prepareDevelopmentProject({
+      projectDir: join(root, 'development'),
+      cliDir: cli,
+      hostDir: host,
+      dependencyDir: dependencies,
+      release: release(),
+    })
+    expect(realpathSync(join(project, 'node_modules', '@deepseek-ai', 'dsh-client-ui-overlay-chat')))
+      .toBe(realpathSync(overlay))
+  })
+
   it('skips dangling hoist links left by a renamed workspace package', () => {
     const root = temporaryRoot()
     const cli = join(root, 'apps', 'cli')
