@@ -143,7 +143,7 @@ function TurnNavigatorRail({ items, activeTurn, busyTurn, onNavigate, t }: TurnN
   if (scrollState.canScrollUp) fadeClasses.push(css.fadeTop)
   if (scrollState.canScrollDown) fadeClasses.push(css.fadeBottom)
   return (
-    <div className={css.slot}>
+    <div className={css.slot} data-chat-turn-rail="">
       <nav
         className={css.frame}
         style={frameStyle(items.length, scrollState.top)}

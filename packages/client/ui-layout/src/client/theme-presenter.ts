@@ -22,9 +22,15 @@ export class ThemePresenter {
   private appliedTokens: string[] = []
   /** The single metadata node this presenter inserts and removes. */
   private readonly themeColorMeta: HTMLMetaElement
+  /** When true, present the light palette even if Host preference is dark. */
+  private readonly forceLight: boolean
 
-  /** Create the presenter-owned metadata node before the first snapshot arrives. */
-  constructor() {
+  /**
+   * Create the presenter-owned metadata node before the first snapshot arrives.
+   * @param forceLight - overlay iframe: paint the light palette without writing Host settings.
+   */
+  constructor(forceLight = false) {
+    this.forceLight = forceLight
     this.themeColorMeta = document.createElement('meta')
     this.themeColorMeta.name = 'theme-color'
   }
@@ -39,7 +45,11 @@ export class ThemePresenter {
    * @param snapshot - resolved theme snapshot from ctx.theme.
    */
   apply(snapshot: ThemeSnapshot): void {
-    const scheme = snapshot.active.colorScheme
+    const active = this.forceLight
+      ? snapshot.themes.find(theme => theme.colorScheme === 'light')
+        ?? { ...snapshot.active, colorScheme: 'light' as const, tokens: {} }
+      : snapshot.active
+    const scheme = active.colorScheme
     document.documentElement.style.colorScheme = scheme
     const body = document.body
     if (scheme === 'dark') body.setAttribute(DARK_ATTRIBUTE, '')
@@ -47,7 +57,7 @@ export class ThemePresenter {
     body.style.setProperty(CONTENT_FONT_SIZE_VARIABLE, `${snapshot.fontSize}px`)
     for (const name of this.appliedTokens) body.style.removeProperty(name)
     this.appliedTokens = []
-    for (const [name, value] of Object.entries(snapshot.active.tokens)) {
+    for (const [name, value] of Object.entries(active.tokens)) {
       body.style.setProperty(name, value)
       this.appliedTokens.push(name)
     }

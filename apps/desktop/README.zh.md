@@ -194,7 +194,7 @@ pnpm run prepare:desktop
 
 ## 底层开发覆盖项
 
-未打包的 Electron 进程使用应用目录下的 `.desktop-build/development/project` 作为开发项目。`DSH_DESKTOP_NODE_BINARY`、`DSH_DESKTOP_PNPM_ENTRY` 和 `DSH_DESKTOP_DSH_DIR` 用于选择明确的运行时资源。打包应用会忽略这些变量，从 `process.resourcesPath` 解析签名资源，并使用受管 Desktop profile。
+未打包的 Electron 进程使用应用目录下的 `.desktop-build/development/project` 作为开发项目。该项目的 `node_modules` 镜像工作区虚拟提升目录（`node_modules/.pnpm/node_modules`），再从 `@deepseek-ai/dsh-base` 和 `@deepseek-ai/dsh-web-app` 的嵌套 `node_modules` 补上提升目录漏掉的名称，使 profile 插件在提升省略时仍可解析。`DSH_DESKTOP_NODE_BINARY`、`DSH_DESKTOP_PNPM_ENTRY` 和 `DSH_DESKTOP_DSH_DIR` 用于选择明确的运行时资源。打包应用会忽略这些变量，从 `process.resourcesPath` 解析签名资源，并使用受管 Desktop profile。
 
 ## 已知限制
 

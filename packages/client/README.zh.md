@@ -75,6 +75,7 @@ kind: "package-group"
 | [`ui-directory-picker-browse/`](ui-directory-picker-browse/README.zh.md) | 面向工作区目录流程的应用内目录浏览界面 | — |
 | [`ui-directory-picker-native/`](ui-directory-picker-native/README.zh.md) | 驱动宿主 OS 选择器的原生目录选择界面 | — |
 | [`ui-open-in-app/`](ui-open-in-app/README.zh.md) | 在已安装应用中打开工作区目录的会话标题栏拆分按钮 | — |
+| [`ui-overlay-chat/`](ui-overlay-chat/README.zh.md) | 桌面悬浮球 overlay iframe 的 Compact Chat 根 | — |
 
 -----
 

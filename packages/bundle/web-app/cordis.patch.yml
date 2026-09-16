@@ -207,6 +207,10 @@
     - id: ui-layout
       name: '@deepseek-ai/dsh-client-ui-layout'
 
+    # Overlay Compact Chat occupies 'root' only when ?surface=overlay.
+    - id: ui-overlay-chat
+      name: '@deepseek-ai/dsh-client-ui-overlay-chat'
+
     - id: ui-renderer
       name: '@deepseek-ai/dsh-client-ui-renderer'
 

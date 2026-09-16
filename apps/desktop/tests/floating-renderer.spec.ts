@@ -33,6 +33,24 @@ function hangingStreamResponse(signal: AbortSignal | null | undefined): {
   }
 }
 
+const OVERLAY_CHAT_SRC = 'dsh-app://app/index.html?surface=overlay'
+
+function recordIframePosts(iframe: HTMLIFrameElement): { data: unknown; origin: unknown }[] {
+  const posts: { data: unknown; origin: unknown }[] = []
+  const win = iframe.contentWindow
+  if (win === null) return posts
+  const orig = win.postMessage.bind(win)
+  win.postMessage = (data: unknown, origin?: unknown) => {
+    posts.push({ data, origin })
+    try {
+      orig(data, origin as string)
+    } catch {
+      // JSDOM iframe documents have no loaded origin.
+    }
+  }
+  return posts
+}
+
 function createNdjsonPump() {
   const encoder = new TextEncoder()
   const chunks: Uint8Array[] = []
@@ -197,13 +215,28 @@ it('creates a Computer Use session on dsh_orb and sends from the overlay', async
         reasoningEffort: 'max',
       },
     })
-    await expect.poll(() => document.querySelector('.bubble.user')?.textContent).toBe('Open WeChat')
+    expect(calls.some(call => call.method === 'session/page')).toBe(false)
     expect(document.querySelector('#new-conversation')?.textContent).toBe('+')
     expect(document.querySelector('#new-conversation')?.getAttribute('aria-label')).toBe('New')
-    expect([...document.querySelectorAll('.bubble')].map(node => node.textContent)).toEqual(['Open WeChat'])
+    expect(document.querySelector('.bubble.assistant')).toBeNull()
     expect(document.querySelector<HTMLButtonElement>('#stop')?.hidden).toBe(true)
     document.body.dispatchEvent(new dom.window.Event('pointerenter', { bubbles: true }))
-    await expect.poll(() => setExpanded.mock.calls.some(call => call[0] === true)).toBe(true)
+    await expect.poll(() => document.querySelector('#transcript iframe')?.getAttribute('src')).toBe(OVERLAY_CHAT_SRC)
+    expect(document.querySelector('.bubble.assistant')).toBeNull()
+    expect(document.querySelector('.bubble.user')).toBeNull()
+    const frame = document.querySelector<HTMLIFrameElement>('#transcript iframe')
+    if (frame === null) throw new Error('missing overlay chat iframe')
+    const posts = recordIframePosts(frame)
+    const win = document.defaultView
+    if (win === null) throw new Error('missing overlay window')
+    win.dispatchEvent(new win.MessageEvent('message', {
+      origin: 'dsh-app://app',
+      data: { type: 'dsh.overlay.ready' },
+    }))
+    expect(posts.some(post =>
+      (post.data as { type?: string; sessionId?: string }).type === 'dsh.overlay.session'
+      && (post.data as { sessionId?: string }).sessionId === 'session-orb'
+      && post.origin === 'dsh-app://app')).toBe(true)
     expect(document.querySelector<HTMLButtonElement>('#stop')?.hidden).toBe(true)
     const prompt = document.querySelector<HTMLInputElement>('#prompt')
     if (prompt === null) throw new Error('missing prompt')
@@ -482,7 +515,10 @@ it('lists orb Computer Use chats and reopens the selected session', async () => 
   try {
     runInContext(readFileSync(new URL('../renderer/floating.js', import.meta.url), 'utf8'), dom.getInternalVMContext())
     const document = dom.window.document
-    await expect.poll(() => document.querySelector('.bubble.user')?.textContent).toBe('Open WeChat')
+    await expect.poll(() => setSessionId.mock.calls).toEqual([['session-orb']])
+    expect(calls.some(call => call.method === 'session/page')).toBe(false)
+    document.body.dispatchEvent(new dom.window.Event('pointerenter', { bubbles: true }))
+    await expect.poll(() => document.querySelector('#transcript iframe')?.getAttribute('src')).toBe(OVERLAY_CHAT_SRC)
     const history = document.querySelector<HTMLButtonElement>('#history')
     const transcript = document.querySelector<HTMLElement>('#transcript')
     const historyList = document.querySelector<HTMLElement>('#history-list')
@@ -500,14 +536,20 @@ it('lists orb Computer Use chats and reopens the selected session', async () => 
     history.click()
     await expect.poll(() => historyList.hidden).toBe(true)
     expect(transcript.hidden).toBe(false)
-    expect(document.querySelector('.bubble.user')?.textContent).toBe('Open WeChat')
+    expect(document.querySelector('#transcript iframe')?.getAttribute('src')).toBe(OVERLAY_CHAT_SRC)
+    expect(document.querySelector('.bubble.assistant')).toBeNull()
     history.click()
     await expect.poll(() => [...document.querySelectorAll('.history-row')].some(node => node.textContent === 'Click Pages')).toBe(true)
     const prior = [...document.querySelectorAll('.history-row')].find(node => node.textContent === 'Click Pages')
     if (prior === undefined) throw new Error('missing prior Computer Use row')
+    const frame = document.querySelector<HTMLIFrameElement>('#transcript iframe')
+    if (frame === null) throw new Error('missing overlay chat iframe')
+    const posts = recordIframePosts(frame)
     prior.dispatchEvent(new dom.window.Event('click', { bubbles: true }))
     await expect.poll(() => historyList.hidden).toBe(true)
-    await expect.poll(() => document.querySelector('.bubble.user')?.textContent).toBe('Click Pages')
+    await expect.poll(() => setSessionId.mock.calls.at(-1)).toEqual(['session-old'])
+    await expect.poll(() => posts.some(post =>
+      (post.data as { sessionId?: string }).sessionId === 'session-old')).toBe(true)
     expect(setSessionId.mock.calls.at(-1)).toEqual(['session-old'])
     expect(calls.some((call) => {
       if (call.method !== 'session/create') return false
@@ -627,7 +669,7 @@ async function mountQuestionOverlay() {
   runInContext(readFileSync(new URL('../renderer/floating.js', import.meta.url), 'utf8'), dom.getInternalVMContext())
   await expect.poll(() => setSessionId.mock.calls).toEqual([['session-orb']])
   pump.push({ type: 'ready', clientId: 'client-orb', host: { home: '/tmp' } })
-  return { dom, calls, pump, setExpanded }
+  return { dom, calls, pump, setExpanded, setSessionId }
 }
 
 function resultCalls(calls: { method: string; payload: unknown }[]) {
@@ -657,7 +699,8 @@ it('shows a Computer Use question on the overlay and submits a selected option',
     })
     await expect.poll(() => document.querySelector('#question-title')?.textContent).toBe('Which app should I open?')
     expect(document.querySelector<HTMLElement>('#question')?.hidden).toBe(false)
-    expect(document.querySelector<HTMLElement>('#transcript')?.hidden).toBe(true)
+    expect(document.querySelector<HTMLElement>('#transcript')?.hidden).toBe(false)
+    expect(document.querySelector('#transcript iframe')).not.toBeNull()
     expect(document.body.classList.contains('asking')).toBe(true)
     expect(document.querySelector('#question-eyebrow')?.textContent).toBe('Desktop')
     expect(document.querySelector('.question-recommended')?.textContent).toBe('Recommended')
@@ -845,7 +888,8 @@ it('keeps an unanswered question while History switches away and back', async ()
     const prior = [...document.querySelectorAll('.history-row')].find(node => node.textContent === 'Click Pages')
     if (prior === undefined) throw new Error('missing prior Computer Use row')
     prior.dispatchEvent(new overlay.dom.window.Event('click', { bubbles: true }))
-    await expect.poll(() => document.querySelector('.bubble.user')?.textContent).toBe('Click Pages')
+    await expect.poll(() => overlay.setSessionId.mock.calls.at(-1)).toEqual(['session-old'])
+    expect(document.querySelector('.bubble.user')).toBeNull()
     expect(document.querySelector<HTMLElement>('#question')?.hidden).toBe(true)
     expect(resultCalls(overlay.calls)).toEqual([])
     document.querySelector<HTMLButtonElement>('#history')?.click()

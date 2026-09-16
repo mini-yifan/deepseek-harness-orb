@@ -124,6 +124,20 @@ body.pinned #ball {
   padding-top: 36px;
 }
 
+#question {
+  flex: 0 0 auto;
+  max-height: 55%;
+}
+
+#transcript iframe {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: #ffffff;
+}
+
 #transcript[hidden],
 #history-list[hidden],
 #question[hidden] {
@@ -162,29 +176,6 @@ body.pinned #ball {
   margin: 0;
   font-size: 12px;
   color: var(--pin);
-}
-
-.bubble {
-  max-width: 80%;
-  border-radius: 14px;
-  padding: 10px 14px;
-  font-size: 13px;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-.bubble.user {
-  align-self: flex-end;
-  color: var(--white);
-  background: var(--black);
-}
-
-.bubble.assistant {
-  align-self: flex-start;
-  color: var(--black);
-  background: var(--white);
-  border: 1px solid var(--border);
 }
 
 #composer {

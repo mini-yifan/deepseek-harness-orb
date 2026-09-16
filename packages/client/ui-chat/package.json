@@ -27,6 +27,9 @@
   },
   "dsh": {
     "client": {
+      "external": [
+        "@deepseek-ai/dsh-api-session-controller/client"
+      ],
       "inject": [
         "@deepseek-ai/dsh-api-session-controller",
         "@deepseek-ai/dsh-api-workspace-controller",

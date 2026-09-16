@@ -91,6 +91,22 @@ describe('ui-layout client apply', () => {
     expect(slots.spec('shell.overlay')).toEqual({ kind: 'list', scope: 'root' })
   })
 
+  it('skips AppFrame root on the overlay surface and still provides ctx.layout', async () => {
+    vi.stubGlobal('location', { search: '?surface=overlay' })
+    const { ctx, slots } = await bench()
+    const fiber = ctx.plugin({ inject: [...inject], apply })
+    await fiber.await()
+    expect(ctx.get('layout')).toBeInstanceOf(LayoutController)
+    expect(slots.entries('root')).toHaveLength(0)
+    expect(slots.spec('sidebar')).toBeUndefined()
+    expect(document.documentElement.style.colorScheme).toBe('light')
+    const theme = ctx.get('theme') as ThemeRuntime
+    theme.setTheme('dark')
+    expect(document.documentElement.style.colorScheme).toBe('light')
+    expect(document.body.hasAttribute('data-ds-dark-theme')).toBe(false)
+    await fiber.dispose()
+  })
+
   it('shares a pre-created instance between service actions, root rendering, and panelInfo', async () => {
     const { ctx, slots, rendererHost } = await bench()
     const fiber = ctx.plugin({ inject: [...inject], apply })

@@ -194,7 +194,7 @@ Signed packaging emits generic-provider channel metadata for the deployment sele
 
 ## Low-level development overrides
 
-An unpackaged Electron process uses `.desktop-build/development/project` under its application directory as its development project. `DSH_DESKTOP_NODE_BINARY`, `DSH_DESKTOP_PNPM_ENTRY`, and `DSH_DESKTOP_DSH_DIR` select explicit runtime resources. Packaged applications ignore these variables, resolve signed resources from `process.resourcesPath`, and use the managed Desktop profile.
+An unpackaged Electron process uses `.desktop-build/development/project` under its application directory as its development project. That project's `node_modules` mirrors the workspace virtual hoist (`node_modules/.pnpm/node_modules`), then links any remaining names from the nested `node_modules` of `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-web-app` so profile plugins the hoist omitted still resolve. `DSH_DESKTOP_NODE_BINARY`, `DSH_DESKTOP_PNPM_ENTRY`, and `DSH_DESKTOP_DSH_DIR` select explicit runtime resources. Packaged applications ignore these variables, resolve signed resources from `process.resourcesPath`, and use the managed Desktop profile.
 
 ## Known limitations
 
