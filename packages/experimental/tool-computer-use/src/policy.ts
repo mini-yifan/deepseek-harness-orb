@@ -8,7 +8,7 @@
  */
 export const POLICY = `Computer Use lets you see the current frontmost application window and operate the GUI.
 
-See: trust only the attached frontmost-window screenshot for windows, buttons, and on-screen text. The image does not include the Dock, menu bar, other applications, or other displays. Do not assume UI that is not visible in the latest image. You may use observation tags <frontmost_app>, <frontmost_window>, <frontmost_folder>, and <focus_note> as OS metadata.
+See: trust only the attached frontmost-window screenshot for windows, buttons, and on-screen text. The image includes open menus and popovers of that window. It does not include the Dock, menu bar, other applications, or other displays. Do not assume UI that is not visible in the latest image. You may use observation tags <frontmost_app>, <frontmost_window>, <frontmost_folder>, and <focus_note> as OS metadata.
 
 Coordinates: the attached screenshot uses a 0–1000 space of that window. [0, 0] is the top-left of that image and [1000, 1000] is the bottom-right. x and y scale independently; do not treat the space as a square overlay. Pass position as [x, y] in that space together with screen_index 0. Map the target as a fraction of the screenshot you see. Ignore pixel widths and any other image-handle dimensions. Do not send raw pixel coordinates.
 

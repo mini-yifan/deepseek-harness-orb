@@ -183,6 +183,28 @@ describe('wrapDesktopBackend', () => {
     expect(activeCaptureExcludeWindowIds()).toEqual([])
   })
 
+  it('forwards overlay window ids into menu-region capture', async () => {
+    const seen: (readonly number[])[] = []
+    const menuScreen = {
+      ...screen,
+      windowId: 42,
+      transientWindowIds: [99],
+      bounds: { x: 10, y: 20, width: 400, height: 300 },
+    }
+    const inner = stubBackend({
+      capture: () => {
+        seen.push(activeCaptureExcludeWindowIds())
+        return Promise.resolve({ data: new Uint8Array(), mediaType: 'image/png' as const })
+      },
+    })
+    const backend = wrapDesktopBackend(inner, {
+      withCapture: run => run({ excludeWindowIds: [11, 22] }),
+      withInput: run => run(),
+    })
+    await backend.capture(menuScreen)
+    expect(seen).toEqual([[11, 22]])
+  })
+
   it('forwards overlay window ids into listScreens', async () => {
     const seen: (readonly number[])[] = []
     const inner = stubBackend({

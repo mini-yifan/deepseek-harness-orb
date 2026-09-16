@@ -11,7 +11,10 @@ import { createUnsupportedDesktopBackend } from './unsupported.ts'
 export interface ScreenInfo {
   /** Zero-based index in the backend's current surface list. Always `0` in this cut. */
   readonly index: number
-  /** Logical global rectangle of the captured window, used for 0–1000 mapping. */
+  /**
+   * Logical global rectangle used for 0–1000 mapping.
+   * The owner window when no menu is open; otherwise that window union its open popups.
+   */
   readonly bounds: {
     readonly x: number
     readonly y: number
@@ -20,8 +23,13 @@ export interface ScreenInfo {
   }
   /** Backing-store scale of the `NSScreen` that contains the window (`1` on non-retina). */
   readonly scale: number
-  /** CGWindowID used to capture this window. Omit on fake/unsupported backends. */
+  /** CGWindowID of the owner window. Omit on fake/unsupported backends. */
   readonly windowId?: number
+  /**
+   * Popup/menu CGWindowIDs included in {@link bounds}.
+   * Nonempty means capture is a screen rectangle of `bounds`, not `screencapture -l`.
+   */
+  readonly transientWindowIds?: readonly number[]
 }
 
 /** Encoded raster returned by one window capture. */
@@ -143,13 +151,14 @@ export interface CopyImageToClipboardInput {
  */
 export interface DesktopBackend {
   /**
-   * List the current observation surface (0 or 1 frontmost window after overlay skip).
+   * List the current observation surface (0 or 1 frontmost window after overlay skip;
+   * bounds include open menus of that window).
    * @param signal - cooperative cancellation.
    * @returns screens in backend index order; empty when no operable window remains.
    */
   listScreens(signal?: AbortSignal): Promise<readonly ScreenInfo[]>
   /**
-   * Capture one window, including the cursor when the platform supports it.
+   * Capture one window, or the window-plus-menu rectangle when popups are open.
    * @param screen - surface selected from {@link listScreens}.
    * @param signal - cooperative cancellation.
    * @returns encoded image bytes and media type.

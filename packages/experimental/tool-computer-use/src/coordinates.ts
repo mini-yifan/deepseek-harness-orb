@@ -48,7 +48,7 @@ export function assertAllowedHotkey(keys: readonly string[]): void {
 /**
  * Map a 0–1000 position onto one observation surface's logical global coordinates.
  * @param position - `[x, y]` in the 0–1000 space of `screen`.
- * @param screen - window whose logical bounds receive the mapping.
+ * @param screen - observation whose logical bounds receive the mapping.
  * @returns global logical coordinates in the same space as `screen.bounds`.
  */
 export function mapNormalizedToGlobal(
