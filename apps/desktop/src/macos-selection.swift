@@ -121,7 +121,14 @@ private final class SelectionMonitor: @unchecked Sendable {
     let front = NSWorkspace.shared.frontmostApplication
     if let pid = front?.processIdentifier, excluded.contains(pid) { return }
     if let ax = readAccessibility() {
-      emitSelection(text: ax.text, bounds: ax.bounds, pid: front?.processIdentifier, bundle: front?.bundleIdentifier)
+      emitSelection(
+        text: ax.text,
+        bounds: ax.bounds,
+        pid: front?.processIdentifier,
+        bundle: front?.bundleIdentifier,
+        x: anchor.x,
+        y: anchor.y,
+      )
       return
     }
     if let text = readClipboardFallback() {
@@ -149,12 +156,9 @@ private final class SelectionMonitor: @unchecked Sendable {
     var payload: [String: Any] = ["type": "selection", "text": trimmed]
     if let pid { payload["pid"] = Int(pid) }
     if let bundle { payload["bundle"] = bundle }
-    if let bounds {
-      payload["bounds"] = electronRect(bounds)
-    } else if let x, let y {
-      payload["x"] = x
-      payload["y"] = y
-    }
+    if let bounds { payload["bounds"] = electronRect(bounds) }
+    if let x { payload["x"] = x }
+    if let y { payload["y"] = y }
     emit(payload)
   }
 }

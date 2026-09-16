@@ -1,7 +1,6 @@
 /** macOS selection-toolbar overlay window geometry and BrowserWindow construction. */
 
 import { BrowserWindow, screen } from 'electron'
-import type { SelectionBounds } from './selection-monitor.ts'
 
 /** Default toolbar size before the renderer reports content width. */
 export const SELECTION_TOOLBAR_SIZE = { width: 280, height: 46 } as const
@@ -25,26 +24,22 @@ function workAreaOf(point: { readonly x: number; readonly y: number }): OverlayR
 }
 
 /**
- * Place the toolbar below a selection rectangle, else at the mouse-up point, clamped to the work area.
+ * Place the toolbar below the mouse-up point, clamped to the work area.
+ * AX selection rectangles are not used: browsers often report window-local or chrome-origin rects.
  * @param anchor - mouse-up in Electron screen coordinates.
- * @param selectionBounds - AX selection rectangle when known.
  * @param size - toolbar size.
  * @param workArea - containing display work area.
  * @returns window bounds.
  */
 export function selectionToolbarBounds(
   anchor: { readonly x: number; readonly y: number },
-  selectionBounds: SelectionBounds | undefined,
   size: { readonly width: number; readonly height: number } = SELECTION_TOOLBAR_SIZE,
   workArea: OverlayRect = workAreaOf(anchor),
 ): OverlayRect {
   const gap = 8
-  const origin = selectionBounds === undefined
-    ? { x: anchor.x, y: anchor.y + gap }
-    : { x: selectionBounds.x, y: selectionBounds.y + selectionBounds.height + gap }
   return {
-    x: clamp(origin.x, workArea.x, workArea.x + workArea.width - size.width),
-    y: clamp(origin.y, workArea.y, workArea.y + workArea.height - size.height),
+    x: clamp(anchor.x, workArea.x, workArea.x + workArea.width - size.width),
+    y: clamp(anchor.y + gap, workArea.y, workArea.y + workArea.height - size.height),
     width: size.width,
     height: size.height,
   }
