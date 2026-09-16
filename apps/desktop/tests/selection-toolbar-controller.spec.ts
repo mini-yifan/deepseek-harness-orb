@@ -159,10 +159,34 @@ describe('selection toolbar controller', () => {
       type: 'selection',
       text: 'edge',
       pid: 2,
-      bounds: { x: 10, y: 800, width: 40, height: 20 },
+      x: 10,
+      y: 820,
+      bounds: { x: 0, y: 0, width: 40, height: 20 },
     })
     expect(controller.setContentSize(280, 120)).toEqual({ menuAbove: true })
     expect(toolbar.bounds.y).toBeLessThan(828)
     expect(toolbar.bounds.height).toBe(120)
+  })
+
+  it('places the toolbar below the mouse even when AX bounds sit at the window origin', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-selection-browser-'))
+    roots.push(root)
+    const controller = new SelectionToolbarController(root, {
+      electronPid: 99,
+      openExternal: async () => undefined,
+      promptOverlay: vi.fn(),
+      requestAccessibility: () => false,
+      startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid: vi.fn() }),
+    })
+    const toolbar = fakeToolbar()
+    controller.setToolbarWindow(toolbar as never)
+    controller.onHelperEvent({ type: 'mouse-up', x: 400, y: 300 })
+    controller.onHelperEvent({
+      type: 'selection',
+      text: 'browser',
+      pid: 7,
+      bounds: { x: 0, y: 0, width: 80, height: 16 },
+    })
+    expect(toolbar.setBounds).toHaveBeenCalledWith(expect.objectContaining({ x: 400, y: 308 }))
   })
 })

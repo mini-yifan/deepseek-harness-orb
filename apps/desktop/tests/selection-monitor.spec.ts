@@ -23,6 +23,15 @@ describe('selection helper protocol', () => {
         text: 'hi',
         bounds: { x: 1, y: 2, width: 3, height: 4 },
       })
+    expect(parseSelectionHelperLine(
+      '{"type":"selection","text":"hi","bounds":{"x":0,"y":0,"width":80,"height":16},"x":400,"y":300}',
+    )).toEqual({
+      type: 'selection',
+      text: 'hi',
+      bounds: { x: 0, y: 0, width: 80, height: 16 },
+      x: 400,
+      y: 300,
+    })
   })
 
   it('drops blank, invalid, and empty-text payloads', () => {

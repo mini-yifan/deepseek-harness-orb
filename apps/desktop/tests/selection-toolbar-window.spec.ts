@@ -15,21 +15,19 @@ import {
 describe('selection toolbar geometry', () => {
   const workArea = { x: 100, y: 50, width: 1000, height: 800 }
 
-  it('places the toolbar below a selection rect and clamps to the work area', () => {
+  it('places the toolbar below the mouse-up point and clamps to the work area', () => {
     expect(selectionToolbarBounds(
       { x: 200, y: 100 },
-      { x: 180, y: 80, width: 40, height: 20 },
       SELECTION_TOOLBAR_SIZE,
       workArea,
     )).toEqual({
-      x: 180,
+      x: 200,
       y: 108,
       width: SELECTION_TOOLBAR_SIZE.width,
       height: SELECTION_TOOLBAR_SIZE.height,
     })
     expect(selectionToolbarBounds(
       { x: 2000, y: 2000 },
-      undefined,
       { width: 280, height: 46 },
       workArea,
     )).toEqual({

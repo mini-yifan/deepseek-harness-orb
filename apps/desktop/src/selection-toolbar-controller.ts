@@ -3,7 +3,7 @@
 import type { BrowserWindow } from 'electron'
 import { DESKTOP_IPC } from './ipc.ts'
 import type { SelectionHelperEvent, SelectionMonitor, SelectionMonitorHandlers } from './selection-monitor.ts'
-import { startSelectionMonitor, type SelectionBounds } from './selection-monitor.ts'
+import { startSelectionMonitor } from './selection-monitor.ts'
 import {
   composeSelectionExplainPrompt,
   composeSelectionTranslatePrompt,
@@ -52,7 +52,6 @@ export class SelectionToolbarController {
   private monitor: SelectionMonitor | undefined
   private toolbar: BrowserWindow | undefined
   private lastText = ''
-  private lastBounds: SelectionBounds | undefined
   private lastAnchor = { x: 0, y: 0 }
   private lastBarOrigin = { x: 0, y: 0 }
   private lastDedupe: { key: string; at: number } | undefined
@@ -267,9 +266,8 @@ export class SelectionToolbarController {
     this.lastDedupe = { key, at: now }
     this.lastText = event.text
     this.lastPid = event.pid
-    this.lastBounds = event.bounds
     if (event.x !== undefined && event.y !== undefined) this.lastAnchor = { x: event.x, y: event.y }
-    const bounds = selectionToolbarBounds(this.lastAnchor, this.lastBounds)
+    const bounds = selectionToolbarBounds(this.lastAnchor)
     this.lastBarOrigin = { x: bounds.x, y: bounds.y }
     showSelectionToolbar(this.toolbar, bounds)
     this.publishState()
