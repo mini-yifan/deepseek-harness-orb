@@ -24,7 +24,12 @@ import {
 } from '../src/floating-window.ts'
 
 const workArea = { x: 100, y: 50, width: 1000, height: 800 }
-const messages = { floatingOpenMain: 'Open Main Window', floatingQuit: 'Quit DeepSeek Harness' }
+const messages = {
+  floatingOpenMain: 'Open Main Window',
+  floatingQuit: 'Quit DeepSeek Harness',
+  selectionToolbarEnable: 'Enable Selection Toolbar',
+  selectionToolbarDisable: 'Disable Selection Toolbar',
+}
 
 describe('floating window expand geometry', () => {
   it('grows left and up when the ball sits on the right and has space above', () => {
@@ -159,6 +164,26 @@ describe('floating window context menu', () => {
       { label: 'Quit DeepSeek Harness', click: onQuit },
     ])
   })
+
+  it('adds enable/disable selection toolbar between Open Main and Quit', () => {
+    const onToggle = vi.fn()
+    const template = floatingContextMenuTemplate(
+      { isEditable: false, editFlags: { canCut: false, canCopy: false, canPaste: false } },
+      {
+        ...messages,
+      },
+      onOpenMain,
+      onQuit,
+      { enabled: true, onToggle },
+    )
+    expect(template).toEqual([
+      { label: 'Open Main Window', click: onOpenMain },
+      { type: 'separator' },
+      { label: 'Disable Selection Toolbar', click: onToggle },
+      { type: 'separator' },
+      { label: 'Quit DeepSeek Harness', click: onQuit },
+    ])
+  })
 })
 
 describe('floating overlay guard', () => {
@@ -222,11 +247,31 @@ describe('floating overlay guard', () => {
     expect(() => cgWindowIdFromMediaSourceId('screen:1:0')).toThrow(/not a CGWindowID/u)
     const window = {
       destroyed: false,
+      visible: true,
       isDestroyed() { return this.destroyed },
+      isVisible() { return this.visible },
       getMediaSourceId() { return 'window:77:0' },
     }
     expect(overlayWindowExcludeIds(window as never)).toEqual([77])
     window.destroyed = true
     expect(overlayWindowExcludeIds(window as never)).toEqual([])
+    const ball = {
+      destroyed: false,
+      visible: true,
+      isDestroyed() { return this.destroyed },
+      isVisible() { return this.visible },
+      getMediaSourceId() { return 'window:11:0' },
+    }
+    const toolbar = {
+      destroyed: false,
+      visible: false,
+      isDestroyed() { return this.destroyed },
+      isVisible() { return this.visible },
+      getMediaSourceId() { return 'window:22:0' },
+    }
+    expect(overlayWindowExcludeIds(ball as never, toolbar as never)).toEqual([11])
+    toolbar.visible = true
+    expect(overlayWindowExcludeIds(ball as never, toolbar as never)).toEqual([11, 22])
+    expect(overlayWindowExcludeIds(ball as never, undefined)).toEqual([11])
   })
 })

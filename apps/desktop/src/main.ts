@@ -10,6 +10,8 @@ import {
   ipcMain,
   Menu,
   protocol,
+  shell,
+  systemPreferences,
   type IpcMainInvokeEvent,
 } from 'electron'
 import { resolveDesktopPaths } from './paths.ts'
@@ -37,6 +39,8 @@ import {
   readFloatingSessionId,
   writeFloatingSessionId,
 } from './floating-session.ts'
+import { createSelectionToolbarWindow } from './selection-toolbar-window.ts'
+import { SelectionToolbarController } from './selection-toolbar-controller.ts'
 
 const SCHEME = 'dsh-app'
 let focusPrimaryWindow = (): void => {}
@@ -184,6 +188,7 @@ async function main(): Promise<void> {
   let mainWindow: BrowserWindow | undefined
   let pluginWindow: BrowserWindow | undefined
   let floatingWindow: BrowserWindow | undefined
+  let selection: SelectionToolbarController | undefined
   let shellInstallerOwnsQuit = false
   let updateState: DesktopUpdateState = { phase: 'idle' }
   const locale = resolveDesktopLocale(app.getLocale())
@@ -228,13 +233,32 @@ async function main(): Promise<void> {
   const ensureFloating = (): void => {
     if (process.platform !== 'darwin' || quitting) return
     if (floatingWindow !== undefined && !floatingWindow.isDestroyed()) return
+    selection ??= new SelectionToolbarController(activeProject, {
+      electronPid: process.pid,
+      openExternal: url => shell.openExternal(url),
+      promptOverlay(text) {
+        if (floatingWindow === undefined || floatingWindow.isDestroyed()) return
+        floatingWindow.webContents.send(DESKTOP_IPC.selectionPrompt, { text })
+      },
+      requestAccessibility: () => systemPreferences.isTrustedAccessibilityClient(true),
+    })
     floatingWindow = createFloatingWindow(managementPreload, messages, () => {
       focusPrimaryWindow()
-    }, () => { app.quit() })
+    }, () => { app.quit() }, {
+      enabled: () => selection?.enabled() === true,
+      toggle: () => { selection?.toggle() },
+    })
     app.setActivationPolicy('regular')
     app.dock?.show()
     floatingWindow.once('closed', () => { floatingWindow = undefined })
     void floatingWindow.loadURL(`${SCHEME}://shell/floating.html`)
+    if (selection.window() === undefined) {
+      const toolbar = createSelectionToolbarWindow(managementPreload)
+      selection.setToolbarWindow(toolbar)
+      toolbar.webContents.once('did-finish-load', () => { selection?.publishState() })
+      void toolbar.loadURL(`${SCHEME}://shell/selection-toolbar.html`)
+    }
+    selection.start()
   }
   const requireFloatingWindow = (event: IpcMainInvokeEvent): BrowserWindow => {
     assertDesktopSender(event, ['shell'])
@@ -244,9 +268,19 @@ async function main(): Promise<void> {
     }
     return window
   }
+  const requireSelectionToolbarWindow = (event: IpcMainInvokeEvent): SelectionToolbarController => {
+    assertDesktopSender(event, ['shell'])
+    if (selection === undefined) throw new Error('dsh desktop: selection toolbar is unavailable')
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (window === null || window !== selection.window()) {
+      throw new Error('dsh desktop: rejected selection IPC from an unowned renderer')
+    }
+    return selection
+  }
   const restoreOverlayGuard = (): void => {
     if (floatingWindow === undefined || floatingWindow.isDestroyed()) return
     resetFloatingOverlayGuard(floatingWindow)
+    selection?.setHidInput(false)
   }
   const backend = new DesktopBackendController((onFailure) => {
     if (development === undefined) manager.assertProfileRuntime(activeProject)
@@ -264,7 +298,8 @@ async function main(): Promise<void> {
       (event) => {
         if (floatingWindow === undefined || floatingWindow.isDestroyed()) return []
         applyFloatingOverlayGuard(floatingWindow, event.mode, event.action)
-        const ids = overlayWindowExcludeIds(floatingWindow)
+        if (event.mode === 'input') selection?.setHidInput(event.action === 'begin')
+        const ids = overlayWindowExcludeIds(floatingWindow, selection?.window())
         if (event.mode === 'input' && event.action === 'begin') {
           return overlayGuardInputApplyDelay().then(() => ids)
         }
@@ -488,6 +523,24 @@ async function main(): Promise<void> {
     requireFloatingWindow(event)
     app.quit()
   })
+  ipcMain.handle(DESKTOP_IPC.floatingRunning, (event, running: unknown) => {
+    requireFloatingWindow(event)
+    if (typeof running !== 'boolean') throw new Error('dsh desktop: floating running requires a boolean')
+    selection?.setSessionRunning(running)
+  })
+  ipcMain.handle(DESKTOP_IPC.selectionSearch, event => requireSelectionToolbarWindow(event).search())
+  ipcMain.handle(DESKTOP_IPC.selectionTranslate, (event) => {
+    requireSelectionToolbarWindow(event).translate()
+  })
+  ipcMain.handle(DESKTOP_IPC.selectionExplain, (event) => {
+    requireSelectionToolbarWindow(event).explain()
+  })
+  ipcMain.handle(DESKTOP_IPC.selectionSetLanguage, (event, language: unknown) => {
+    if (language !== 'zh' && language !== 'en') {
+      throw new Error('dsh desktop: translate language must be zh or en')
+    }
+    requireSelectionToolbarWindow(event).setLanguage(language)
+  })
 
   const checkAndPrompt = async (manual: boolean): Promise<void> => {
     const state = await updates.check()
@@ -599,6 +652,7 @@ async function main(): Promise<void> {
     if (shellInstallerOwnsQuit || quitting) return
     event.preventDefault()
     quitting = true
+    selection?.stop()
     void backend.close().catch((error: unknown) => { console.error(error) }).finally(() => { app.quit() })
   })
 

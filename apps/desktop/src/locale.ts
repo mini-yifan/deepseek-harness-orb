@@ -68,6 +68,14 @@ export const en = {
   floatingQuestionCustomPlaceholder: 'Type your answer',
   floatingQuestionIncomplete: 'Please complete this question first.',
   floatingQuestionUnanswered: 'Please select an option or enter a custom answer.',
+  selectionToolbarSearch: 'Search',
+  selectionToolbarTranslate: 'Translate',
+  selectionToolbarExplain: 'Agent Explain',
+  selectionLanguageZh: 'Chinese',
+  selectionLanguageEn: 'English',
+  selectionToolbarLanguage: 'Translate language',
+  selectionToolbarEnable: 'Enable Selection Toolbar',
+  selectionToolbarDisable: 'Disable Selection Toolbar',
 } as const
 
 /** Every Desktop locale supplies the complete English key set. */
@@ -141,6 +149,14 @@ export const zh = {
   floatingQuestionCustomPlaceholder: '输入你的答案',
   floatingQuestionIncomplete: '请先完成这道问题。',
   floatingQuestionUnanswered: '请选择一个选项或填写自定义答案。',
+  selectionToolbarSearch: '搜索',
+  selectionToolbarTranslate: '翻译',
+  selectionToolbarExplain: 'Agent 讲解',
+  selectionLanguageZh: '中文',
+  selectionLanguageEn: 'English',
+  selectionToolbarLanguage: '选择翻译语言',
+  selectionToolbarEnable: '开启划词',
+  selectionToolbarDisable: '关闭划词',
 } as const satisfies DesktopMessages
 
 /** Locale payload exposed to the Desktop-owned renderer. */

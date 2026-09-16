@@ -1,7 +1,7 @@
 /** Context-isolated renderer bridge for desktop package and update operations. */
 
 import { contextBridge, ipcRenderer } from 'electron'
-import { DESKTOP_IPC, type DshDesktopApi, type DesktopUpdateState } from './ipc.ts'
+import { DESKTOP_IPC, type DshDesktopApi, type DesktopUpdateState, type SelectionPromptPayload, type SelectionToolbarState } from './ipc.ts'
 import type { DesktopBackendState } from './backend-controller.ts'
 
 const api: DshDesktopApi = {
@@ -42,6 +42,27 @@ const api: DshDesktopApi = {
     orbWorkspacePath: () => ipcRenderer.invoke(DESKTOP_IPC.floatingOrbWorkspace) as Promise<string>,
     focusMain: () => ipcRenderer.invoke(DESKTOP_IPC.floatingFocusMain) as Promise<void>,
     quit: () => ipcRenderer.invoke(DESKTOP_IPC.floatingQuit) as Promise<void>,
+    setSessionRunning: running => ipcRenderer.invoke(DESKTOP_IPC.floatingRunning, running) as Promise<void>,
+    onSelectionPrompt(listener) {
+      const handle = (_event: Electron.IpcRendererEvent, payload: SelectionPromptPayload): void => {
+        listener(payload)
+      }
+      ipcRenderer.on(DESKTOP_IPC.selectionPrompt, handle)
+      return () => { ipcRenderer.off(DESKTOP_IPC.selectionPrompt, handle) }
+    },
+  },
+  selection: {
+    search: () => ipcRenderer.invoke(DESKTOP_IPC.selectionSearch) as Promise<void>,
+    translate: () => ipcRenderer.invoke(DESKTOP_IPC.selectionTranslate) as Promise<void>,
+    explain: () => ipcRenderer.invoke(DESKTOP_IPC.selectionExplain) as Promise<void>,
+    setLanguage: language => ipcRenderer.invoke(DESKTOP_IPC.selectionSetLanguage, language) as Promise<void>,
+    onState(listener) {
+      const handle = (_event: Electron.IpcRendererEvent, state: SelectionToolbarState): void => {
+        listener(state)
+      }
+      ipcRenderer.on(DESKTOP_IPC.selectionState, handle)
+      return () => { ipcRenderer.off(DESKTOP_IPC.selectionState, handle) }
+    },
   },
 }
 

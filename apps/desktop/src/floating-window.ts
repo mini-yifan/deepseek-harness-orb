@@ -23,15 +23,25 @@ export interface FloatingContextEditState {
  */
 export function floatingContextMenuTemplate(
   params: FloatingContextEditState,
-  messages: Pick<DesktopMessages, 'floatingOpenMain' | 'floatingQuit'>,
+  messages: Pick<
+    DesktopMessages,
+    'floatingOpenMain' | 'floatingQuit' | 'selectionToolbarEnable' | 'selectionToolbarDisable'
+  >,
   onOpenMain: () => void,
   onQuit: () => void,
+  selection?: { readonly enabled: boolean; readonly onToggle: () => void },
 ): MenuItemConstructorOptions[] {
   const actions: MenuItemConstructorOptions[] = [
     { label: messages.floatingOpenMain, click: onOpenMain },
     { type: 'separator' },
     { label: messages.floatingQuit, click: onQuit },
   ]
+  if (selection !== undefined) {
+    actions.splice(2, 0, {
+      label: selection.enabled ? messages.selectionToolbarDisable : messages.selectionToolbarEnable,
+      click: selection.onToggle,
+    }, { type: 'separator' })
+  }
   if (!params.isEditable) return actions
   return [
     { role: 'cut', enabled: params.editFlags.canCut },
@@ -182,6 +192,7 @@ function currentBallOrigin(window: BrowserWindow, workArea: OverlayRect): { x: n
  * @param messages - locale dictionary for the right-click menu.
  * @param onOpenMain - show the Desktop main window.
  * @param onQuit - quit the application.
+ * @param selection - optional selection-toolbar toggle on the overlay menu.
  * @returns the overlay window.
  */
 export function createFloatingWindow(
@@ -189,6 +200,7 @@ export function createFloatingWindow(
   messages: DesktopMessages,
   onOpenMain: () => void,
   onQuit: () => void,
+  selection?: { readonly enabled: () => boolean; readonly toggle: () => void },
 ): BrowserWindow {
   const window = new BrowserWindow({
     width: FLOATING_BALL_SIZE,
@@ -215,7 +227,13 @@ export function createFloatingWindow(
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('context-menu', (_event, params) => {
-    Menu.buildFromTemplate(floatingContextMenuTemplate(params, messages, onOpenMain, onQuit)).popup({ window })
+    Menu.buildFromTemplate(floatingContextMenuTemplate(
+      params,
+      messages,
+      onOpenMain,
+      onQuit,
+      selection === undefined ? undefined : { enabled: selection.enabled(), onToggle: selection.toggle },
+    )).popup({ window })
   })
   return window
 }
@@ -322,13 +340,19 @@ export function cgWindowIdFromMediaSourceId(sourceId: string): number {
 
 /**
  * Overlay window ids Computer Use must omit from the next ScreenCaptureKit capture.
- * Ball and expanded panel share this BrowserWindow, so one id covers both.
- * @param window - floating overlay.
- * @returns a one-element id list, or `[]` when the window is gone.
+ * Pass every Desktop overlay that must stay out of the shot.
+ * Hidden windows are omitted: ScreenCaptureKit `onScreenWindowsOnly` cannot see them,
+ * and a missing exclude id fails capture.
+ * @param windows - floating ball, selection toolbar, or other capture-excluded chrome.
+ * @returns CGWindowIDs, omitting destroyed or hidden windows.
  */
-export function overlayWindowExcludeIds(window: BrowserWindow): number[] {
-  if (window.isDestroyed()) return []
-  return [cgWindowIdFromMediaSourceId(window.getMediaSourceId())]
+export function overlayWindowExcludeIds(...windows: Array<BrowserWindow | undefined>): number[] {
+  const ids: number[] = []
+  for (const window of windows) {
+    if (window === undefined || window.isDestroyed() || !window.isVisible()) continue
+    ids.push(cgWindowIdFromMediaSourceId(window.getMediaSourceId()))
+  }
+  return ids
 }
 
 /** Milliseconds Electron waits after click-through before acking input begin, so WindowServer hit-testing has committed. */

@@ -9,6 +9,8 @@ export interface DesktopElectronBuilderConfig {
     { readonly from: string, readonly to: 'dsh' },
     { readonly from: string, readonly to: 'dsh/node_modules' },
   ]
+  readonly files: readonly string[]
+  readonly asarUnpack: readonly string[]
   readonly mac: {
     readonly identity: string | undefined
     readonly forceCodeSigning: boolean

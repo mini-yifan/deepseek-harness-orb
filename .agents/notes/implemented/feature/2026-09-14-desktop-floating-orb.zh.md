@@ -40,7 +40,7 @@ Desktop Host overlay YAML 从 `../lib/computer-use-preset-root.js` 插入 `compu
 
 ## 影响
 
-在 darwin 上关掉主窗口后，球仍会运行，直到从 Dock、Cmd+Q 或 overlay 右键明确退出。overlay 没有语音、套索、划词工具条或逐次点击批准。overlay 是第二个 Gateway Client，认领它所持 Computer Use 会话上仍在进行的 `'user-questions/request'` waterfall，因此关掉主窗口后仍有答题方。overlay 的截屏排除与点击穿透只包住 Computer Use 区间；捕获省略使用整扇 overlay 窗的 ScreenCaptureKit 窗口 id。重启会在 Host 仍持有该会话时续上已存 Computer Use 会话。overlay Computer Use 的 cwd 是 `$DSH_HOME/dsh_orb`。snapshot 与包测试钉住 `code_agent` 路由例子（微信/Pages 走 GUI、Word 新建、字体改绿续写、五子棋新建），以及仅 macOS 的 overlay 构造。
+在 darwin 上关掉主窗口后，球仍会运行，直到从 Dock、Cmd+Q 或 overlay 右键明确退出。overlay 没有语音、套索或逐次点击批准。[桌面划词工具条](2026-09-16-desktop-selection-toolbar.zh.md) 拥有划选后的搜索 / 翻译 / Agent 讲解。overlay 是第二个 Gateway Client，认领它所持 Computer Use 会话上仍在进行的 `'user-questions/request'` waterfall，因此关掉主窗口后仍有答题方。overlay 的截屏排除与点击穿透只包住 Computer Use 区间；捕获省略使用可见 overlay 窗口的 ScreenCaptureKit 窗口 id。重启会在 Host 仍持有该会话时续上已存 Computer Use 会话。overlay Computer Use 的 cwd 是 `$DSH_HOME/dsh_orb`。snapshot 与包测试钉住 `code_agent` 路由例子（微信/Pages 走 GUI、Word 新建、字体改绿续写、五子棋新建），以及仅 macOS 的 overlay 构造。
 
 ## 测试
 

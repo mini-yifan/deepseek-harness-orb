@@ -1,0 +1,228 @@
+/** Orchestrate the Darwin selection helper, toolbar window, and overlay prompts. */
+
+import type { BrowserWindow } from 'electron'
+import { DESKTOP_IPC } from './ipc.ts'
+import type { SelectionHelperEvent, SelectionMonitor, SelectionMonitorHandlers } from './selection-monitor.ts'
+import { startSelectionMonitor, type SelectionBounds } from './selection-monitor.ts'
+import {
+  composeSelectionExplainPrompt,
+  composeSelectionTranslatePrompt,
+  selectionSearchUrl,
+  type SelectionTranslateLanguage,
+} from './selection-prompt.ts'
+import {
+  hideSelectionToolbar,
+  pointInWindow,
+  selectionToolbarBounds,
+  showSelectionToolbar,
+} from './selection-toolbar-window.ts'
+import {
+  readSelectionToolbarConfig,
+  writeSelectionToolbarConfig,
+  type SelectionToolbarConfig,
+} from './selection-toolbar-config.ts'
+
+/** Ignore a repeated pid+bundle+text selection within this window. */
+export const SELECTION_DEDUPE_MS = 3_000
+
+/** Host-owned actions the toolbar controller must not import from Electron main. */
+export interface SelectionToolbarHost {
+  readonly electronPid: number
+  /** Open the Bing search URL in the default browser. */
+  openExternal(url: string): Promise<void>
+  /** Send composed user-message text to the overlay renderer. */
+  promptOverlay(text: string): void
+  /** Prompt macOS Accessibility TCC; returns whether the process is trusted. */
+  requestAccessibility(): boolean
+  /** Test override; production uses {@link startSelectionMonitor}. */
+  startMonitor?(handlers: SelectionMonitorHandlers): SelectionMonitor | undefined
+  /** Test clock; production uses `Date.now`. */
+  now?(): number
+}
+
+/**
+ * Desktop-owned selection toolbar: helper events, profile JSON, Bing search, and overlay prompts.
+ */
+export class SelectionToolbarController {
+  private config: SelectionToolbarConfig
+  private monitor: SelectionMonitor | undefined
+  private toolbar: BrowserWindow | undefined
+  private lastText = ''
+  private lastBounds: SelectionBounds | undefined
+  private lastAnchor = { x: 0, y: 0 }
+  private lastDedupe: { key: string; at: number } | undefined
+  private sessionRunning = false
+  private hidInput = false
+  private promptedAccessibility = false
+
+  /**
+   * @param profileDir - Desktop profile directory holding `selection-toolbar.json`.
+   * @param host - Electron actions kept out of this module's import graph for tests.
+   */
+  constructor(
+    private readonly profileDir: string,
+    private readonly host: SelectionToolbarHost,
+  ) {
+    this.config = readSelectionToolbarConfig(profileDir)
+  }
+
+  /** @returns whether the toolbar is enabled in the profile. */
+  enabled(): boolean {
+    return this.config.enabled
+  }
+
+  /** @returns the persisted translate target. */
+  language(): SelectionTranslateLanguage {
+    return this.config.translateTargetLanguage
+  }
+
+  /** @returns the live toolbar window, if created. */
+  window(): BrowserWindow | undefined {
+    return this.toolbar
+  }
+
+  /**
+   * Bind the no-activate toolbar window. The caller loads `selection-toolbar.html`.
+   * @param window - panel created by `createSelectionToolbarWindow`.
+   */
+  setToolbarWindow(window: BrowserWindow): void {
+    this.toolbar = window
+    window.once('closed', () => { this.toolbar = undefined })
+  }
+
+  /** Spawn the Darwin helper when the toolbar is enabled. */
+  start(): void {
+    if (!this.config.enabled || this.monitor !== undefined) return
+    const start = this.host.startMonitor ?? startSelectionMonitor
+    this.monitor = start({ onEvent: (event) => { this.onHelperEvent(event) } })
+    this.monitor?.setExcludePids([this.host.electronPid])
+  }
+
+  /** Kill the helper and hide the toolbar. */
+  stop(): void {
+    this.monitor?.stop()
+    this.monitor = undefined
+    hideSelectionToolbar(this.toolbar)
+  }
+
+  /** Persist the inverse of {@link enabled} and start or stop the helper. */
+  toggle(): void {
+    this.writeConfig({ ...this.config, enabled: !this.config.enabled })
+    if (this.config.enabled) this.start()
+    else this.stop()
+  }
+
+  /**
+   * Persist the translate target and push it to the toolbar renderer.
+   * @param language - Chinese or English.
+   */
+  setLanguage(language: SelectionTranslateLanguage): void {
+    this.writeConfig({ ...this.config, translateTargetLanguage: language })
+    this.publishState()
+  }
+
+  /** Send the current language to the toolbar renderer. */
+  publishState(): void {
+    if (this.toolbar === undefined || this.toolbar.isDestroyed()) return
+    this.toolbar.webContents.send(DESKTOP_IPC.selectionState, {
+      language: this.config.translateTargetLanguage,
+    })
+  }
+
+  /**
+   * Hide and skip reads while the overlay Computer Use session is running.
+   * @param running - overlay `session/list` running flag.
+   */
+  setSessionRunning(running: boolean): void {
+    this.sessionRunning = running
+    if (running) hideSelectionToolbar(this.toolbar)
+  }
+
+  /**
+   * Hide and skip reads during overlay-guard HID so Cmd+C cannot fight `input_text`.
+   * @param active - whether an `input` begin is still unmatched.
+   */
+  setHidInput(active: boolean): void {
+    this.hidInput = active
+    if (active) hideSelectionToolbar(this.toolbar)
+  }
+
+  /**
+   * Open Bing for the last selection. Does not expand the overlay.
+   * @returns after `openExternal` settles, or immediately when there is no text.
+   */
+  async search(): Promise<void> {
+    if (this.lastText === '') return
+    hideSelectionToolbar(this.toolbar)
+    await this.host.openExternal(selectionSearchUrl(this.lastText))
+  }
+
+  /** Prompt the overlay Computer Use session to translate the last selection. */
+  translate(): void {
+    this.promptSelection(composeSelectionTranslatePrompt(this.lastText, this.config.translateTargetLanguage))
+  }
+
+  /** Prompt the overlay Computer Use session to explain the last selection. */
+  explain(): void {
+    this.promptSelection(composeSelectionExplainPrompt(this.lastText))
+  }
+
+  /**
+   * Apply one NDJSON helper event. Tests inject events without spawning the binary.
+   * @param event - parsed helper payload.
+   */
+  onHelperEvent(event: SelectionHelperEvent): void {
+    switch (event.type) {
+      case 'ready':
+        this.monitor?.setExcludePids([this.host.electronPid])
+        return
+      case 'untrusted':
+        if (this.promptedAccessibility) return
+        this.promptedAccessibility = true
+        this.host.requestAccessibility()
+        return
+      case 'mouse-down':
+        if (!pointInWindow(this.toolbar, event)) hideSelectionToolbar(this.toolbar)
+        return
+      case 'key':
+        hideSelectionToolbar(this.toolbar)
+        return
+      case 'mouse-up':
+        this.lastAnchor = { x: event.x, y: event.y }
+        return
+      case 'selection':
+        this.onSelection(event)
+        return
+    }
+  }
+
+  private pausedReads(): boolean {
+    return this.sessionRunning || this.hidInput || !this.config.enabled
+  }
+
+  private writeConfig(config: SelectionToolbarConfig): void {
+    this.config = config
+    writeSelectionToolbarConfig(this.profileDir, config)
+  }
+
+  private promptSelection(text: string): void {
+    if (this.lastText === '') return
+    hideSelectionToolbar(this.toolbar)
+    this.host.promptOverlay(text)
+  }
+
+  private onSelection(event: Extract<SelectionHelperEvent, { type: 'selection' }>): void {
+    if (this.pausedReads() || this.toolbar === undefined) return
+    const key = `${String(event.pid ?? 0)}\0${event.bundle ?? ''}\0${event.text}`
+    const now = (this.host.now ?? Date.now)()
+    if (this.lastDedupe !== undefined && this.lastDedupe.key === key && now - this.lastDedupe.at < SELECTION_DEDUPE_MS) {
+      return
+    }
+    this.lastDedupe = { key, at: now }
+    this.lastText = event.text
+    this.lastBounds = event.bounds
+    if (event.x !== undefined && event.y !== undefined) this.lastAnchor = { x: event.x, y: event.y }
+    showSelectionToolbar(this.toolbar, selectionToolbarBounds(this.lastAnchor, this.lastBounds))
+    this.publishState()
+  }
+}

@@ -99,7 +99,7 @@ This section explains the design behind the plugin and points at the code that r
 
 The plugin is one experimental package on purpose. The existing agent-loop already turns a tool result that contains images into the next model request, so Computer Use does not add an observe tool and does not change loop semantics. Grounding copy is a `systemPrompt.section`, not a Skill. A second backend would justify splitting Service Definition from Provider; this cut keeps macOS capture/input in the same package as the tools.
 
-First-frame attachment uses `agent/pre-step`: the listener always awaits `next()`, then appends a plugin `user` notice with `form: 'notice'` when the claimed batch contains a `source.kind === 'user'` message and the route declares image input. `agent.inject()` would land only on the next step.
+First-frame attachment uses `agent/pre-step`: the listener always awaits `next()`, then appends a plugin `user` notice with `form: 'notice'` when the claimed batch contains a `source.kind === 'user'` message and the route declares image input, except when that user text starts with `Desktop selection. Answer in this chat only. Do not call GUI tools or code_agent.` `agent.inject()` would land only on the next step.
 
 ### Source map
 
@@ -108,6 +108,7 @@ First-frame attachment uses `agent/pre-step`: the listener always awaits `next()
 | [`src/index.ts`](src/index.ts) | Plugin entry: `name` / `inject` / `Config` / `apply` over the host-platform backend |
 | [`src/preset-root.ts`](src/preset-root.ts) | Overlay-only plugin: publishes the extra agent-presets root |
 | [`src/plugin.ts`](src/plugin.ts) | Shared `applyComputerUse`: policy, thirteen GUI tools, first-frame pre-step |
+| [`src/selection-turn.ts`](src/selection-turn.ts) | Detect Desktop selection-toolbar user turns so first-frame capture is omitted |
 | [`src/observe.ts`](src/observe.ts) | Frontmost-window capture, overlay-skip foreground inspect, and model-facing envelopes |
 | [`src/code-agent.ts`](src/code-agent.ts) | Computer Use-only `code_agent`: `session.create` / `session.prompt` |
 | [`src/code-agent-completion.ts`](src/code-agent-completion.ts) | Parked plugin notice after the Code session and the Computer Use caller are idle |
@@ -189,6 +190,8 @@ Route the user's request yourself:
 After code_agent returns, tell the user the background Code agent is running, then end the turn. Do not call wait, long_wait, or bash sleep to poll that session.
 
 When a plugin notice reports that a Code agent session finished, tell the user which background task completed and what it produced.
+
+When a user message starts with "Desktop selection. Answer in this chat only. Do not call GUI tools or code_agent.", answer in this chat only. Do not call GUI tools, code_agent, or screenshot on that turn.
 ```
 
 #### Token effect

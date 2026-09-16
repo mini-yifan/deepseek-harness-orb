@@ -61,9 +61,11 @@ export function createElectronBuilderConfig(
     files: [
       'lib/*.js',
       'lib/*.cjs',
+      'lib/macos-selection',
       'renderer/**/*',
       'package.json',
     ],
+    asarUnpack: ['lib/macos-selection'],
     extraResources: [
       { from: buildPaths.runtime, to: 'runtime' },
       { from: buildPaths.dsh, to: 'dsh' },

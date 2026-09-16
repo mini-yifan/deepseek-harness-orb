@@ -1,0 +1,81 @@
+:root {
+  color-scheme: light;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  --panel-bg: #f7f7f8;
+  --text: #111111;
+  --border: #c8c8ce;
+  --hover: #ececf0;
+}
+
+html,
+body {
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+}
+
+#bar {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  pointer-events: auto;
+}
+
+button {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-bg);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--hover);
+}
+
+#translate-group {
+  display: flex;
+}
+
+#translate {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+}
+
+#translate-arrow {
+  min-width: 22px;
+  max-width: 22px;
+  padding: 0 4px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+#language-menu {
+  position: absolute;
+  top: 42px;
+  left: 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+#language-menu[hidden] {
+  display: none;
+}
+
+#language-menu button {
+  height: 28px;
+  text-align: left;
+}
+
+#language-menu button[aria-checked="true"] {
+  font-weight: 600;
+}

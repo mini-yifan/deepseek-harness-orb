@@ -20,6 +20,7 @@ const harness = await vi.hoisted(async () => {
   let navigated = deferred()
   let errorPublished = deferred()
   let quitCompleted = deferred()
+  let nextMediaSourceId = 4242
   class FakeWindow extends EventEmitter {
     destroyed = false
     contentProtection = false
@@ -28,6 +29,8 @@ const harness = await vi.hoisted(async () => {
     visibleOnAllWorkspaces = false
     visibleOnAllWorkspacesOptions: { visibleOnFullScreen?: boolean; skipTransformProcessType?: boolean } | undefined = undefined
     bounds = { x: 0, y: 0, width: 72, height: 72 }
+    visible = false
+    readonly mediaSourceId: string
     readonly urls: string[] = []
     readonly webContents = Object.assign(new EventEmitter(), {
       setWindowOpenHandler: vi.fn(),
@@ -38,19 +41,30 @@ const harness = await vi.hoisted(async () => {
         if (channel === 'dsh-desktop:backend-state' && state.phase === 'error') errorPublished.resolve()
       }),
     })
-    readonly show = vi.fn()
+    readonly show = vi.fn(() => { this.visible = true })
+    readonly showInactive = vi.fn(() => { this.visible = true })
+    readonly hide = vi.fn(() => { this.visible = false })
     readonly focus = vi.fn()
     readonly blur = vi.fn()
     readonly restore = vi.fn()
-    constructor(readonly options: { show?: boolean; type?: string; width?: number; height?: number }) {
+    constructor(readonly options: {
+      show?: boolean
+      type?: string
+      width?: number
+      height?: number
+      focusable?: boolean
+    }) {
       super()
+      this.mediaSourceId = `window:${String(nextMediaSourceId++)}:0`
       windows.push(this)
       if (typeof options.width === 'number') this.bounds.width = options.width
       if (typeof options.height === 'number') this.bounds.height = options.height
+      this.visible = options.show === true
     }
-    getMediaSourceId() { return 'window:4242:0' }
+    getMediaSourceId() { return this.mediaSourceId }
     isDestroyed() { return this.destroyed }
     isMinimized() { return false }
+    isVisible() { return this.visible }
     setContentProtection(value: boolean) { this.contentProtection = value }
     setIgnoreMouseEvents(value: boolean, options?: { forward?: boolean }) {
       this.ignoreMouseEvents = value
@@ -140,6 +154,7 @@ const harness = await vi.hoisted(async () => {
       windows.length = 0; hosts.length = 0; handlers.clear(); app.removeAllListeners()
       app.isPackaged = true
       pluginsEnabled = false
+      nextMediaSourceId = 4242
       preparing = deferred(); prepared = deferred(); hostStarted = deferred()
       navigated = deferred(); errorPublished = deferred(); quitCompleted = deferred()
     },
@@ -161,6 +176,8 @@ vi.mock('electron', () => ({
   screen: {
     getDisplayNearestPoint: () => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } }),
   },
+  shell: { openExternal: vi.fn() },
+  systemPreferences: { isTrustedAccessibilityClient: vi.fn(() => false) },
 }))
 vi.mock('../src/paths.ts', () => ({
   resolveDesktopPaths: () => ({ profile: 'desktop-test-profile', orbWorkspace: 'desktop-test-orb' }),
@@ -462,6 +479,8 @@ describe('desktop floating overlay', () => {
     const overlay = harness.windows.find(window => window.options.type === 'panel')
     expect(overlay).toBeDefined()
     expect(overlay?.urls).toEqual(['dsh-app://shell/floating.html'])
+    const toolbar = harness.windows.find(window => window.options.focusable === false)
+    expect(toolbar?.urls).toEqual(['dsh-app://shell/selection-toolbar.html'])
     expect(overlay?.contentProtection).toBe(false)
     expect(overlay?.visibleOnAllWorkspaces).toBe(true)
     expect(overlay?.visibleOnAllWorkspacesOptions).toEqual({
@@ -473,7 +492,14 @@ describe('desktop floating overlay', () => {
     expect(appWindows()[0]?.contentProtection).toBe(false)
     expect(harness.hosts[0]!.onOverlayGuard?.({
       type: 'overlay-guard', requestId: 1, action: 'begin', mode: 'capture',
-    })).toEqual([4242])
+    })).toEqual([4243])
+    harness.hosts[0]!.onOverlayGuard?.({
+      type: 'overlay-guard', requestId: 6, action: 'end', mode: 'capture',
+    })
+    toolbar?.showInactive()
+    expect(harness.hosts[0]!.onOverlayGuard?.({
+      type: 'overlay-guard', requestId: 5, action: 'begin', mode: 'capture',
+    })).toEqual([4243, 4244])
     expect(overlay?.contentProtection).toBe(false)
     expect(overlay?.ignoreMouseEvents).toBe(false)
     harness.hosts[0]!.onOverlayGuard?.({
@@ -485,6 +511,7 @@ describe('desktop floating overlay', () => {
     })
     expect(overlay?.ignoreMouseEvents).toBe(true)
     expect(overlay?.ignoreMouseEventsForward).toBe(false)
+    expect(toolbar?.hide).toHaveBeenCalled()
     expect(inputBegin).toBeInstanceOf(Promise)
     expect(overlay?.blur).toHaveBeenCalled()
     harness.hosts[0]!.onOverlayGuard?.({

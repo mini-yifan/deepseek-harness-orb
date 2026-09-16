@@ -4,6 +4,7 @@ import type { DesktopPluginRecord } from './project-manager.ts'
 import type { DesktopLocale } from './locale.ts'
 import type { DesktopBackendState } from './backend-controller.ts'
 import type { FloatingExpandState } from './floating-window.ts'
+import type { SelectionTranslateLanguage } from './selection-prompt.ts'
 
 /** IPC channel names kept private to the desktop application bundle. */
 export const DESKTOP_IPC = {
@@ -30,7 +31,24 @@ export const DESKTOP_IPC = {
   floatingOrbWorkspace: 'dsh-desktop:floating-orb-workspace',
   floatingFocusMain: 'dsh-desktop:floating-focus-main',
   floatingQuit: 'dsh-desktop:floating-quit',
+  floatingRunning: 'dsh-desktop:floating-running',
+  selectionPrompt: 'dsh-desktop:selection-prompt',
+  selectionSearch: 'dsh-desktop:selection-search',
+  selectionTranslate: 'dsh-desktop:selection-translate',
+  selectionExplain: 'dsh-desktop:selection-explain',
+  selectionSetLanguage: 'dsh-desktop:selection-set-language',
+  selectionState: 'dsh-desktop:selection-state',
 } as const
+
+/** User-message text the overlay renderer prompts onto the Computer Use session. */
+export interface SelectionPromptPayload {
+  readonly text: string
+}
+
+/** Labels and current language pushed to the selection-toolbar renderer. */
+export interface SelectionToolbarState {
+  readonly language: 'zh' | 'en'
+}
 
 /** Desktop release update state rendered by desktop-owned UI. */
 export interface DesktopUpdateState {
@@ -70,6 +88,15 @@ export interface DshDesktopApi {
     orbWorkspacePath(): Promise<string>
     focusMain(): Promise<void>
     quit(): Promise<void>
+    setSessionRunning(running: boolean): Promise<void>
+    onSelectionPrompt(listener: (payload: SelectionPromptPayload) => void): () => void
+  }
+  readonly selection: {
+    search(): Promise<void>
+    translate(): Promise<void>
+    explain(): Promise<void>
+    setLanguage(language: SelectionTranslateLanguage): Promise<void>
+    onState(listener: (state: SelectionToolbarState) => void): () => void
   }
 }
 

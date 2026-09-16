@@ -42,9 +42,11 @@ Closing the main window does not quit the app. The Dock icon stays after the bal
 
 ## Use the macOS floating ball
 
-The ball is created only after Host ready. Hover it to expand a white panel; the ball stays in the input corner. Click the ball to pin the panel; click again to unpin, then move away to collapse. Drag moves the ball and keeps it on screen; it does not snap to an edge. The panel shows chat bubbles, a single-line input that sends on Enter, Stop at the opposite end of the input pill from the ball only while that Computer Use session is running, **History** at the top-left to list and reopen Computer Use chats on `dsh_orb`, and **New** at the top-right for another Computer Use chat on that folder. When the Computer Use agent asks a question, the expanded panel shows the prompt with choices or a text field so you can answer on the ball; the main window can still answer the same request. There is no Send button, mode picker, voice, selection toolbar, or lasso.
+The ball is created only after Host ready. Hover it to expand a white panel; the ball stays in the input corner. Click the ball to pin the panel; click again to unpin, then move away to collapse. Drag moves the ball and keeps it on screen; it does not snap to an edge. The panel shows chat bubbles, a single-line input that sends on Enter, Stop at the opposite end of the input pill from the ball only while that Computer Use session is running, **History** at the top-left to list and reopen Computer Use chats on `dsh_orb`, and **New** at the top-right for another Computer Use chat on that folder. When the Computer Use agent asks a question, the expanded panel shows the prompt with choices or a text field so you can answer on the ball; the main window can still answer the same request. There is no Send button, mode picker, voice, or lasso.
 
-The input placeholder is “Ask the desktop agent…”. Sends go to the Computer Use session with DeepSeek-V41-Flash at Max thinking. Stop cancels only that Computer Use session, not sidebar standard sessions. The context menu offers **Open Main Window** and **Quit DeepSeek Harness**; only an explicit Quit ends the process.
+After a drag-select in another app, a toolbar offers **Search** (Bing in the default browser), **Translate** (Chinese or English into the ball’s current Computer Use chat), and **Agent Explain** (same chat, no first-frame screenshot). Right-click the ball to turn the toolbar off. The Mac must allow Accessibility; the first failed read opens System Settings.
+
+The input placeholder is “Ask the desktop agent…”. Sends go to the Computer Use session with DeepSeek-V41-Flash at Max thinking. Stop cancels only that Computer Use session, not sidebar standard sessions. The context menu offers **Open Main Window**, enable or disable the selection toolbar, and **Quit DeepSeek Harness**; only an explicit Quit ends the process.
 
 The ball’s Computer Use bash and filesystem default to Full access, so they can write outside `dsh_orb`. Background `code_agent` sessions keep Workspace Write.
 
@@ -63,7 +65,7 @@ Those background sessions are the same kind as a session you type in the main wi
 
 ## Limits
 
-The floating ball is macOS-only. There is no voice, selection toolbar, lasso, or per-click approval. Computer Use capture omits the ball and expanded panel from that screenshot via ScreenCaptureKit window exclusion, and HID makes that whole overlay click-through only for that input burst; the main window stays capturable and hittable. The Computer Use package is a signed runtime extra, not a Desktop Host npm dependency.
+The floating ball is macOS-only. There is no voice, lasso, or per-click approval. Computer Use capture omits the ball, expanded panel, and selection toolbar from that screenshot via ScreenCaptureKit window exclusion, and HID makes that whole overlay click-through only for that input burst while hiding the toolbar; the main window stays capturable and hittable. The Computer Use package is a signed runtime extra, not a Desktop Host npm dependency.
 
 ## Continue
 
