@@ -182,7 +182,7 @@ describe('macOS backend with an injected runner', () => {
     }])
   })
 
-  it('captures JPEG bytes written by screencapture -l -o', async () => {
+  it('captures JPEG bytes written by screencapture plus sips crop', async () => {
     const files: string[] = []
     const args: string[][] = []
     const backend = createMacosDesktopBackend(runner({ files, args }))
@@ -192,8 +192,9 @@ describe('macOS backend with an injected runner', () => {
     const captured = await backend.capture(screen!)
     expect(captured.mediaType).toBe('image/png')
     expect(captured.data).toEqual(FAKE_DESKTOP_PNG)
-    expect(files).toEqual(['/usr/sbin/screencapture'])
-    expect(args[0]?.slice(0, 6)).toEqual(['-x', '-o', '-t', 'jpg', '-l', '42'])
+    expect(files).toEqual(['/usr/sbin/screencapture', '/usr/bin/sips'])
+    expect(args[0]?.slice(0, 3)).toEqual(['-x', '-t', 'jpg'])
+    expect(args[1]?.slice(0, 6)).toEqual(['--cropOffset', '0', '0', '-c', '100', '200'])
   })
 
   it('captures a screen rectangle when inspect reports open menus', async () => {
@@ -219,11 +220,15 @@ describe('macOS backend with an injected runner', () => {
     expect(args[1]?.slice(0, 6)).toEqual(['--cropOffset', '40', '20', '-c', '600', '800'])
   })
 
-  it('rejects capture when the surface has no window id', async () => {
-    const backend = createMacosDesktopBackend(runner({}))
-    await expect(backend.capture({
+  it('captures a screen rectangle when the surface has no window id', async () => {
+    const files: string[] = []
+    const args: string[][] = []
+    const backend = createMacosDesktopBackend(runner({ files, args }))
+    await backend.capture({
       index: 0, bounds: { x: 0, y: 0, width: 100, height: 50 }, scale: 2,
-    })).rejects.toThrow(/requires a window id/u)
+    })
+    expect(files).toEqual(['/usr/sbin/screencapture', '/usr/bin/sips'])
+    expect(args[0]?.slice(0, 3)).toEqual(['-x', '-t', 'jpg'])
   })
 
   it('captures JPEG bytes as image/jpeg', async () => {
@@ -245,7 +250,7 @@ describe('macOS backend with an injected runner', () => {
     expect(captured.mediaType).toBe('image/png')
     expect(files).toEqual([macosSckCaptureHelperPath()])
     expect(args[0]).toEqual([
-      '--window=42',
+      '--region=0,0,100,50',
       '--exclude=4242',
       expect.stringMatching(/^--out=/u),
     ])
@@ -342,8 +347,18 @@ describe('macOS backend with an injected runner', () => {
     expect(CHROME_WINDOW_OWNERS).toContain('Dock')
     expect(inspectForegroundScript([])).toContain('"Dock": true')
     expect(inspectForegroundScript([])).toContain('chromeOwners[tOwner]')
-    expect(inspectForegroundScript([])).toContain('samePid || relatedOwner(found.appName, tOwner)')
-    expect(inspectForegroundScript([])).toContain('!related && !crossPidLayers[tLayer]')
+    expect(inspectForegroundScript([])).toContain('function familyPids(ownerPid)')
+    expect(inspectForegroundScript([])).toContain('$.NSWorkspace.sharedWorkspace.runningApplications.js')
+    expect(inspectForegroundScript([])).toContain('function relatedBundle(a, b)')
+    expect(inspectForegroundScript([])).toContain("b.indexOf(a + '.') === 0")
+    expect(inspectForegroundScript([])).toContain("a.indexOf(b + '.') === 0")
+    expect(inspectForegroundScript([])).toContain('family[tPid] || relatedOwner(found.appName, tOwner)')
+    expect(inspectForegroundScript([])).toContain('if (!inFamily)')
+    expect(inspectForegroundScript([])).toContain('if (!crossPidLayers[tLayer]) continue')
+    expect(inspectForegroundScript([])).toContain(
+      'overlaps(found.x, found.y, found.width, found.height, tx, ty, tw, th, pad)',
+    )
+    expect(inspectForegroundScript([])).not.toContain('samePid || relatedOwner(found.appName, tOwner)')
     expect(inspectForegroundScript([4242, 7])).toContain('4242: true')
     expect(inspectForegroundScript([4242, 7])).toContain('7: true')
     expect(inspectForegroundScript([1.5, -1])).toBe(inspectForegroundScript([]))

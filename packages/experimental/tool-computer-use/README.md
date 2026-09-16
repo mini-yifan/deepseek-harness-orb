@@ -62,7 +62,7 @@ On macOS, grant Screen Recording to capture, Accessibility to post clicks and ke
 
 ### The tools
 
-There is no `observe` tool. The first user turn already includes the current frontmost window, and every GUI tool returns the post-action window as native image blocks in the tool result. `screenshot` is an export: it writes that raster to the user Desktop and copies it to the clipboard. The image includes open menus and popovers of that window. It does not include the Dock, menu bar, other applications, or other displays.
+There is no `observe` tool. The first user turn already includes the current frontmost window, and every GUI tool returns the post-action window as native image blocks in the tool result. `screenshot` is an export: it writes that raster to the user Desktop and copies it to the clipboard. The image includes that app's open menus, popovers, and panels. It does not include the Dock, menu bar, other applications (except where they overlap this app's windows), or other displays.
 
 | Tool | Arguments | After the action |
 |---|---|---|
@@ -112,7 +112,7 @@ First-frame attachment uses `agent/pre-step`: the listener always awaits `next()
 | [`src/observe.ts`](src/observe.ts) | Frontmost-window capture, overlay-skip foreground inspect, and model-facing envelopes |
 | [`src/code-agent.ts`](src/code-agent.ts) | Computer Use-only `code_agent`: `session.create` / `session.prompt` |
 | [`src/code-agent-completion.ts`](src/code-agent-completion.ts) | Parked plugin notice after the Code session and the Computer Use caller are idle |
-| [`src/macos.ts`](src/macos.ts) | Darwin capture via `screencapture -l -o`, or ScreenCaptureKit `--window=` when overlay window ids are set; open menus use helper `--region=` or a full `screencapture` plus `sips` crop; click, scroll, hotkey, long-press, and drag via JXA `CGEvent`; `input_text` pastes via NSPasteboard; `list_apps` / `open_app` via NSWorkspace; `open_in_browser` / `open_in_finder` via `/usr/bin/open`; `inspectForeground` binds `CGWindowListCopyWindowInfo` then unwraps (skip overlay ids) plus Finder AppleScript |
+| [`src/macos.ts`](src/macos.ts) | Darwin capture via a full `screencapture` plus `sips` crop of the frontmost-app window union, or ScreenCaptureKit helper `--region=` when overlay window ids are set; click, scroll, hotkey, long-press, and drag via JXA `CGEvent`; `input_text` pastes via NSPasteboard; `list_apps` / `open_app` via NSWorkspace; `open_in_browser` / `open_in_finder` via `/usr/bin/open`; `inspectForeground` binds `CGWindowListCopyWindowInfo` then unwraps (skip overlay ids) plus Finder AppleScript |
 | [`src/macos-sck-capture.swift`](src/macos-sck-capture.swift) | Darwin helper: window capture or display-exclude region crop that still omits overlay CGWindowIDs; starts `NSApplication` on the main actor first |
 | [`src/open.ts`](src/open.ts) | `long_press` duration, `open_in_browser` URL, and `open_in_finder` path validation |
 | [`src/wait-args.ts`](src/wait-args.ts) | Fixed 1s `wait` and `long_wait` 10/30/60/120 buckets |
@@ -138,8 +138,9 @@ First-frame attachment uses `agent/pre-step`: the listener always awaits `next()
 - [Computer Use parks Code agent completion](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-code-agent-completion.md) — parked plugin notice after both sessions are idle.
 - [Computer Use observation foreground](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-observation-foreground.md) — overlay-window skip, Finder folder, and focus fallback on existing `user/message` / `tool/result`.
 - [Computer Use focused-window observation](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-focused-window-observation.md) — one overlay-skipped frontmost window, `list_apps` / `open_app`, and no desktop panorama.
-- [Computer Use transient window observation](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-transient-window-observation.md) — open menus and popovers unioned into that screenshot.
-- [Computer Use context-menu observation](../../../.agents/notes/implemented/bug-fix/2026-09-16-computer-use-context-menu-observation.md) — same-app popups, settle-before-inspect, and overlay input cloak through recapture.
+- [Computer Use app-window observation](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-app-window-observation.md) — frontmost-app family window union and always-region capture.
+- [Computer Use transient window observation](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-transient-window-observation.md) — region helper for that union rectangle.
+- [Computer Use context-menu observation](../../../.agents/notes/implemented/bug-fix/2026-09-16-computer-use-context-menu-observation.md) — settle-before-inspect and overlay input cloak through recapture.
 - [Computer Use 0–1000 fraction coordinates](../../../.agents/notes/implemented/bug-fix/2026-09-15-computer-use-fraction-coordinates.md) — model-facing 0–1000 is a fraction of the visible screenshot, not capture pixels.
 - [Image handle omits request-preview pixels](../../../.agents/notes/implemented/bug-fix/2026-09-15-omit-request-preview-handle-dimensions.md) — the shared image handle names identity, not request-preview width and height.
 - [Desktop floating orb](../../../.agents/notes/implemented/feature/2026-09-14-desktop-floating-orb.md) — macOS overlay, runtime extra, and first-class `code_agent` sessions.
@@ -162,7 +163,7 @@ One stable `tool:computer-use` section is assembled on every request while the p
 ```markdown
 Computer Use lets you see the current frontmost application window and operate the GUI.
 
-See: trust only the attached frontmost-window screenshot for windows, buttons, and on-screen text. The image includes open menus and popovers of that window. It does not include the Dock, menu bar, other applications, or other displays. Do not assume UI that is not visible in the latest image. You may use observation tags <frontmost_app>, <frontmost_window>, <frontmost_folder>, and <focus_note> as OS metadata.
+See: trust only the attached screenshot of the frontmost application on this display for windows, buttons, and on-screen text. The image includes that app's open menus, popovers, and panels. It does not include the Dock, menu bar, other applications (except where they overlap this app's windows), or other displays. Do not assume UI that is not visible in the latest image. You may use observation tags <frontmost_app>, <frontmost_window>, <frontmost_folder>, and <focus_note> as OS metadata.
 
 Coordinates: the attached screenshot uses a 0–1000 space of that window. [0, 0] is the top-left of that image and [1000, 1000] is the bottom-right. x and y scale independently; do not treat the space as a square overlay. Pass position as [x, y] in that space together with screen_index 0. Map the target as a fraction of the screenshot you see. Ignore pixel widths and any other image-handle dimensions. Do not send raw pixel coordinates.
 
@@ -226,7 +227,7 @@ These limits are current package constraints. The plugin drives the real unsandb
 - **macOS only** — capture and HID input are implemented on Darwin; other platforms throw at execute.
 - **Screen Recording, Accessibility, and Automation TCC** — capture needs Screen Recording; clicks, typing, scroll, hotkeys, long-press, and drag need Accessibility; Finder folder lookup needs Automation for Finder. The plugin does not prompt for those rights.
 - **No per-click approval** — installing or patching the plugin is the consent gate; a visual loop cannot ask on every action.
-- **Host chrome is omitted from the shot when it is not the frontmost window** — Web windows appear only when that window is frontmost. Desktop's main window stays capturable when it is next after overlay skip. The macOS overlay is omitted from Computer Use screenshots by ScreenCaptureKit exclude-id checks (window filter, or display exclude plus crop when a menu is open) and is click-through for HID bursts, `open_app`, and their recapture via ack'd overlay-guard IPC. Foreground inspect and `listScreens` skip those overlay window ids, so the main window can appear as `<frontmost_app>`.
+- **Host chrome is omitted from the shot when it is not the frontmost window** — Web windows appear only when that window is frontmost. Desktop's main window stays capturable when it is next after overlay skip. The macOS overlay is omitted from Computer Use screenshots by ScreenCaptureKit exclude-id checks (display exclude plus crop) and is click-through for HID bursts, `open_app`, and their recapture via ack'd overlay-guard IPC. Foreground inspect and `listScreens` skip those overlay window ids, so the main window can appear as `<frontmost_app>`.
 - **Typing uses the string clipboard** — `input_text` pastes with Cmd+V and restores the previous string clipboard afterwards. Other clipboard types are not restored. `screenshot` replaces the pasteboard with the captured image and does not restore the previous clipboard.
 - **Retina vs attached size** — backing scale and request rasters can differ from the capture; pass 0–1000 fractions of the visible screenshot.
 - **Fixed settle wait** — post-action delay is `postActionWaitMs` before inspect and capture pixels; there is no pixel-diff stall.
