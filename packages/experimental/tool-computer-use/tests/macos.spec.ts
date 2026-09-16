@@ -12,8 +12,10 @@ import {
   DEFAULT_BROWSER_SCRIPT,
   macosSckCaptureHelperPath,
   MIN_LAYER0_WINDOW_EDGE,
+  CHROME_WINDOW_LAYERS,
+  CHROME_WINDOW_OWNERS,
+  CROSS_PID_TRANSIENT_LAYERS,
   CROSS_PID_TRANSIENT_PAD,
-  TRANSIENT_WINDOW_LAYERS,
   openAppScript,
   runCommand,
   sanitizeExcludeWindowIds,
@@ -134,6 +136,8 @@ describe('macOS backend with an injected runner', () => {
       .resolves.toEqual([])
     await expect(createMacosDesktopBackend(runner({ inspect: '[null]' })).listScreens())
       .resolves.toEqual([])
+    await expect(createMacosDesktopBackend(runner({})).withGuiTurn(() => Promise.resolve(9)))
+      .resolves.toBe(9)
     await expect(createMacosDesktopBackend(runner({
       inspect: inspectJson({ width: 0, height: 1 }),
     })).listScreens()).resolves.toEqual([])
@@ -159,6 +163,22 @@ describe('macOS backend with an injected runner', () => {
       scale: 2,
       windowId: 42,
       transientWindowIds: [99, 100],
+    }])
+    await expect(createMacosDesktopBackend(runner({
+      inspect: inspectJson({ transients: 'x' }),
+    })).listScreens()).resolves.toEqual([{
+      index: 0,
+      bounds: { x: 0, y: 0, width: 100, height: 50 },
+      scale: 2,
+      windowId: 42,
+    }])
+    await expect(createMacosDesktopBackend(runner({
+      inspect: inspectJson({ transients: [0, -1, 1.5] }),
+    })).listScreens()).resolves.toEqual([{
+      index: 0,
+      bounds: { x: 0, y: 0, width: 100, height: 50 },
+      scale: 2,
+      windowId: 42,
     }])
   })
 
@@ -310,8 +330,20 @@ describe('macOS backend with an injected runner', () => {
     expect(inspectForegroundScript([])).toContain(`var minEdge = ${String(MIN_LAYER0_WINDOW_EDGE)}`)
     expect(inspectForegroundScript([])).toContain(`const pad = ${String(CROSS_PID_TRANSIENT_PAD)}`)
     expect(inspectForegroundScript([])).toContain('found.transients = transients')
-    expect(TRANSIENT_WINDOW_LAYERS).toContain(101)
+    expect(inspectForegroundScript([])).toContain('function relatedOwner(a, b)')
+    expect(inspectForegroundScript([])).toContain("b.indexOf(a + ' ') === 0")
+    expect(inspectForegroundScript([])).toContain("a.indexOf(b + ' ') === 0")
+    expect(CROSS_PID_TRANSIENT_LAYERS).toContain(101)
+    expect(CHROME_WINDOW_LAYERS).toEqual([20, 24])
     expect(inspectForegroundScript([])).toContain('101: true')
+    expect(inspectForegroundScript([])).toContain('20: true')
+    expect(inspectForegroundScript([])).toContain('24: true')
+    expect(inspectForegroundScript([])).not.toContain('25: true')
+    expect(CHROME_WINDOW_OWNERS).toContain('Dock')
+    expect(inspectForegroundScript([])).toContain('"Dock": true')
+    expect(inspectForegroundScript([])).toContain('chromeOwners[tOwner]')
+    expect(inspectForegroundScript([])).toContain('samePid || relatedOwner(found.appName, tOwner)')
+    expect(inspectForegroundScript([])).toContain('!related && !crossPidLayers[tLayer]')
     expect(inspectForegroundScript([4242, 7])).toContain('4242: true')
     expect(inspectForegroundScript([4242, 7])).toContain('7: true')
     expect(inspectForegroundScript([1.5, -1])).toBe(inspectForegroundScript([]))
@@ -412,6 +444,12 @@ describe('macOS backend with an injected runner', () => {
       .resolves.toEqual(FOCUS_FALLBACK_FOREGROUND)
     await expect(createMacosDesktopBackend(runner({ inspect: '' })).inspectForeground())
       .resolves.toEqual(FOCUS_FALLBACK_FOREGROUND)
+    await expect(createMacosDesktopBackend(runner({
+      inspect: inspectJson({ windowTitle: undefined }),
+    })).inspectForeground()).resolves.toEqual({ appName: 'Pages' })
+    await expect(createMacosDesktopBackend(runner({
+      inspect: inspectJson({ windowTitle: '  ' }),
+    })).inspectForeground()).resolves.toEqual({ appName: 'Pages' })
   })
 
   it('returns focus fallback when the window-list osascript fails', async () => {
@@ -489,6 +527,26 @@ describe('macOS backend with an injected runner', () => {
       .rejects.toThrow(/requires a name/u)
     await expect(createMacosDesktopBackend(runner({ apps: 'not-json' })).listApps())
       .rejects.toThrow(/failed to list apps/u)
+    await expect(createMacosDesktopBackend(runner({ apps: '{}' })).listApps())
+      .rejects.toThrow(/failed to list apps/u)
+    await expect(createMacosDesktopBackend(runner({ apps: JSON.stringify([1]) })).listApps())
+      .rejects.toThrow(/failed to list apps/u)
+    await expect(createMacosDesktopBackend(runner({
+      apps: JSON.stringify(['', 'Pages', 'Pages']),
+    })).listApps()).resolves.toEqual(['Pages'])
+    await expect(createMacosDesktopBackend(runner({ openApp: 'not-json' })).openApp({ name: 'Pages' }))
+      .rejects.toThrow(/unreadable activate result/u)
+    await expect(createMacosDesktopBackend(runner({ openApp: 'null' })).openApp({ name: 'Pages' }))
+      .rejects.toThrow(/unreadable activate result/u)
+    await expect(createMacosDesktopBackend(runner({
+      openApp: JSON.stringify({ kind: 'activated' }),
+    })).openApp({ name: 'Pages' })).rejects.toThrow(/unreadable activate result/u)
+    await expect(createMacosDesktopBackend(runner({
+      openApp: JSON.stringify({ kind: 'ambiguous' }),
+    })).openApp({ name: 'Text' })).rejects.toThrow(/matches multiple applications: Text/u)
+    await expect(createMacosDesktopBackend(runner({
+      openApp: new Error('osascript crashed'),
+    })).openApp({ name: 'Pages' })).rejects.toThrow(/open_app failed for Pages/u)
   })
 
   it('names Screen Recording when capture fails', async () => {

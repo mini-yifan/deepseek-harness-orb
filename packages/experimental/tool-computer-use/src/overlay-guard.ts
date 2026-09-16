@@ -56,19 +56,21 @@ function captureExcludeIds(session: OverlayCaptureSession | undefined): readonly
 }
 
 /**
- * Wrap a desktop backend so capture, foreground inspect, listScreens, HID, and openApp run inside overlay-guard intervals.
- * `openApp` uses `withInput` so the overlay yields key status before activate.
+ * Wrap a desktop backend so capture, foreground inspect, listScreens, HID, openApp, and withGuiTurn run inside overlay-guard intervals.
+ * `openApp` and `withGuiTurn` use `withInput` so the overlay yields key status before activate and stays click-through through recapture.
+ * Desktop Host refcounts nested cloak calls so one turn sends one input begin/end.
  * `listApps`, `openInBrowser`, `openInFinder`, and `copyImageToClipboard` are unwrapped because
  * they do not capture pixels, inspect windows, post HID, or steal key status.
  * @param inner - platform or fake backend.
  * @param guard - host overlay cloak.
- * @returns a backend that cloaks around capture, inspect, listScreens, HID, and openApp.
+ * @returns a backend that cloaks around capture, inspect, listScreens, HID, openApp, and withGuiTurn.
  */
 export function wrapDesktopBackend(
   inner: DesktopBackend,
   guard: ComputerUseOverlayGuard,
 ): DesktopBackend {
   return {
+    withGuiTurn: (run, signal) => guard.withInput(() => inner.withGuiTurn(run, signal), signal),
     listScreens: signal => guard.withCapture(
       session => runWithCaptureExcludeWindowIds(
         captureExcludeIds(session),

@@ -103,6 +103,43 @@ describe('computer-use overlay guard', () => {
     await pending
   })
 
+  it('nests withInput and withCapture so one HID turn sends one begin/end', async () => {
+    const events: OverlayGuardIpcEvent[] = []
+    const guard = createComputerUseOverlayGuard((event) => {
+      events.push(event)
+      queueMicrotask(() => { completeOverlayGuardAck(event.requestId, event.mode === 'input' ? [4] : [9]) })
+    })
+    const seen: number[][] = []
+    await guard.withInput(async () => {
+      await guard.withInput(async () => undefined)
+      await guard.withCapture(async (session) => {
+        seen.push(session.excludeWindowIds)
+        await guard.withCapture(async (inner) => {
+          seen.push(inner.excludeWindowIds)
+          return inner
+        })
+        return session
+      })
+    })
+    expect(events.map(event => `${event.action}:${event.mode}`)).toEqual(['begin:input', 'end:input'])
+    expect(seen).toEqual([[4], [4]])
+  })
+
+  it('nests withCapture without extra begin/end', async () => {
+    const events: OverlayGuardIpcEvent[] = []
+    const guard = createComputerUseOverlayGuard((event) => {
+      events.push(event)
+      queueMicrotask(() => { completeOverlayGuardAck(event.requestId, [9]) })
+    })
+    await guard.withCapture(async (outer) => {
+      expect(outer.excludeWindowIds).toEqual([9])
+      await guard.withCapture(async (inner) => {
+        expect(inner.excludeWindowIds).toEqual([9])
+      })
+    })
+    expect(events.map(event => `${event.action}:${event.mode}`)).toEqual(['begin:capture', 'end:capture'])
+  })
+
   it('uses the installed transport from apply', async () => {
     const events: OverlayGuardIpcEvent[] = []
     setOverlayGuardTransport((event) => {

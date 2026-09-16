@@ -168,7 +168,7 @@ export function observationContent(
  * @param ctx - plugin context with `attachments`.
  * @param backend - desktop capture implementation.
  * @param signal - cooperative cancellation.
- * @param options - optional settle wait applied after inspect and immediately before capture.
+ * @param options - optional settle wait applied before inspect and capture so open menus are listed.
  * @returns canonical screens, foreground metadata, and model-facing blocks.
  */
 export async function observeDesktop(
@@ -178,6 +178,8 @@ export async function observeDesktop(
   options: { settleMs?: number } = {},
 ): Promise<DesktopObservation> {
   signal.throwIfAborted()
+  const settleMs = options.settleMs ?? 0
+  if (settleMs > 0) await delay(settleMs, signal)
   const listed = await backend.listScreens(signal)
   const selected = listed.slice(0, 1)
   let foreground = FOCUS_FALLBACK_FOREGROUND
@@ -188,8 +190,6 @@ export async function observeDesktop(
   }
   const screens: ObservedScreen[] = []
   const captures: CapturedScreen[] = []
-  const settleMs = options.settleMs ?? 0
-  if (selected.length > 0 && settleMs > 0) await delay(settleMs, signal)
   for (const screen of selected) {
     signal.throwIfAborted()
     const captured = await backend.capture(screen, signal)

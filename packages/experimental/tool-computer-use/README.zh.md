@@ -54,7 +54,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 
 | 字段 | 默认值 | 含义 |
 |---|---|---|
-| `postActionWaitMs` | `600` | inspect 之后、截取像素之前等待的毫秒数 |
+| `postActionWaitMs` | `600` | GUI 动作之后、inspect 与截取像素之前等待的毫秒数 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-experimental-tool-computer-use)是每个受支持字段及其 JSDoc 的穷尽式真源。
 
@@ -117,7 +117,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 | [`src/open.ts`](src/open.ts) | `long_press` 时长、`open_in_browser` URL 与 `open_in_finder` 路径校验 |
 | [`src/wait-args.ts`](src/wait-args.ts) | 固定 1 秒的 `wait` 与 `long_wait` 的 10/30/60/120 分档 |
 | [`src/screenshot.ts`](src/screenshot.ts) | `screenshot` 的桌面文件名与唯一路径写入 |
-| [`src/overlay-guard.ts`](src/overlay-guard.ts) | 可选的 Desktop overlay 遮蔽：把 listScreens、capture、inspect、HID 与 `open_app` 包进 `wrapDesktopBackend`；`list_apps` / `open_in_browser` / `open_in_finder` / `copyImageToClipboard` 不包 |
+| [`src/overlay-guard.ts`](src/overlay-guard.ts) | 可选的 Desktop overlay 遮蔽：把 listScreens、capture、inspect、HID、`open_app` 与 `withGuiTurn` 包进 `wrapDesktopBackend`；`list_apps` / `open_in_browser` / `open_in_finder` / `copyImageToClipboard` 不包 |
 | [`presets/computer-use/`](presets/computer-use/) | Computer Use agent preset：Shell、网页、GUI 工具、`code_agent`、`ask_user_question`、压缩 |
 | — | 不发布运行时不变式伴生入口，因为本插件不引入新的会话事件；观察结果走现有的 `user/message` 与 `tool/result`。 |
 
@@ -139,6 +139,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 - [Computer Use 观察前台元数据](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-observation-foreground.zh.md) — overlay 窗口排除、Finder 文件夹，以及现有 `user/message` / `tool/result` 上的焦点 fallback。
 - [Computer Use 焦点窗口观察](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-focused-window-observation.zh.md) — 跳过 overlay 后的最前窗口、`list_apps` / `open_app`，以及不附整桌面全景。
 - [Computer Use 瞬时窗口观察](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-transient-window-observation.zh.md) — 把打开的菜单和弹出层并进该截图。
+- [Computer Use 右键菜单观察](../../../.agents/notes/implemented/bug-fix/2026-09-16-computer-use-context-menu-observation.zh.md) — 同应用弹出层、先等待再 inspect，以及 recapture 期间的 overlay input 遮蔽。
 - [Computer Use 0–1000 比例坐标](../../../.agents/notes/implemented/bug-fix/2026-09-15-computer-use-fraction-coordinates.zh.md) — 模型侧 0–1000 是可见截图上的比例，不是捕获像素。
 - [图片句柄省略请求预览像素](../../../.agents/notes/implemented/bug-fix/2026-09-15-omit-request-preview-handle-dimensions.zh.md) — 共用图片句柄只写身份，不写请求预览宽高。
 - [桌面悬浮球](../../../.agents/notes/implemented/feature/2026-09-14-desktop-floating-orb.zh.md) — macOS overlay、runtime extra，以及一等 `code_agent` 会话。
@@ -225,10 +226,10 @@ When a user message starts with "Desktop selection. Answer in this chat only. Do
 - **仅 macOS** — 捕获与 HID 输入在 Darwin 上实现；其他平台在执行时抛错。
 - **屏幕录制、辅助功能与自动化 TCC** — 捕获需要屏幕录制；点击、输入、滚动、热键、长按与拖拽需要辅助功能；Finder 当前文件夹查询需要访达的自动化权限。插件不会提示授予这些权限。
 - **没有逐次点击批准** — 安装或 patch 插件就是同意门槛；视觉循环不能在每个动作上询问。
-- **宿主 chrome 不是最前窗口时不会进图** — Web 窗口只在它是最前窗口时出现。Desktop 主窗口在 overlay 跳过后仍可被截到。macOS overlay 由 ScreenCaptureKit 的 exclude id 校验从 Computer Use 截图中省略（窗口 filter，或菜单打开时的 display exclude 加裁切），并在 HID 突发和 `open_app` 期间通过带确认的 overlay-guard IPC 点击穿透。前台检查与 `listScreens` 都跳过这些 overlay 窗口 id，因此主窗口可以出现在 `<frontmost_app>` 里。
+- **宿主 chrome 不是最前窗口时不会进图** — Web 窗口只在它是最前窗口时出现。Desktop 主窗口在 overlay 跳过后仍可被截到。macOS overlay 由 ScreenCaptureKit 的 exclude id 校验从 Computer Use 截图中省略（窗口 filter，或菜单打开时的 display exclude 加裁切），并在 HID 突发、`open_app` 及其 recapture 期间通过带确认的 overlay-guard IPC 点击穿透。前台检查与 `listScreens` 都跳过这些 overlay 窗口 id，因此主窗口可以出现在 `<frontmost_app>` 里。
 - **输入会使用字符串剪贴板** — `input_text` 通过 Cmd+V 粘贴，并在之后恢复先前的字符串剪贴板。其他剪贴板类型不会被恢复。`screenshot` 会用捕获的图片替换剪贴板，不恢复先前内容。
 - **Retina 与附件尺寸** — backing scale 与请求栅格可能和捕获栅格不同；对可见截图使用 0–1000 比例坐标。
-- **固定等待** — 动作后延迟是截取像素之前的 `postActionWaitMs`；没有像素差 stall。
+- **固定等待** — 动作后延迟是 inspect 与截取像素之前的 `postActionWaitMs`；没有像素差 stall。
 - **没有套索或 `manage_files`** — GUI 覆盖是 click、type、scroll、hotkey、wait、long_wait、screenshot、长按、拖拽、open-in-browser、open-in-finder、list-apps 与 open-app。切换应用用 `open_app`，不要去点 Dock。后台文档与代码走 `code_agent`。
 - **`code_agent` 通知需要活的 Agent** — execute 仍在入队接受后返回。找不到活的 Code agent、Computer Use 调用方已销毁、或 Code 会话再也不回到空闲，都会丢掉通知。策略拦不住仍然调用 `wait` 或 `long_wait` 的模型。
 - **桌面 overlay 仅 macOS** — Windows Desktop 仍是单主窗口。实验包是签名 runtime extra，不是 Desktop Host 的 npm 依赖。

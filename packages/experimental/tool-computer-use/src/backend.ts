@@ -239,6 +239,14 @@ export interface DesktopBackend {
    * @param signal - cooperative cancellation.
    */
   copyImageToClipboard(input: CopyImageToClipboardInput, signal?: AbortSignal): Promise<void>
+  /**
+   * Hold overlay HID click-through for one GUI action plus its post-action screenshot.
+   * Platform and fake backends run `run` immediately; Desktop `wrapDesktopBackend` uses `withInput`.
+   * @param run - HID plus recapture.
+   * @param signal - cooperative cancellation for the overlay cloak handshake.
+   * @returns the value `run` resolves to.
+   */
+  withGuiTurn<T>(run: () => Promise<T>, signal?: AbortSignal): Promise<T>
 }
 
 /**

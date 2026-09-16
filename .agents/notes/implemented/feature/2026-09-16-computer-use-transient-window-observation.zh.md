@@ -12,7 +12,7 @@ Status: implemented
 
 观察仍从跳过 overlay 后的 layer-0 所有者开始。[焦点窗口观察](2026-09-16-computer-use-focused-window-observation.zh.md) 仍拥有该选取、`list_apps` / `open_app`，以及没有弹出层时的按窗口 id 捕获。本笔记拥有把打开的菜单并进同一张截图，并把 0–1000 映射到并集。
 
-`inspectForeground` 仍取剩余 layer-0 窗口里第一扇两边都至少 64pt 的。然后收集屏幕上的窗口：不是 overlay id、不是 Dock/菜单栏/状态栏 layer 20/24/25、不是 Dock/控制中心/通知中心/墙纸所有者、且 alpha 不是 0。同一 PID 且 layer 为 3、8、19、101、102 的窗口会并进来，不套 64pt 下限。另一 PID 只在 layer 101 且边框与所有者外扩 48pt 后相交时并入。不在同一 `NSScreen` 上的瞬时窗口会跳过。`ScreenInfo.bounds` 变成并集；`transientWindowIds` 列出这些弹出层 id。现有的 `mapNormalizedToGlobal` 按 `bounds` 映射，伸到所有者下方的菜单仍可点。
+`inspectForeground` 仍取剩余 layer-0 窗口里第一扇两边都至少 64pt 的。哪些弹出层并入该所有者由 [Computer Use 右键菜单观察](../bug-fix/2026-09-16-computer-use-context-menu-observation.zh.md) 拥有：同应用窗口（同一 PID 或 Helper 名）在任意非 chrome layer（含 0 与 25）且与所有者外扩 48pt 后相交，以及无亲缘关系的 PID 只在 layer 101 且带该 pad。Dock 与菜单栏 layer 20、24 仍是 chrome。不在同一 `NSScreen` 上的瞬时窗口会跳过。`ScreenInfo.bounds` 变成并集；`transientWindowIds` 列出这些弹出层 id。现有的 `mapNormalizedToGlobal` 按 `bounds` 映射，伸到所有者下方的菜单仍可点。
 
 `transientWindowIds` 为空时，捕获仍是 `screencapture -l -o` 或 helper `--window=` / `desktopIndependentWindow`。非空时，捕获是并集矩形：没有 overlay id 时用整屏 `screencapture` 再加 `sips --cropOffset` 裁切（本 OS 上 `screencapture -R` 会报 "could not create image from rect"），有 overlay id 时用 helper `--region=`，`SCContentFilter(display:excludingWindows:)` 加上 `sourceRect`。设置了 overlay id 时没有 `screencapture -R` 回退。helper 仍在 ScreenCaptureKit 之前于主 actor 以 `.prohibited` 启动 `NSApplication`。
 
@@ -34,8 +34,8 @@ POLICY 写明附加图像含该窗口上打开的菜单和弹出层，仍不含 
 
 ## 影响
 
-区域截图可能带上与并集重叠的其他应用。overlay id 仍会省略悬浮球。若菜单根本不出现在 `CGWindowList` 里又伸到所有者外面，仍然看不见。同一 PID、同一屏幕上的浮动调色板会把截图变大。
+区域截图可能带上与并集重叠的其他应用。overlay id 仍会省略悬浮球。若菜单根本不出现在 `CGWindowList` 里又伸到所有者外面，仍然看不见。同应用且相交的调色板会把截图变大。
 
 ## 测试
 
-包测试钉住 inspect JSON 的 `transients` 落到 `ScreenInfo.transientWindowIds` 与并集 `bounds`、该列表为空时的 `screencapture -l`、非空时的整屏 `screencapture` 加 `sips` 裁切、有 overlay id 时 helper `--window=` 与 `--region=` 且无 `screencapture` 回退、AppKit 主 actor 初始化、helper `--region=` / `excludingWindows` / `sourceRect` 源码钉、inspect 脚本里的 layer 101，以及 POLICY 的菜单句。人工编写的 [`snapshots/session/computer-use/`](../../../../snapshots/session/computer-use/) 系统提示钉住该 POLICY 行。
+包测试钉住 inspect JSON 的 `transients` 落到 `ScreenInfo.transientWindowIds` 与并集 `bounds`、该列表为空时的 `screencapture -l`、非空时的整屏 `screencapture` 加 `sips` 裁切、有 overlay id 时 helper `--window=` 与 `--region=` 且无 `screencapture` 回退、AppKit 主 actor 初始化、helper `--region=` / `excludingWindows` / `sourceRect` 源码钉、inspect 脚本里的 layer 101，以及 POLICY 的菜单句。[右键菜单观察](../bug-fix/2026-09-16-computer-use-context-menu-observation.zh.md) 钉住同应用 layer 0 / Helper 匹配。人工编写的 [`snapshots/session/computer-use/`](../../../../snapshots/session/computer-use/) 系统提示钉住该 POLICY 行。

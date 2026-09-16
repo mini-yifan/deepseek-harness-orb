@@ -7,6 +7,7 @@ import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
 import { FOCUS_FALLBACK_FOREGROUND } from '../src/backend.ts'
 import { createFakeDesktopBackend } from '../src/fake.ts'
 import {
+  compactForeground,
   formatForegroundEnvelope,
   imageRefFromObserved,
   observeDesktop,
@@ -84,7 +85,7 @@ describe('observeDesktop', () => {
     })
   })
 
-  it('waits settleMs after inspect and before capture', async () => {
+  it('waits settleMs before inspect and capture', async () => {
     home = await mkdtemp(join(tmpdir(), 'dsh-cu-obs-settle-'))
     const ctx = new Context()
     context = ctx
@@ -100,6 +101,10 @@ describe('observeDesktop', () => {
     })
     const observation = await observeDesktop(ctx, {
       ...fake,
+      listScreens: async () => {
+        order.push('listScreens')
+        return fake.listScreens()
+      },
       inspectForeground: async () => {
         order.push('inspect')
         return fake.inspectForeground()
@@ -111,7 +116,7 @@ describe('observeDesktop', () => {
     }, SIGNAL, { settleMs: 600 })
     expect(observation.screens).toHaveLength(1)
     expect(delay).toHaveBeenCalledWith(600, SIGNAL)
-    expect(order).toEqual(['inspect', 'delay', 'capture'])
+    expect(order).toEqual(['delay', 'listScreens', 'inspect', 'capture'])
   })
 
   it('returns focus tags without a panorama when no window remains', async () => {
@@ -123,14 +128,14 @@ describe('observeDesktop', () => {
       screens: [],
       foreground: FOCUS_FALLBACK_FOREGROUND,
     })
-    const delay = vi.spyOn(waitModule, 'delay')
+    const delay = vi.spyOn(waitModule, 'delay').mockResolvedValue(undefined)
     const observation = await observeDesktop(
       ctx,
       empty,
       SIGNAL,
       { settleMs: 600 },
     )
-    expect(delay).not.toHaveBeenCalled()
+    expect(delay).toHaveBeenCalledWith(600, SIGNAL)
     expect(observation.screens).toEqual([])
     expect(observation.captures).toEqual([])
     expect(observation.blocks.some(block => block.type === 'image')).toBe(false)
@@ -225,6 +230,23 @@ describe('formatForegroundEnvelope', () => {
     expect(formatForegroundEnvelope({ appName: 'none', focusNote: '  ' })).toBe(
       '<frontmost_app>none</frontmost_app>',
     )
+    expect(formatForegroundEnvelope({ appName: 'Pages', windowTitle: '  ' })).toBe(
+      '<frontmost_app>Pages</frontmost_app>',
+    )
+  })
+})
+
+describe('compactForeground', () => {
+  it('keeps defined optional fields and omits missing ones', () => {
+    expect(compactForeground({ appName: 'Pages', windowTitle: 'Untitled' })).toEqual({
+      appName: 'Pages',
+      windowTitle: 'Untitled',
+    })
+    expect(compactForeground({ appName: 'Finder', finderFolder: '/tmp' })).toEqual({
+      appName: 'Finder',
+      finderFolder: '/tmp',
+    })
+    expect(compactForeground(FOCUS_FALLBACK_FOREGROUND)).toEqual(FOCUS_FALLBACK_FOREGROUND)
   })
 })
 

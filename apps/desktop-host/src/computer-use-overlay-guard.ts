@@ -36,6 +36,7 @@ export interface OverlayCaptureSession {
 export interface ComputerUseOverlayGuard {
   /**
    * Exclude the overlay from screen capture while `run` executes, then restore it.
+   * Nested calls reuse the outermost exclude ids; a call inside `withInput` sends no capture IPC.
    * @param run - capture implementation; receives overlay window ids from the begin ack.
    * @param signal - cooperative cancellation for the begin ack wait.
    * @returns the value `run` resolves to.
@@ -46,6 +47,7 @@ export interface ComputerUseOverlayGuard {
   ): Promise<T>
   /**
    * Make the overlay click-through while `run` executes, wait for posted HID events to be hit-tested, then restore hit testing.
+   * Nested calls share the outermost input interval.
    * @param run - HID implementation.
    * @param signal - cooperative cancellation for the begin ack wait.
    * @returns the value `run` resolves to.
@@ -70,6 +72,16 @@ interface PendingAck {
 let nextRequestId = 1
 let transportSend: ((event: OverlayGuardIpcEvent) => void) | undefined
 const pending = new Map<number, PendingAck>()
+/** Nested withInput / withCapture share one Electron cloak; only depth 0 sends begin/end. */
+let inputDepth = 0
+let captureDepth = 0
+let activeExcludeWindowIds: readonly number[] = []
+
+function resetOverlayGuardDepths(): void {
+  inputDepth = 0
+  captureDepth = 0
+  activeExcludeWindowIds = []
+}
 
 function errorOf(reason: unknown, fallback: string): Error {
   return reason instanceof Error ? reason : new Error(fallback)
@@ -90,6 +102,7 @@ export function setOverlayGuardTransport(send: (event: OverlayGuardIpcEvent) => 
  */
 export function clearOverlayGuardTransport(error: Error): void {
   transportSend = undefined
+  resetOverlayGuardDepths()
   for (const waiter of pending.values()) waiter.reject(error)
   pending.clear()
 }
@@ -143,18 +156,28 @@ async function withCaptureMode<T>(
   run: (session: OverlayCaptureSession) => Promise<T>,
   signal?: AbortSignal,
 ): Promise<T> {
-  const beginId = nextRequestId++
-  send({ type: 'overlay-guard', requestId: beginId, action: 'begin', mode: 'capture' })
+  const outermost = captureDepth === 0 && inputDepth === 0
+  captureDepth += 1
+  let sentBegin = false
   try {
-    const excludeWindowIds = await waitAck(beginId, signal)
-    return await run({ excludeWindowIds })
+    if (outermost) {
+      const beginId = nextRequestId++
+      send({ type: 'overlay-guard', requestId: beginId, action: 'begin', mode: 'capture' })
+      sentBegin = true
+      activeExcludeWindowIds = await waitAck(beginId, signal)
+    }
+    return await run({ excludeWindowIds: activeExcludeWindowIds })
   } finally {
-    const endId = nextRequestId++
-    send({ type: 'overlay-guard', requestId: endId, action: 'end', mode: 'capture' })
-    try {
-      await waitAck(endId)
-    } catch {
-      // Electron already gone, ack lost, or Host stopping; Host-exit restore covers the overlay.
+    captureDepth -= 1
+    if (sentBegin) {
+      const endId = nextRequestId++
+      send({ type: 'overlay-guard', requestId: endId, action: 'end', mode: 'capture' })
+      try {
+        await waitAck(endId)
+      } catch {
+        // Electron already gone, ack lost, or Host stopping; Host-exit restore covers the overlay.
+      }
+      if (inputDepth === 0 && captureDepth === 0) activeExcludeWindowIds = []
     }
   }
 }
@@ -164,21 +187,31 @@ async function withInputMode<T>(
   run: () => Promise<T>,
   signal?: AbortSignal,
 ): Promise<T> {
-  const beginId = nextRequestId++
-  send({ type: 'overlay-guard', requestId: beginId, action: 'begin', mode: 'input' })
+  const outermost = inputDepth === 0
+  inputDepth += 1
+  let sentBegin = false
   let hidBegan = false
   try {
-    await waitAck(beginId, signal)
-    hidBegan = true
+    if (outermost) {
+      const beginId = nextRequestId++
+      send({ type: 'overlay-guard', requestId: beginId, action: 'begin', mode: 'input' })
+      sentBegin = true
+      activeExcludeWindowIds = await waitAck(beginId, signal)
+      hidBegan = true
+    }
     return await run()
   } finally {
-    if (hidBegan) await sleep(OVERLAY_GUARD_INPUT_DRAIN_MS)
-    const endId = nextRequestId++
-    send({ type: 'overlay-guard', requestId: endId, action: 'end', mode: 'input' })
-    try {
-      await waitAck(endId)
-    } catch {
-      // Electron already gone, ack lost, or Host stopping; Host-exit restore covers the overlay.
+    inputDepth -= 1
+    if (sentBegin) {
+      if (hidBegan) await sleep(OVERLAY_GUARD_INPUT_DRAIN_MS)
+      const endId = nextRequestId++
+      send({ type: 'overlay-guard', requestId: endId, action: 'end', mode: 'input' })
+      try {
+        await waitAck(endId)
+      } catch {
+        // Electron already gone, ack lost, or Host stopping; Host-exit restore covers the overlay.
+      }
+      if (captureDepth === 0) activeExcludeWindowIds = []
     }
   }
 }

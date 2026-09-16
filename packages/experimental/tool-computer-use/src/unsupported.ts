@@ -29,5 +29,6 @@ export function createUnsupportedDesktopBackend(): DesktopBackend {
     openInBrowser: fail,
     openInFinder: fail,
     copyImageToClipboard: fail,
+    withGuiTurn: run => run(),
   }
 }

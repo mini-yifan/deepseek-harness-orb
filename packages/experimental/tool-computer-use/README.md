@@ -54,7 +54,7 @@ A custom Loader composition that can resolve the package name may instead mount:
 
 | Field | Default | Meaning |
 |---|---|---|
-| `postActionWaitMs` | `600` | Milliseconds to wait after inspect, immediately before recapturing pixels |
+| `postActionWaitMs` | `600` | Milliseconds to wait after a GUI action before inspect and pixel capture |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-experimental-tool-computer-use) is the exhaustive source for every accepted field and its JSDoc.
 
@@ -117,7 +117,7 @@ First-frame attachment uses `agent/pre-step`: the listener always awaits `next()
 | [`src/open.ts`](src/open.ts) | `long_press` duration, `open_in_browser` URL, and `open_in_finder` path validation |
 | [`src/wait-args.ts`](src/wait-args.ts) | Fixed 1s `wait` and `long_wait` 10/30/60/120 buckets |
 | [`src/screenshot.ts`](src/screenshot.ts) | Desktop filenames and unique-path write for `screenshot` |
-| [`src/overlay-guard.ts`](src/overlay-guard.ts) | Optional Desktop overlay cloak: `wrapDesktopBackend` around listScreens, capture, inspect, HID, and `open_app`; `list_apps` / `open_in_browser` / `open_in_finder` / `copyImageToClipboard` stay unwrapped |
+| [`src/overlay-guard.ts`](src/overlay-guard.ts) | Optional Desktop overlay cloak: `wrapDesktopBackend` around listScreens, capture, inspect, HID, `open_app`, and `withGuiTurn`; `list_apps` / `open_in_browser` / `open_in_finder` / `copyImageToClipboard` stay unwrapped |
 | [`presets/computer-use/`](presets/computer-use/) | Computer Use agent preset: Shell, web, GUI tools, `code_agent`, `ask_user_question`, compaction |
 | — | No runtime invariant companion is published because this plugin introduces no new session events; observations ride existing `user/message` and `tool/result`. |
 
@@ -139,6 +139,7 @@ First-frame attachment uses `agent/pre-step`: the listener always awaits `next()
 - [Computer Use observation foreground](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-observation-foreground.md) — overlay-window skip, Finder folder, and focus fallback on existing `user/message` / `tool/result`.
 - [Computer Use focused-window observation](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-focused-window-observation.md) — one overlay-skipped frontmost window, `list_apps` / `open_app`, and no desktop panorama.
 - [Computer Use transient window observation](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-transient-window-observation.md) — open menus and popovers unioned into that screenshot.
+- [Computer Use context-menu observation](../../../.agents/notes/implemented/bug-fix/2026-09-16-computer-use-context-menu-observation.md) — same-app popups, settle-before-inspect, and overlay input cloak through recapture.
 - [Computer Use 0–1000 fraction coordinates](../../../.agents/notes/implemented/bug-fix/2026-09-15-computer-use-fraction-coordinates.md) — model-facing 0–1000 is a fraction of the visible screenshot, not capture pixels.
 - [Image handle omits request-preview pixels](../../../.agents/notes/implemented/bug-fix/2026-09-15-omit-request-preview-handle-dimensions.md) — the shared image handle names identity, not request-preview width and height.
 - [Desktop floating orb](../../../.agents/notes/implemented/feature/2026-09-14-desktop-floating-orb.md) — macOS overlay, runtime extra, and first-class `code_agent` sessions.
@@ -225,10 +226,10 @@ These limits are current package constraints. The plugin drives the real unsandb
 - **macOS only** — capture and HID input are implemented on Darwin; other platforms throw at execute.
 - **Screen Recording, Accessibility, and Automation TCC** — capture needs Screen Recording; clicks, typing, scroll, hotkeys, long-press, and drag need Accessibility; Finder folder lookup needs Automation for Finder. The plugin does not prompt for those rights.
 - **No per-click approval** — installing or patching the plugin is the consent gate; a visual loop cannot ask on every action.
-- **Host chrome is omitted from the shot when it is not the frontmost window** — Web windows appear only when that window is frontmost. Desktop's main window stays capturable when it is next after overlay skip. The macOS overlay is omitted from Computer Use screenshots by ScreenCaptureKit exclude-id checks (window filter, or display exclude plus crop when a menu is open) and is click-through for HID bursts and `open_app` via ack'd overlay-guard IPC. Foreground inspect and `listScreens` skip those overlay window ids, so the main window can appear as `<frontmost_app>`.
+- **Host chrome is omitted from the shot when it is not the frontmost window** — Web windows appear only when that window is frontmost. Desktop's main window stays capturable when it is next after overlay skip. The macOS overlay is omitted from Computer Use screenshots by ScreenCaptureKit exclude-id checks (window filter, or display exclude plus crop when a menu is open) and is click-through for HID bursts, `open_app`, and their recapture via ack'd overlay-guard IPC. Foreground inspect and `listScreens` skip those overlay window ids, so the main window can appear as `<frontmost_app>`.
 - **Typing uses the string clipboard** — `input_text` pastes with Cmd+V and restores the previous string clipboard afterwards. Other clipboard types are not restored. `screenshot` replaces the pasteboard with the captured image and does not restore the previous clipboard.
 - **Retina vs attached size** — backing scale and request rasters can differ from the capture; pass 0–1000 fractions of the visible screenshot.
-- **Fixed settle wait** — post-action delay is `postActionWaitMs` immediately before capture pixels; there is no pixel-diff stall.
+- **Fixed settle wait** — post-action delay is `postActionWaitMs` before inspect and capture pixels; there is no pixel-diff stall.
 - **No lasso or `manage_files`** — GUI coverage is click, type, scroll, hotkey, wait, long_wait, screenshot, long-press, drag, open-in-browser, open-in-finder, list-apps, and open-app. Switch apps with `open_app`; do not click the Dock. Background documents and code go through `code_agent`.
 - **`code_agent` notice needs live Agents** — execute still returns after queue accept. A missing live Code agent, a disposed Computer Use caller, or a Code session that never returns to idle drops the notice. Policy cannot stop a model that still calls `wait` or `long_wait`.
 - **Desktop overlay is macOS-only** — Windows Desktop keeps a single main window. The experimental package is a signed runtime extra, not a Desktop Host npm dependency.

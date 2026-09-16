@@ -85,6 +85,7 @@ async function setup(options: {
   model?: LlmModelInfo
   foreground?: DesktopForeground
   screens?: readonly ScreenInfo[]
+  apps?: readonly string[]
   postActionWaitMs?: number
 } = {}) {
   const home = await mkdtemp(join(tmpdir(), 'dsh-cu-'))
@@ -107,6 +108,7 @@ async function setup(options: {
   const backend = createFakeDesktopBackend({
     ...options.foreground === undefined ? {} : { foreground: options.foreground },
     ...options.screens === undefined ? {} : { screens: options.screens },
+    ...options.apps === undefined ? {} : { apps: options.apps },
   })
   applyComputerUse(ctx, backend, resolveComputerUseConfig({
     postActionWaitMs: options.postActionWaitMs ?? 0,
@@ -247,7 +249,7 @@ describe('computer-use tools', () => {
       .toMatchObject({ card: 'generic', title: 'Wait' })
   })
 
-  it('settles postActionWaitMs after inspect and before recapture', async () => {
+  it('settles postActionWaitMs before recapture inspect', async () => {
     const { ctx, backend } = await setup({ postActionWaitMs: 600 })
     const result = await execute(ctx, 'click', { screen_index: 0, position: [100, 200] })
     expect(result.isError).toBe(false)
@@ -257,6 +259,29 @@ describe('computer-use tools', () => {
       screen_index: 0, position: [0, 0], direction: 'down', scroll_level: 1,
     })
     expect(waitModule.delay).toHaveBeenCalledWith(600, SIGNAL)
+  })
+
+  it('holds withGuiTurn across HID and recapture; wait and screenshot skip it', async () => {
+    const { ctx, backend } = await setup()
+    let turns = 0
+    const inner = backend.withGuiTurn.bind(backend)
+    backend.withGuiTurn = async (run, signal) => {
+      turns += 1
+      return inner(run, signal)
+    }
+    await execute(ctx, 'click', { screen_index: 0, position: [100, 200] })
+    expect(turns).toBe(1)
+    turns = 0
+    await execute(ctx, 'wait', {})
+    expect(turns).toBe(0)
+    await execute(ctx, 'long_wait', { wait_seconds: 10 })
+    expect(turns).toBe(0)
+    await execute(ctx, 'screenshot', {})
+    expect(turns).toBe(0)
+    await execute(ctx, 'list_apps', {})
+    expect(turns).toBe(0)
+    await execute(ctx, 'open_app', { name: 'Pages' })
+    expect(turns).toBe(1)
   })
 
   it('saves a desktop screenshot and copies it to the clipboard', async () => {
@@ -336,6 +361,72 @@ describe('computer-use tools', () => {
     expect(text(failed)).toContain('<frontmost_app>none</frontmost_app>')
     expect(text(failed)).toContain('<focus_note>')
     expect(failed.content.some(block => block.type === 'image')).toBe(false)
+  })
+
+  it('renders empty app lists and open_app fallbacks; rethrows open_app abort', async () => {
+    const { ctx } = await setup({ apps: [] })
+    const listed = await execute(ctx, 'list_apps', {})
+    expect(listed.isError).toBe(false)
+    expect(text(listed)).toContain('No running regular applications')
+    const open = ctx.tools.get('open_app')
+    expect(open).toBeDefined()
+    expect(text({
+      content: open!.output.render({}, {
+        name: 'Pages',
+        ok: true,
+        screens: [],
+        foreground: { appName: 'Pages' },
+      }),
+    })).toContain('(activated)')
+    expect(text({
+      content: open!.output.render({}, {
+        name: 'Pages',
+        ok: false,
+        screens: [],
+        foreground: { appName: 'Pages' },
+      }),
+    })).toContain('unknown error')
+
+    const abortHome = await mkdtemp(join(tmpdir(), 'dsh-cu-open-abort-'))
+    homes.push(abortHome)
+    const abortCtx = new Context()
+    contexts.push(abortCtx)
+    await abortCtx.plugin(SystemPrompt)
+    await abortCtx.plugin(ToolRuntime)
+    await abortCtx.plugin(LocalAttachmentStore, { dshHome: abortHome })
+    await abortCtx.plugin(LlmRuntime)
+    abortCtx.llm.registerAdapter(['visual'], new CatalogAdapter([
+      { provider: 'visual', id: 'vision-model', name: 'Vision', inputModalities: ['text', 'image'] },
+    ]))
+    const abort = new Error('stopped')
+    abort.name = 'AbortError'
+    applyComputerUse(abortCtx, createFakeDesktopBackend({ openAppError: abort }), resolveComputerUseConfig({
+      postActionWaitMs: 0,
+    }))
+    const aborted = await execute(abortCtx, 'open_app', { name: 'Pages' })
+    expect(aborted.isError).toBe(true)
+
+    const stringHome = await mkdtemp(join(tmpdir(), 'dsh-cu-open-string-'))
+    homes.push(stringHome)
+    const stringCtx = new Context()
+    contexts.push(stringCtx)
+    await stringCtx.plugin(SystemPrompt)
+    await stringCtx.plugin(ToolRuntime)
+    await stringCtx.plugin(LocalAttachmentStore, { dshHome: stringHome })
+    await stringCtx.plugin(LlmRuntime)
+    stringCtx.llm.registerAdapter(['visual'], new CatalogAdapter([
+      { provider: 'visual', id: 'vision-model', name: 'Vision', inputModalities: ['text', 'image'] },
+    ]))
+    const fake = createFakeDesktopBackend()
+    applyComputerUse(stringCtx, {
+      ...fake,
+      openApp: async () => {
+        throw 'boom'
+      },
+    }, resolveComputerUseConfig({ postActionWaitMs: 0 }))
+    const stringFail = await execute(stringCtx, 'open_app', { name: 'Pages' })
+    expect(stringFail.isError).toBe(false)
+    expect(text(stringFail)).toContain('Could not open Pages: boom')
   })
 
   it('fails loud when screenshot writing returns no paths', async () => {

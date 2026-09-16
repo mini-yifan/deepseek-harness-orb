@@ -41,6 +41,7 @@ const platformBackend = vi.hoisted(() => {
     openInBrowser: vi.fn(() => Promise.resolve()),
     openInFinder: vi.fn(() => Promise.resolve()),
     copyImageToClipboard: vi.fn(() => Promise.resolve()),
+    withGuiTurn: vi.fn((run: () => Promise<unknown>) => run()),
   }
 })
 
@@ -122,6 +123,7 @@ function stubBackend(overrides: Partial<DesktopBackend> = {}): DesktopBackend {
     openInBrowser: () => Promise.resolve(),
     openInFinder: () => Promise.resolve(),
     copyImageToClipboard: () => Promise.resolve(),
+    withGuiTurn: run => run(),
     ...overrides,
   }
 }
@@ -148,6 +150,10 @@ describe('wrapDesktopBackend', () => {
     await backend.openInBrowser({ url: 'https://example.com' })
     await backend.openInFinder({ path: '/tmp', revealOnly: false })
     await backend.copyImageToClipboard({ path: '/tmp/shot.png', mediaType: 'image/png' })
+    await backend.withGuiTurn(async () => {
+      await backend.click({ screen, position: [1, 2], button: 'left', count: 1 })
+      await backend.listScreens()
+    })
     expect(guard.calls).toEqual([
       'capture', 'capture-end',
       'capture', 'capture-end',
@@ -159,10 +165,14 @@ describe('wrapDesktopBackend', () => {
       'input', 'input-end',
       'input', 'input-end',
       'input', 'input-end',
+      'input',
+      'input', 'input-end',
+      'capture', 'capture-end',
+      'input-end',
     ])
     expect(inner.actions.map(action => action.type)).toEqual([
       'openApp', 'click', 'typeText', 'scroll', 'hotkey', 'longPress', 'drag', 'openInBrowser', 'openInFinder',
-      'copyImageToClipboard',
+      'copyImageToClipboard', 'click',
     ])
   })
 
@@ -329,7 +339,7 @@ describe('apply overlay guard wiring', () => {
       } as never,
     })
     expect(result.isError).toBe(true)
-    expect(text(result)).toContain('cloaked-capture')
+    expect(text(result)).toContain('cloaked-input')
   })
 
   it('wraps when computerUseOverlayGuard is provided on a parent context', async () => {
@@ -360,6 +370,6 @@ describe('apply overlay guard wiring', () => {
       } as never,
     })
     expect(result.isError).toBe(true)
-    expect(text(result)).toContain('cloaked-capture')
+    expect(text(result)).toContain('cloaked-input')
   })
 })

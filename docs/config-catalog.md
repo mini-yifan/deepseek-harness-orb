@@ -745,7 +745,7 @@ Requires: `tools` · `systemPrompt` · `attachments`
 /** Loader-accepted Computer Use configuration. */
 export interface Config {
   /**
-   * Milliseconds to wait after a GUI action, immediately before recapturing pixels.
+   * Milliseconds to wait after a GUI action before inspect and pixel capture, so open menus are listed.
    * Default: 600.
    */
   readonly postActionWaitMs?: number
