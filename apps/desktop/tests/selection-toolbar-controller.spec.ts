@@ -48,6 +48,7 @@ describe('selection toolbar controller', () => {
     const promptOverlay = vi.fn()
     const requestAccessibility = vi.fn(() => false)
     const exclude: number[][] = []
+    const activatePid = vi.fn()
     let now = 1_000
     const controller = new SelectionToolbarController(root, {
       electronPid: 99,
@@ -58,6 +59,7 @@ describe('selection toolbar controller', () => {
       startMonitor: () => ({
         stop: vi.fn(),
         setExcludePids: (pids: readonly number[]) => { exclude.push([...pids]) },
+        activatePid,
       }),
     })
     const toolbar = fakeToolbar()
@@ -75,6 +77,7 @@ describe('selection toolbar controller', () => {
     expect(toolbar.showInactive).toHaveBeenCalled()
     await controller.search()
     expect(openExternal).toHaveBeenCalledWith('https://www.bing.com/search?q=hello')
+    expect(activatePid).not.toHaveBeenCalled()
     controller.onHelperEvent({
       type: 'selection',
       text: 'hello',
@@ -87,6 +90,7 @@ describe('selection toolbar controller', () => {
     expect(promptOverlay).toHaveBeenCalledWith(
       `${DESKTOP_SELECTION_PREAMBLE}\n\nTranslate the following into Chinese:\n\nhello`,
     )
+    expect(activatePid).toHaveBeenCalledWith(7)
     controller.setLanguage('en')
     expect(toolbar.webContents.send).toHaveBeenCalledWith(DESKTOP_IPC.selectionState, { language: 'en' })
     controller.explain()
@@ -112,6 +116,25 @@ describe('selection toolbar controller', () => {
     expect(controller.enabled()).toBe(false)
   })
 
+  it('does not restore Desktop as the front app after Translate or Explain', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-selection-self-pid-'))
+    roots.push(root)
+    const activatePid = vi.fn()
+    const controller = new SelectionToolbarController(root, {
+      electronPid: 99,
+      openExternal: async () => undefined,
+      promptOverlay: vi.fn(),
+      requestAccessibility: () => false,
+      startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid }),
+    })
+    controller.setToolbarWindow(fakeToolbar() as never)
+    controller.start()
+    controller.onHelperEvent({ type: 'selection', text: 'self', pid: 99, x: 1, y: 1 })
+    controller.translate()
+    controller.explain()
+    expect(activatePid).not.toHaveBeenCalled()
+  })
+
   it('grows the toolbar for the language menu and flips it above the bar near the work-area edge', () => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-selection-menu-'))
     roots.push(root)
@@ -120,7 +143,7 @@ describe('selection toolbar controller', () => {
       openExternal: async () => undefined,
       promptOverlay: vi.fn(),
       requestAccessibility: () => false,
-      startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn() }),
+      startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid: vi.fn() }),
     })
     const toolbar = fakeToolbar()
     controller.setToolbarWindow(toolbar as never)

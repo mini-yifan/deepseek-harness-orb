@@ -26,6 +26,9 @@ import {
 /** Ignore a repeated pid+bundle+text selection within this window. */
 export const SELECTION_DEDUPE_MS = 3_000
 
+/** Delay before a second front-app restore so Chromium's delayed activation does not keep Desktop key. */
+export const SELECTION_RESTORE_FRONT_MS = 80
+
 /** Host-owned actions the toolbar controller must not import from Electron main. */
 export interface SelectionToolbarHost {
   readonly electronPid: number
@@ -53,6 +56,8 @@ export class SelectionToolbarController {
   private lastAnchor = { x: 0, y: 0 }
   private lastBarOrigin = { x: 0, y: 0 }
   private lastDedupe: { key: string; at: number } | undefined
+  private lastPid: number | undefined
+  private restoreTimer: ReturnType<typeof setTimeout> | undefined
   private sessionRunning = false
   private hidInput = false
   private promptedAccessibility = false
@@ -104,6 +109,10 @@ export class SelectionToolbarController {
   stop(): void {
     this.monitor?.stop()
     this.monitor = undefined
+    if (this.restoreTimer !== undefined) {
+      clearTimeout(this.restoreTimer)
+      this.restoreTimer = undefined
+    }
     hideSelectionToolbar(this.toolbar)
   }
 
@@ -184,6 +193,16 @@ export class SelectionToolbarController {
   }
 
   /**
+   * Make the app that owned the last selection key again.
+   * Translate and Explain call this so Desktop does not stay the frontmost app.
+   */
+  restoreFrontApp(): void {
+    const pid = this.lastPid
+    if (pid === undefined || pid === this.host.electronPid) return
+    this.monitor?.activatePid(pid)
+  }
+
+  /**
    * Apply one NDJSON helper event. Tests inject events without spawning the binary.
    * @param event - parsed helper payload.
    */
@@ -224,6 +243,18 @@ export class SelectionToolbarController {
   private promptSelection(text: string): void {
     if (this.lastText === '') return
     this.host.promptOverlay(text)
+    this.scheduleRestoreFrontApp()
+  }
+
+  private scheduleRestoreFrontApp(): void {
+    this.restoreFrontApp()
+    if (this.restoreTimer !== undefined) clearTimeout(this.restoreTimer)
+    const timer = setTimeout(() => {
+      this.restoreTimer = undefined
+      this.restoreFrontApp()
+    }, SELECTION_RESTORE_FRONT_MS)
+    timer.unref()
+    this.restoreTimer = timer
   }
 
   private onSelection(event: Extract<SelectionHelperEvent, { type: 'selection' }>): void {
@@ -235,6 +266,7 @@ export class SelectionToolbarController {
     }
     this.lastDedupe = { key, at: now }
     this.lastText = event.text
+    this.lastPid = event.pid
     this.lastBounds = event.bounds
     if (event.x !== undefined && event.y !== undefined) this.lastAnchor = { x: event.x, y: event.y }
     const bounds = selectionToolbarBounds(this.lastAnchor, this.lastBounds)

@@ -141,10 +141,16 @@ const harness = await vi.hoisted(async () => {
     setActivationPolicy: vi.fn(),
   })
   const selectionMonitor = {
-    onEvent: undefined as ((event: { type: string; text?: string; x?: number; y?: number }) => void) | undefined,
-    start(handlers: { onEvent: (event: { type: string; text?: string; x?: number; y?: number }) => void }) {
+    onEvent: undefined as ((event: { type: string; text?: string; x?: number; y?: number; pid?: number }) => void) | undefined,
+    activatePid: vi.fn(),
+    start(handlers: { onEvent: (event: { type: string; text?: string; x?: number; y?: number; pid?: number }) => void }) {
       selectionMonitor.onEvent = handlers.onEvent
-      return { stop: vi.fn(), setExcludePids: vi.fn() }
+      selectionMonitor.activatePid.mockReset()
+      return {
+        stop: vi.fn(),
+        setExcludePids: vi.fn(),
+        activatePid: selectionMonitor.activatePid,
+      }
     },
   }
   return {
@@ -165,6 +171,7 @@ const harness = await vi.hoisted(async () => {
       pluginsEnabled = false
       nextMediaSourceId = 4242
       selectionMonitor.onEvent = undefined
+      selectionMonitor.activatePid.mockReset()
       preparing = deferred(); prepared = deferred(); hostStarted = deferred()
       navigated = deferred(); errorPublished = deferred(); quitCompleted = deferred()
     },
@@ -612,8 +619,9 @@ describe('desktop floating overlay', () => {
     main.show.mockClear()
     main.focus.mockClear()
     if (harness.selectionMonitor.onEvent === undefined) throw new Error('missing selection monitor')
-    harness.selectionMonitor.onEvent({ type: 'selection', text: 'hello', x: 40, y: 50 })
+    harness.selectionMonitor.onEvent({ type: 'selection', text: 'hello', pid: 7, x: 40, y: 50 })
     invokeSelection(DESKTOP_IPC.selectionTranslate)
+    expect(harness.selectionMonitor.activatePid).toHaveBeenCalledWith(7)
     expect(overlay?.webContents.send).toHaveBeenCalledWith(
       DESKTOP_IPC.selectionPrompt,
       expect.objectContaining({ text: expect.stringContaining('Translate the following into Chinese') }),
