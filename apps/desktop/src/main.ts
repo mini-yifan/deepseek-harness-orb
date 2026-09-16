@@ -39,11 +39,14 @@ import {
   readFloatingSessionId,
   writeFloatingSessionId,
 } from './floating-session.ts'
-import { createSelectionToolbarWindow } from './selection-toolbar-window.ts'
+import { createSelectionToolbarWindow, hideSelectionToolbar } from './selection-toolbar-window.ts'
 import { SelectionToolbarController } from './selection-toolbar-controller.ts'
 
 const SCHEME = 'dsh-app'
 let focusPrimaryWindow = (): void => {}
+/** Toolbar and overlay prompts must not show the main window through `app` `activate`. */
+const OVERLAY_OWNED_ACTIVATE_MS = 2_000
+let overlayOwnedActivateUntil = 0
 type RecoveryAction = 'restart' | 'plugins' | 'reset'
 let profileRecoveryAvailable = (): boolean => false
 const emergencyPages = new WeakMap<BrowserWindow, { url: string; message: string; busy: boolean }>()
@@ -53,6 +56,14 @@ function overlayGuardInputApplyDelay(): Promise<void> {
     const timer = setTimeout(resolve, OVERLAY_GUARD_INPUT_APPLY_MS)
     timer.unref()
   })
+}
+
+function noteOverlayOwnedActivation(): void {
+  overlayOwnedActivateUntil = Date.now() + OVERLAY_OWNED_ACTIVATE_MS
+}
+
+function overlayOwnedActivationActive(): boolean {
+  return Date.now() < overlayOwnedActivateUntil
 }
 
 let recoverApplication = (action: RecoveryAction): Promise<void> => {
@@ -237,8 +248,14 @@ async function main(): Promise<void> {
       electronPid: process.pid,
       openExternal: url => shell.openExternal(url),
       promptOverlay(text) {
+        noteOverlayOwnedActivation()
         if (floatingWindow === undefined || floatingWindow.isDestroyed()) return
+        floatingWindow.showInactive()
         floatingWindow.webContents.send(DESKTOP_IPC.selectionPrompt, { text })
+        hideSelectionToolbar(selection?.window())
+        if (mainWindow !== undefined && !mainWindow.isDestroyed() && mainWindow.isFocused()) {
+          mainWindow.blur()
+        }
       },
       requestAccessibility: () => systemPreferences.isTrustedAccessibilityClient(true),
     })
@@ -498,7 +515,13 @@ async function main(): Promise<void> {
   })
   ipcMain.handle(DESKTOP_IPC.floatingSetExpanded, (event, expanded: unknown) => {
     if (typeof expanded !== 'boolean') throw new Error('dsh desktop: floating expand requires a boolean')
-    return setFloatingExpanded(requireFloatingWindow(event), expanded)
+    const window = requireFloatingWindow(event)
+    const state = setFloatingExpanded(window, expanded)
+    if (overlayOwnedActivationActive()) {
+      noteOverlayOwnedActivation()
+      window.showInactive()
+    }
+    return state
   })
   ipcMain.handle(DESKTOP_IPC.floatingSessionGet, (event) => {
     requireFloatingWindow(event)
@@ -528,18 +551,41 @@ async function main(): Promise<void> {
     if (typeof running !== 'boolean') throw new Error('dsh desktop: floating running requires a boolean')
     selection?.setSessionRunning(running)
   })
-  ipcMain.handle(DESKTOP_IPC.selectionSearch, event => requireSelectionToolbarWindow(event).search())
+  ipcMain.handle(DESKTOP_IPC.selectionSearch, (event) => {
+    noteOverlayOwnedActivation()
+    return requireSelectionToolbarWindow(event).search()
+  })
   ipcMain.handle(DESKTOP_IPC.selectionTranslate, (event) => {
+    noteOverlayOwnedActivation()
     requireSelectionToolbarWindow(event).translate()
   })
   ipcMain.handle(DESKTOP_IPC.selectionExplain, (event) => {
+    noteOverlayOwnedActivation()
     requireSelectionToolbarWindow(event).explain()
   })
   ipcMain.handle(DESKTOP_IPC.selectionSetLanguage, (event, language: unknown) => {
+    noteOverlayOwnedActivation()
     if (language !== 'zh' && language !== 'en') {
       throw new Error('dsh desktop: translate language must be zh or en')
     }
     requireSelectionToolbarWindow(event).setLanguage(language)
+  })
+  ipcMain.handle(DESKTOP_IPC.selectionInteract, (event) => {
+    requireSelectionToolbarWindow(event)
+    noteOverlayOwnedActivation()
+  })
+  ipcMain.handle(DESKTOP_IPC.selectionSetContentSize, (event, size: unknown) => {
+    noteOverlayOwnedActivation()
+    if (typeof size !== 'object' || size === null || Array.isArray(size)) {
+      throw new Error('dsh desktop: toolbar size requires width and height')
+    }
+    const record = size as { width?: unknown; height?: unknown }
+    if (typeof record.width !== 'number' || typeof record.height !== 'number'
+      || !Number.isFinite(record.width) || !Number.isFinite(record.height)
+      || record.width < 1 || record.height < 1) {
+      throw new Error('dsh desktop: toolbar size requires positive finite dimensions')
+    }
+    return requireSelectionToolbarWindow(event).setContentSize(record.width, record.height)
   })
 
   const checkAndPrompt = async (manual: boolean): Promise<void> => {
@@ -644,7 +690,10 @@ async function main(): Promise<void> {
     window.focus()
   }
 
-  app.on('activate', () => { focusPrimaryWindow() })
+  app.on('activate', () => {
+    if (overlayOwnedActivationActive()) return
+    focusPrimaryWindow()
+  })
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()
   })

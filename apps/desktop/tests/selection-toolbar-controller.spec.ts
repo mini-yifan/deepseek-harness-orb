@@ -111,4 +111,35 @@ describe('selection toolbar controller', () => {
     controller.toggle()
     expect(controller.enabled()).toBe(false)
   })
+
+  it('grows the toolbar for the language menu and flips it above the bar near the work-area edge', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-selection-menu-'))
+    roots.push(root)
+    const controller = new SelectionToolbarController(root, {
+      electronPid: 99,
+      openExternal: async () => undefined,
+      promptOverlay: vi.fn(),
+      requestAccessibility: () => false,
+      startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn() }),
+    })
+    const toolbar = fakeToolbar()
+    controller.setToolbarWindow(toolbar as never)
+    controller.onHelperEvent({
+      type: 'selection',
+      text: 'hello',
+      x: 40,
+      y: 50,
+    })
+    expect(controller.setContentSize(280, 120)).toEqual({ menuAbove: false })
+    expect(toolbar.setBounds).toHaveBeenCalledWith(expect.objectContaining({ y: 58, height: 120 }))
+    controller.onHelperEvent({
+      type: 'selection',
+      text: 'edge',
+      pid: 2,
+      bounds: { x: 10, y: 800, width: 40, height: 20 },
+    })
+    expect(controller.setContentSize(280, 120)).toEqual({ menuAbove: true })
+    expect(toolbar.bounds.y).toBeLessThan(828)
+    expect(toolbar.bounds.height).toBe(120)
+  })
 })

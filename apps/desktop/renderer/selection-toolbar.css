@@ -10,6 +10,7 @@
 html,
 body {
   margin: 0;
+  height: 100%;
   background: transparent;
   overflow: hidden;
 }
@@ -78,4 +79,14 @@ button:hover {
 
 #language-menu button[aria-checked="true"] {
   font-weight: 600;
+}
+
+body.menu-above #bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+}
+
+body.menu-above #language-menu {
+  top: 4px;
 }
