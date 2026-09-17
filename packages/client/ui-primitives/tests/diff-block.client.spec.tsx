@@ -159,6 +159,7 @@ describe('DiffBlock copy', () => {
       configurable: true,
       value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
     })
+    Object.defineProperty(document, 'execCommand', { configurable: true, value: undefined })
     render(<DiffBlock diffs={[{ path: 'a.ts', oldText: null, newText: 'x' }]} />)
     const copy = screen.getByRole('button', { name: '复制' })
     await act(async () => { fireEvent.click(copy) })

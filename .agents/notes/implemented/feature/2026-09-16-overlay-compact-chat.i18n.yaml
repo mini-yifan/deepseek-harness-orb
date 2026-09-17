@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-16-overlay-compact-chat.md
-2026-09-16-overlay-compact-chat.md: 81e023a4f5549fa9f6a0f2bd8ca06b774d9788b9
-2026-09-16-overlay-compact-chat.zh.md: 371704bd8af49ea69b0ec5ab298491abf9f65a3b
+2026-09-16-overlay-compact-chat.md: ab4c8434a0a6699e75b92f1388fb2e4879eba264
+2026-09-16-overlay-compact-chat.zh.md: 5a54acf77f79f08db7c1023aa29ec1af5281c1d4

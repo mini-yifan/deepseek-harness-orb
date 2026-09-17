@@ -353,6 +353,7 @@ describe('TerminalBlock copy', () => {
       configurable: true,
       value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
     })
+    Object.defineProperty(document, 'execCommand', { configurable: true, value: undefined })
     render(<TerminalBlock command="ls" output="a" />)
     fireEvent.click(screen.getByRole('button', { name: '复制' }))
     await act(async () => {
@@ -371,12 +372,25 @@ describe('writeClipboard', () => {
     expect(writeText).toHaveBeenCalledWith('payload')
   })
 
-  it('reports false when the Clipboard API rejects', async () => {
+  it('reports false when the Clipboard API rejects and execCommand is absent', async () => {
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
     })
+    Object.defineProperty(document, 'execCommand', { configurable: true, value: undefined })
     await expect(writeClipboard('payload')).resolves.toBe(false)
+  })
+
+  it('falls through to execCommand when the Clipboard API rejects', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
+    })
+    const exec = vi.fn(() => true)
+    Object.defineProperty(document, 'execCommand', { configurable: true, value: exec })
+    await expect(writeClipboard('payload')).resolves.toBe(true)
+    expect(exec).toHaveBeenCalledWith('copy')
+    expect(document.querySelector('textarea')).toBeNull()
   })
 
   it('selects a detached textarea for the execCommand fallback and removes it after', async () => {

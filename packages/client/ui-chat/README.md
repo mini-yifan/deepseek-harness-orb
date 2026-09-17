@@ -44,7 +44,7 @@ A completed Turn shows an expandable usage row only when the loaded window inclu
 <a id="completed-turn-footer"></a>
 ## Completed-turn footer
 
-The completed-turn action footer starts 20px below the preceding prose or extension content.
+The completed-turn action footer starts 20px below the preceding prose or extension content. IconActions keep copy, rating, branch, and stat pills at 28px; a not-today clock ellipsizes rather than shrinking those controls. Overlay clipboard and the like/dislike dialog host are [overlay message actions](../../../.agents/notes/implemented/bug-fix/2026-09-17-overlay-message-actions-narrow.md).
 
 -----
 

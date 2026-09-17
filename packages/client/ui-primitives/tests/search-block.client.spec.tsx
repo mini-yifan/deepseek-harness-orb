@@ -212,6 +212,7 @@ describe('SearchBlock copy', () => {
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true, value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
     })
+    Object.defineProperty(document, 'execCommand', { configurable: true, value: undefined })
     render(<SearchBlock kind="paths" truncated={false} total={1} paths={['a']} />)
     fireEvent.click(screen.getByRole('button', { name: '复制' }))
     await act(async () => { await Promise.resolve() })

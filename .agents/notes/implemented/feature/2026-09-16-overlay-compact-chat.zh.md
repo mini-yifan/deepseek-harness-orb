@@ -14,7 +14,7 @@ overlay 文档仍是 [`apps/desktop/renderer/floating.html`](../../../../apps/de
 
 overlay 文档上的 ClientSessions 选中项持久化在 `dsh.overlay.sessions.current`。iframe 与主窗口共享 `dsh-app://app` 源；共用 `dsh.sessions.current` 会抢走主窗口选中项。shell 从 `dsh-app://shell` 发送 `{ type: 'dsh.overlay.session', sessionId }`；iframe 回复 `{ type: 'dsh.overlay.ready' }` 并调用 `sessions.open`，不整页重载。
 
-原生外壳保持不变：320×420 面板、72px 球、灰色输入胶囊、历史 / 新建、停止、Computer Use + Flash/Max、`floating-session.json`，以及提问卡。历史仍隐藏 `#transcript`。提问不再隐藏对话记录。ChatView 拥有跟随（`FOLLOW_THRESHOLD` 24px）。Overlay CSS 设置 `--dsh-chat-content-width: 100%` 与 `--dsh-composer-side-clearance: 0px`，并隐藏 `[data-chat-turn-rail]`。
+原生外壳保持不变：320×420 面板、72px 球、灰色输入胶囊、历史 / 新建、停止、Computer Use + Flash/Max、`floating-session.json`，以及提问卡。历史仍隐藏 `#transcript`。提问不再隐藏对话记录。ChatView 拥有跟随（`FOLLOW_THRESHOLD` 24px）。Overlay CSS 设置 `--dsh-chat-content-width: 100%` 与 `--dsh-composer-side-clearance: 0px`，并隐藏 `[data-chat-turn-rail]`。[Overlay 消息操作](../bug-fix/2026-09-17-overlay-message-actions-narrow.zh.md) 拥有 IconActions 溢出、iframe clipboard-write，以及 overlay 上的 `conversation.input.overlay` 座位。
 
 overlay 构造见 [桌面悬浮球](2026-09-14-desktop-floating-orb.zh.md)，shell waterfall 见 [悬浮球回答用户提问](2026-09-15-floating-orb-user-questions.zh.md)。
 

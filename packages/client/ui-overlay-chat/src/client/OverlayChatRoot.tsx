@@ -1,4 +1,4 @@
-/** Overlay Compact Chat root: ChatView only, no composer or AppFrame chrome. */
+/** Overlay Compact Chat root: ChatView plus input-overlay hosts, no composer or AppFrame chrome. */
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {
   PropsRenderSlots, PropsRuntime,
@@ -8,7 +8,7 @@ import css from './OverlayChatRoot.module.css'
 /** Full composed props for the overlay root occupant. */
 export type OverlayChatRootProps =
   & PropsRuntime<'root'>
-  & PropsRenderSlots<'conversation.view'>
+  & PropsRenderSlots<'conversation.view' | 'conversation.input.overlay'>
 
 function ignoreView(_view: string, _focus: string): void {}
 
@@ -16,7 +16,7 @@ function ignoreRequest(): void {}
 
 /**
  * Render Compact Chat for the overlay iframe's current Session.
- * @param props - root runtime share plus the conversation.view render seat.
+ * @param props - root runtime share plus the conversation.view and input-overlay render seats.
  * @returns the overlay transcript shell.
  */
 export function OverlayChatRoot({
@@ -28,11 +28,16 @@ export function OverlayChatRoot({
       <SessionProvider empty={() => null}>
         {sessionId === undefined
           ? null
-          : renderSlot('conversation.view', {
-            viewRequest: null,
-            openView: ignoreView,
-            completeViewRequest: ignoreRequest,
-          }, { only: 'chat' })}
+          : (
+            <>
+              {renderSlot('conversation.view', {
+                viewRequest: null,
+                openView: ignoreView,
+                completeViewRequest: ignoreRequest,
+              }, { only: 'chat' })}
+              <div className={css.inputOverlay}>{renderSlot('conversation.input.overlay', {})}</div>
+            </>
+          )}
       </SessionProvider>
     </div>
   )

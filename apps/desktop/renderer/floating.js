@@ -391,6 +391,8 @@ async function main() {
     const frame = document.createElement('iframe')
     frame.title = messages.floatingTitle
     frame.src = OVERLAY_INDEX_HREF
+    frame.allow = 'clipboard-write'
+    frame.setAttribute('allow', 'clipboard-write')
     frame.addEventListener('load', postOverlaySession)
     transcript.append(frame)
     postOverlaySession()

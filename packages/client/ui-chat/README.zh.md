@@ -46,7 +46,7 @@ kind: "package-reference"
 <a id="completed-turn-footer"></a>
 ## 已完成轮次的页脚
 
-已完成轮次的操作页脚位于前方正文或扩展内容下方 20px。
+已完成轮次的操作页脚位于前方正文或扩展内容下方 20px。IconActions 把复制、评分、分支和统计胶囊保持在 28px；非当天时钟用省略号，而不是压缩这些控件。Overlay 剪贴板与点赞对话框宿主见 [overlay 消息操作](../../../.agents/notes/implemented/bug-fix/2026-09-17-overlay-message-actions-narrow.zh.md)。
 
 -----
 

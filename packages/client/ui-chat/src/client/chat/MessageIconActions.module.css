@@ -6,6 +6,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
   height: calc(28px + var(--dsh-content-font-delta, 0px));
 }
 
@@ -13,10 +15,13 @@
    Both read the secondary tier so the user row's clock matches the assistant
    tail's meta line. */
 .timeStart {
+  min-width: 0;
+  overflow: hidden;
   padding-right: 12px;
   font-size: var(--dsh-content-font-size-secondary, 13px);
   line-height: calc(24px + var(--dsh-content-font-delta, 0px));
   color: var(--dsw-alias-label-tertiary);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -24,9 +29,12 @@
    row's 8px flex gap spaces it, and it reads the secondary tier so it matches
    the pill labels beside it. */
 .timeEnd {
+  min-width: 0;
+  overflow: hidden;
   font-size: var(--dsh-content-font-size-secondary, 13px);
   line-height: calc(24px + var(--dsh-content-font-delta, 0px));
   color: var(--dsw-alias-label-tertiary);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -54,8 +62,11 @@
   }
 }
 
+/* Icons keep a 28px hit box; the clock (timeStart/timeEnd) is the overflow
+   absorber. */
 .action {
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
   width: calc(28px + var(--dsh-content-font-delta, 0px));

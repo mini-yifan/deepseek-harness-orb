@@ -1,5 +1,6 @@
 .action {
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
   /* Rides the Settings font-size axis like the host row's own actions

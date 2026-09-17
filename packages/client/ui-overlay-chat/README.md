@@ -25,7 +25,7 @@ This package occupies the browser `'root'` slot with Compact Chat when the docum
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount this plugin in the Web composition. On a main-window document it is a no-op. On `dsh-app://app/index.html?surface=overlay` it owns `'root'`, declares session-scoped `conversation.view`, and renders ChatView only. The floating-ball shell posts the orb Session id; this plugin calls `sessions.open` without reloading. There is no Config.
+Mount this plugin in the Web composition. On a main-window document it is a no-op. On `dsh-app://app/index.html?surface=overlay` it owns `'root'`, declares session-scoped `conversation.view` and `conversation.input.overlay`, and renders ChatView only. The floating-ball shell posts the orb Session id; this plugin calls `sessions.open` without reloading. There is no Config.
 
 ### Isolation
 
@@ -39,7 +39,7 @@ The iframe shares the `dsh-app://app` origin with the main window. ClientSession
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The plugin returns immediately unless `overlayClientSurface()` is true. One effect registers `OverlayChatRoot` on `'root'` and declares `conversation.view`; `ui-layout` skips AppFrame on this document, so there is no dual `'root'` occupant. `ui-conversation` waits to inject into `main.conversation` and never declares `conversation.view` here. The shell posts `{ type: 'dsh.overlay.session', sessionId }` from `dsh-app://shell`; the iframe replies `{ type: 'dsh.overlay.ready' }` and retries `sessions.open` until the Host list includes that id. Overlay CSS sets `--dsh-chat-content-width: 100%`, `--dsh-composer-side-clearance: 0px`, hides `[data-chat-turn-rail]`, and paints a white document. `ui-chat` forces Compact. `ui-user-questions` always `next()`s so vanilla `floating.js` remains the overlay waterfall claimer. The [overlay Compact ChatView Agent Note](../../../.agents/notes/implemented/feature/2026-09-16-overlay-compact-chat.md) owns the decision.
+The plugin returns immediately unless `overlayClientSurface()` is true. One effect registers `OverlayChatRoot` on `'root'` and declares `conversation.view` plus `conversation.input.overlay`; `ui-layout` skips AppFrame on this document, so there is no dual `'root'` occupant. `ui-conversation` waits to inject into `main.conversation` and never declares `conversation.view` here. The shell posts `{ type: 'dsh.overlay.session', sessionId }` from `dsh-app://shell`; the iframe replies `{ type: 'dsh.overlay.ready' }` and retries `sessions.open` until the Host list includes that id. Overlay CSS sets `--dsh-chat-content-width: 100%`, `--dsh-composer-side-clearance: 0px`, hides `[data-chat-turn-rail]`, and paints a white document. `ui-chat` forces Compact. `ui-user-questions` always `next()`s so vanilla `floating.js` remains the overlay waterfall claimer. The iframe sets `allow="clipboard-write"`; [overlay message actions](../../../.agents/notes/implemented/bug-fix/2026-09-17-overlay-message-actions-narrow.md) owns that permission, the IconActions clock ellipsis, and the zero-size input-overlay host. The [overlay Compact ChatView Agent Note](../../../.agents/notes/implemented/feature/2026-09-16-overlay-compact-chat.md) owns the Compact root decision.
 
 </details>
 
@@ -70,7 +70,7 @@ None; the package never assembles or sends provider requests.
 
 These limits define the overlay Compact root. They are current package constraints, not a Desktop overlay backlog.
 
-- **No composer, hero, or sidebar** — the floating-ball shell owns History, New, the input pill, Stop, and the ask-user card. This package does not declare `conversation.composer`.
+- **No composer, hero, or sidebar** — the floating-ball shell owns History, New, the input pill, Stop, and the ask-user card. This package does not declare `conversation.composer`. It does host `conversation.input.overlay` as a zero-size seat so FeedbackDialog can portal.
 - **Ask-user stays on the shell** — the iframe `next()`s `'user-questions/request'` so a closed main window still has one overlay answerer in `floating.js`.
 
 <a id="dev-note"></a>
