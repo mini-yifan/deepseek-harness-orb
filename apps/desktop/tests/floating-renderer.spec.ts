@@ -492,6 +492,20 @@ it('does not snap the ball to the window origin when the panel collapses', () =>
   expect(css).not.toContain('body:not(.expanded) #ball')
 })
 
+it('paints collapsed ball shadow, expanded hairline, and outer pin stroke', () => {
+  const css = readFileSync(new URL('../renderer/floating.css', import.meta.url), 'utf8')
+  expect(css).toMatch(/--chrome: 12px/u)
+  expect(css).toMatch(/#panel \{[^}]*inset: var\(--chrome\)/u)
+  expect(css).toMatch(/body\.expanded #panel \{[^}]*border: 1px solid var\(--border\)/u)
+  expect(css).toMatch(/body\.expanded #panel \{[^}]*box-shadow: var\(--panel-shadow\)/u)
+  expect(css).toMatch(/#ball \{[^}]*box-shadow: var\(--ball-shadow\)/u)
+  expect(css).toMatch(/body\.expanded #ball \{[^}]*box-shadow: 0 0 0 1px var\(--border\)/u)
+  expect(css).toMatch(/body\.pinned #panel \{[^}]*box-shadow: 0 0 0 3px var\(--pin\)/u)
+  expect(css).toMatch(/body\.pinned #ball \{[^}]*box-shadow: 0 0 0 3px var\(--pin\)/u)
+  expect(css).not.toContain('inset 0 0 0 3px')
+  expect(css).not.toMatch(/#ball \{[^}]*overflow:\s*hidden/u)
+})
+
 it('forbids selecting overlay chrome except the composer and question fields', () => {
   const css = readFileSync(new URL('../renderer/floating.css', import.meta.url), 'utf8')
   expect(css).toMatch(/html,\s*body \{[^}]*user-select: none/u)
@@ -509,8 +523,8 @@ it('places Stop at the opposite pill end from the ball', () => {
   expect(html).not.toMatch(/id="panel"[\s\S]*id="stop"[\s\S]*<\/section>/u)
   expect(css).toMatch(/#ball \{[^}]*z-index: 1/u)
   expect(css).toMatch(/#stop \{[^}]*z-index: 2/u)
-  expect(css).toMatch(/body\.expand-left #stop \{\s*left: 14px/u)
-  expect(css).toMatch(/body\.expand-right #stop \{\s*right: 14px/u)
+  expect(css).toMatch(/body\.expand-left #stop \{\s*left: calc\(var\(--chrome\) \+ 14px\)/u)
+  expect(css).toMatch(/body\.expand-right #stop \{\s*right: calc\(var\(--chrome\) \+ 14px\)/u)
   expect(css).not.toMatch(/body\.expand-left #stop \{\s*right:/u)
   expect(css).not.toMatch(/body\.expand-right #stop \{\s*left:/u)
 })

@@ -2,12 +2,15 @@
   color-scheme: light;
   font-family: ui-sans-serif, system-ui, sans-serif;
   --ball: 72px;
+  --chrome: 12px;
   --panel-radius: 36px;
   --black: #111111;
   --white: #ffffff;
   --input-bg: #eeeeee;
   --border: #8a8a93;
   --pin: #5c5c66;
+  --ball-shadow: 0 3px 8px rgba(17, 17, 17, 0.32);
+  --panel-shadow: 0 4px 8px rgba(17, 17, 17, 0.22);
 }
 
 html,
@@ -23,7 +26,7 @@ body {
 
 #panel {
   position: absolute;
-  inset: 0;
+  inset: var(--chrome);
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -58,6 +61,8 @@ body.expanded #panel {
   opacity: 1;
   transform: scale(1);
   pointer-events: auto;
+  border: 1px solid var(--border);
+  box-shadow: var(--panel-shadow);
 }
 
 #panel::after {
@@ -78,9 +83,9 @@ body.expand-down #panel::after {
   top: 0;
 }
 
-body.pinned #panel,
-body.pinned #ball {
-  box-shadow: inset 0 0 0 3px var(--pin);
+body.pinned #panel {
+  border-color: var(--pin);
+  box-shadow: 0 0 0 3px var(--pin);
 }
 
 #history,
@@ -420,36 +425,44 @@ body.asking #composer {
 #ball {
   position: absolute;
   z-index: 1;
-  top: 0;
-  left: 0;
+  top: var(--chrome);
+  left: var(--chrome);
   width: var(--ball);
   height: var(--ball);
   border: 0;
   padding: 0;
   border-radius: 50%;
-  overflow: hidden;
   background: var(--black);
+  box-shadow: var(--ball-shadow);
   cursor: grab;
 }
 
 body.expand-left #ball {
   left: auto;
-  right: 0;
+  right: var(--chrome);
 }
 
 body.expand-right #ball {
   right: auto;
-  left: 0;
+  left: var(--chrome);
 }
 
 body.expand-up #ball {
   top: auto;
-  bottom: 0;
+  bottom: var(--chrome);
 }
 
 body.expand-down #ball {
   bottom: auto;
-  top: 0;
+  top: var(--chrome);
+}
+
+body.expanded #ball {
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+body.pinned #ball {
+  box-shadow: 0 0 0 3px var(--pin);
 }
 
 #ball:active {
@@ -486,19 +499,19 @@ body.expand-down #ball {
 }
 
 body.expand-left #stop {
-  left: 14px;
+  left: calc(var(--chrome) + 14px);
 }
 
 body.expand-right #stop {
-  right: 14px;
+  right: calc(var(--chrome) + 14px);
 }
 
 body.expand-up #stop {
-  bottom: 14px;
+  bottom: calc(var(--chrome) + 14px);
 }
 
 body.expand-down #stop {
-  top: 14px;
+  top: calc(var(--chrome) + 14px);
 }
 
 body:not(.expanded) #stop,
