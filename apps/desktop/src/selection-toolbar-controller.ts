@@ -219,6 +219,7 @@ export class SelectionToolbarController {
         if (!pointInWindow(this.toolbar, event)) hideSelectionToolbar(this.toolbar)
         return
       case 'key':
+      case 'dismiss':
         hideSelectionToolbar(this.toolbar)
         return
       case 'mouse-up':

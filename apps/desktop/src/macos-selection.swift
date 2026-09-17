@@ -30,6 +30,8 @@ private final class SelectionMonitor: @unchecked Sendable {
   private var press: NSPoint?
   private var dragged = false
   private var eventMonitor: Any?
+  // Posted clipboard-fallback Command+C keyDown events still to ignore.
+  private var postedCommandCRemaining = 0
 
   func start() {
     let trusted = AXIsProcessTrustedWithOptions([
@@ -39,7 +41,10 @@ private final class SelectionMonitor: @unchecked Sendable {
       emit(["type": "untrusted"])
       return
     }
-    let mask: NSEvent.EventTypeMask = [.leftMouseDown, .leftMouseUp, .leftMouseDragged, .keyDown]
+    let mask: NSEvent.EventTypeMask = [
+      .leftMouseDown, .leftMouseUp, .leftMouseDragged,
+      .rightMouseDown, .otherMouseDown, .scrollWheel, .keyDown,
+    ]
     eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
       self?.handle(event)
     }
@@ -106,11 +111,35 @@ private final class SelectionMonitor: @unchecked Sendable {
           self.readSelection(anchor: point)
         }
       }
+    case .rightMouseDown, .otherMouseDown:
+      emit(["type": "dismiss"])
+    case .scrollWheel:
+      if !event.momentumPhase.isEmpty { return }
+      if event.scrollingDeltaX == 0 && event.scrollingDeltaY == 0 { return }
+      emit(["type": "dismiss"])
     case .keyDown:
-      if event.keyCode == 53 { emit(["type": "key"]) }
+      if consumePostedCommandC(event) { return }
+      emit(["type": "key"])
     default:
       break
     }
+  }
+
+  private func notePostedCommandC() {
+    lock.lock()
+    postedCommandCRemaining += 1
+    lock.unlock()
+  }
+
+  private func consumePostedCommandC(_ event: NSEvent) -> Bool {
+    guard event.keyCode == vkAnsiC, event.modifierFlags.contains(.command) else {
+      return false
+    }
+    lock.lock()
+    defer { lock.unlock() }
+    guard postedCommandCRemaining > 0 else { return false }
+    postedCommandCRemaining -= 1
+    return true
   }
 
   private func readSelection(anchor: (x: Double, y: Double)) {
@@ -131,7 +160,7 @@ private final class SelectionMonitor: @unchecked Sendable {
       )
       return
     }
-    if let text = readClipboardFallback() {
+    if let text = readClipboardFallback(onPostCommandC: { self.notePostedCommandC() }) {
       emitSelection(
         text: text,
         bounds: nil,
@@ -202,11 +231,11 @@ private func readAccessibility() -> (text: String, bounds: CGRect?)? {
   return (trimmed, bounds)
 }
 
-private func readClipboardFallback() -> String? {
+private func readClipboardFallback(onPostCommandC: () -> Void) -> String? {
   let pasteboard = NSPasteboard.general
   let previous = pasteboard.string(forType: .string) ?? ""
   let before = previous.trimmingCharacters(in: .whitespacesAndNewlines)
-  guard postCommandC() else { return nil }
+  guard postCommandC(onPost: onPostCommandC) else { return nil }
   let deadline = DispatchTime.now().uptimeNanoseconds + clipboardDeadlineNs
   while DispatchTime.now().uptimeNanoseconds < deadline {
     let current = (pasteboard.string(forType: .string) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -222,13 +251,14 @@ private func readClipboardFallback() -> String? {
   return nil
 }
 
-private func postCommandC() -> Bool {
+private func postCommandC(onPost: () -> Void) -> Bool {
   guard let source = CGEventSource(stateID: .hidSystemState) else { return false }
   guard let down = CGEvent(keyboardEventSource: source, virtualKey: vkAnsiC, keyDown: true),
     let up = CGEvent(keyboardEventSource: source, virtualKey: vkAnsiC, keyDown: false)
   else { return false }
   down.flags = .maskCommand
   up.flags = .maskCommand
+  onPost()
   down.post(tap: .cghidEventTap)
   up.post(tap: .cghidEventTap)
   return true

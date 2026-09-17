@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-16-desktop-selection-toolbar.md
-2026-09-16-desktop-selection-toolbar.md: 03fbfbccb69aefc1f545af924bfda0ee0df02b7f
-2026-09-16-desktop-selection-toolbar.zh.md: 307f2be28ca5a4ee17322c720cc8d5657b924f23
+2026-09-16-desktop-selection-toolbar.md: f515813030ed08becc3f5952633bf52812a62aa5
+2026-09-16-desktop-selection-toolbar.zh.md: cef0481f0db66cfd7a88c7b36e359ea4c8a8e537
