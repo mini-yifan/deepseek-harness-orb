@@ -45,6 +45,7 @@ import {
   type OverlayGuardIpcEvent,
 } from './computer-use-overlay-guard.ts'
 import { setOrbCodeAgentModelSelection } from './computer-use-orb-code-agent-model.ts'
+import { isOrbPermissionPreset, setOrbPermissionPreset } from './computer-use-orb-permission.ts'
 
 export { DESKTOP_HOST_PROTOCOL_VERSION } from './wire.ts'
 export { computerUsePresetRoot, COMPUTER_USE_PACKAGE } from './computer-use-preset-root.ts'
@@ -71,6 +72,10 @@ export type DesktopHostCommand = {
   readonly provider: string
   readonly model: string
   readonly reasoningEffort?: string
+} | {
+  readonly type: 'orb-permission'
+  readonly preset: 'read-only' | 'workspace-write' | 'danger-full-access'
+  readonly sessionId?: string
 }
 
 /** Events emitted by the desktop child process. */
@@ -117,6 +122,10 @@ function isDesktopHostCommand(message: unknown): message is DesktopHostCommand {
         && typeof candidate.model === 'string' && candidate.model !== ''
         && (candidate.reasoningEffort === undefined
           || (typeof candidate.reasoningEffort === 'string' && candidate.reasoningEffort !== ''))
+    case 'orb-permission':
+      return isOrbPermissionPreset(candidate.preset)
+        && (candidate.sessionId === undefined
+          || (typeof candidate.sessionId === 'string' && candidate.sessionId !== ''))
     default:
       return false
   }
@@ -630,6 +639,9 @@ async function main(): Promise<void> {
         return
       case 'orb-code-agent-model':
         setOrbCodeAgentModelSelection(message)
+        return
+      case 'orb-permission':
+        setOrbPermissionPreset(message.preset, message.sessionId)
         return
       default:
         message satisfies never

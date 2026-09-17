@@ -12,7 +12,7 @@ Status: implemented
 
 ## 决策
 
-历史仍在左、新建仍在右。竖直边沿是输入胶囊对侧的对话记录边：`expand-up` 时 `top: 12px`，`expand-down` 时 `bottom: 12px`。`expand-down` 还会对调 `#panel` 内边距，让胶囊的 72px 带成为顶部留白，并把对话记录 / 历史列表 / 提问的 36px 内边距移到底部，最后几行不会被按钮挡住。
+历史仍在左、新建仍在右。竖直边沿是输入胶囊对侧的对话记录边：`expand-up` 时 `top: 12px`，`expand-down` 时 `bottom: 12px`。两者之间的 Access 芯片共用这条竖向边；[overlay Access 选择器](../feature/2026-09-17-overlay-access-picker.zh.md) 拥有该芯片。`expand-down` 还会对调 `#panel` 内边距，让胶囊的 72px 带成为顶部留白，并把对话记录 / 历史列表 / 提问的 36px 内边距移到底部，最后几行不会被按钮挡住。
 
 ## 考虑过的替代方案
 
@@ -26,4 +26,4 @@ Status: implemented
 
 ## 测试
 
-`apps/desktop/tests/floating-renderer.spec.ts` 钉住历史在左、新建在右、默认 `top: 12px`、`expand-down` 下 `bottom: 12px`，以及向下展开时对调的面板与对话记录内边距。
+`apps/desktop/tests/floating-renderer.spec.ts` 钉住历史在左、新建在右、Access 芯片在两者之间、默认 `top: 12px`、`expand-down` 下 `bottom: 12px`，以及向下展开时对调的面板与对话记录内边距。

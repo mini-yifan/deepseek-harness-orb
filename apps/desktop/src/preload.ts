@@ -4,6 +4,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { DESKTOP_IPC, type DshDesktopApi, type DesktopUpdateState, type SelectionPromptPayload, type SelectionToolbarState } from './ipc.ts'
 import type { DesktopBackendState } from './backend-controller.ts'
 import type { OrbAgentModelSelection } from './orb-agent-models.ts'
+import type { OrbPermissionPreset } from './orb-permission.ts'
 
 const api: DshDesktopApi = {
   protocolVersion: 1,
@@ -48,6 +49,12 @@ const api: DshDesktopApi = {
       ipcRenderer.on(DESKTOP_IPC.floatingOverlayModel, handle)
       return () => { ipcRenderer.off(DESKTOP_IPC.floatingOverlayModel, handle) }
     },
+    overlayPermission: () => ipcRenderer.invoke(DESKTOP_IPC.floatingOverlayPermissionGet) as Promise<OrbPermissionPreset>,
+    setOverlayPermission: (preset, sessionId) => (
+      sessionId === undefined
+        ? ipcRenderer.invoke(DESKTOP_IPC.floatingOverlayPermissionSet, preset)
+        : ipcRenderer.invoke(DESKTOP_IPC.floatingOverlayPermissionSet, preset, sessionId)
+    ) as Promise<void>,
     orbWorkspacePath: () => ipcRenderer.invoke(DESKTOP_IPC.floatingOrbWorkspace) as Promise<string>,
     focusMain: () => ipcRenderer.invoke(DESKTOP_IPC.floatingFocusMain) as Promise<void>,
     quit: () => ipcRenderer.invoke(DESKTOP_IPC.floatingQuit) as Promise<void>,

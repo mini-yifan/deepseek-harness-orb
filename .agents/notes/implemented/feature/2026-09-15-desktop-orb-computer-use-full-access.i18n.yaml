@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-15-desktop-orb-computer-use-full-access.md
-2026-09-15-desktop-orb-computer-use-full-access.md: 7dfb519d6cdcc77377fcf84fa726629e5566320d
-2026-09-15-desktop-orb-computer-use-full-access.zh.md: faa8d4a0bad8948185ee78c9d72718ad53055cde
+2026-09-15-desktop-orb-computer-use-full-access.md: 7531defd055ad21a6bdb3ede1d697eaf713b6c44
+2026-09-15-desktop-orb-computer-use-full-access.zh.md: a374853224e89cf493faf85cf2ac45e6fd77c0a3

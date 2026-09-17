@@ -19,6 +19,8 @@ it('exposes overlay expand, clamp, dsh_orb workspace, and selection IPC', async 
     setSessionRunning: expect.any(Function),
     overlayModel: expect.any(Function),
     onOverlayModel: expect.any(Function),
+    overlayPermission: expect.any(Function),
+    setOverlayPermission: expect.any(Function),
     onSelectionPrompt: expect.any(Function),
   })
   expect(api.selection).toMatchObject({
@@ -37,6 +39,8 @@ it('exposes overlay expand, clamp, dsh_orb workspace, and selection IPC', async 
   await api.floating.orbWorkspacePath()
   await api.floating.setSessionRunning(true)
   await api.floating.overlayModel()
+  await api.floating.overlayPermission()
+  await api.floating.setOverlayPermission('workspace-write')
   await api.selection.search()
   await api.selection.interact()
   await api.selection.setContentSize({ width: 280, height: 120 })
@@ -46,6 +50,8 @@ it('exposes overlay expand, clamp, dsh_orb workspace, and selection IPC', async 
     [DESKTOP_IPC.floatingOrbWorkspace],
     [DESKTOP_IPC.floatingRunning, true],
     [DESKTOP_IPC.floatingOverlayModelGet],
+    [DESKTOP_IPC.floatingOverlayPermissionGet],
+    [DESKTOP_IPC.floatingOverlayPermissionSet, 'workspace-write'],
     [DESKTOP_IPC.selectionSearch],
     [DESKTOP_IPC.selectionInteract],
     [DESKTOP_IPC.selectionSetContentSize, { width: 280, height: 120 }],
