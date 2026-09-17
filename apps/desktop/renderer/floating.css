@@ -65,6 +65,11 @@ body.expanded #panel {
   box-shadow: var(--panel-shadow);
 }
 
+body.expand-down #panel {
+  padding-top: calc(var(--ball) + 10px);
+  padding-bottom: 20px;
+}
+
 #panel::after {
   content: "";
   position: absolute;
@@ -105,6 +110,12 @@ body.pinned #panel {
   cursor: pointer;
 }
 
+body.expand-down #history,
+body.expand-down #new-conversation {
+  top: auto;
+  bottom: 12px;
+}
+
 #history {
   left: 12px;
 }
@@ -129,6 +140,13 @@ body.pinned #panel {
   flex-direction: column;
   gap: 12px;
   padding-top: 36px;
+}
+
+body.expand-down #transcript,
+body.expand-down #history-list,
+body.expand-down #question {
+  padding-top: 0;
+  padding-bottom: 36px;
 }
 
 #question {
