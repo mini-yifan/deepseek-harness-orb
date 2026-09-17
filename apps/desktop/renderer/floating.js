@@ -182,6 +182,7 @@ async function main() {
   let orbWorkspacePath
   let historyOpen = false
   let dragging = false
+  let skipClick = false
   let collapsing = false
   let pinned = false
   let expanded = false
@@ -788,15 +789,29 @@ async function main() {
     scheduleCollapse()
   })
 
+  function isPrimaryButton(event) {
+    return event.button === 0
+  }
+
+  function primaryButtonHeld(event) {
+    return (event.buttons & 1) === 1
+  }
+
   ball.addEventListener('pointerdown', event => {
+    if (!isPrimaryButton(event)) return
     dragging = false
     collapsing = false
+    skipClick = false
     lastOrigin = undefined
     pointer = { ...ballGrabOffset(event), startX: event.screenX, startY: event.screenY }
     ball.setPointerCapture(event.pointerId)
   })
   ball.addEventListener('pointermove', event => {
     if (pointer === undefined) return
+    if (!primaryButtonHeld(event)) {
+      void finishPointer(event)
+      return
+    }
     lastOrigin = { x: event.screenX - pointer.dx, y: event.screenY - pointer.dy }
     if (!dragging) {
       if (Math.hypot(event.screenX - pointer.startX, event.screenY - pointer.startY) <= 4) return
@@ -814,6 +829,7 @@ async function main() {
   })
   async function finishPointer(event) {
     if (dragging) {
+      skipClick = true
       dragging = false
       collapsing = false
       const origin = pointer === undefined
@@ -830,12 +846,24 @@ async function main() {
     return false
   }
   ball.addEventListener('pointerup', async event => {
-    if (await finishPointer(event)) return
+    if (!isPrimaryButton(event)) {
+      void finishPointer(event)
+      return
+    }
+    const dragged = await finishPointer(event)
+    if (dragged || skipClick) {
+      skipClick = false
+      return
+    }
     pinned = !pinned
     document.body.classList.toggle('pinned', pinned)
     if (pinned) await setExpanded(true)
   })
   ball.addEventListener('pointercancel', event => {
+    void finishPointer(event)
+  })
+  // Native overlay menus can swallow pointerup; lost capture must end the grab so hover cannot keep moving the window.
+  ball.addEventListener('lostpointercapture', event => {
     void finishPointer(event)
   })
 
