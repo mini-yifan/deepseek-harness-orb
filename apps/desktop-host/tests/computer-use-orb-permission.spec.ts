@@ -120,6 +120,29 @@ describe('pinOrbWorkspacePermission', () => {
     expect(presets.currentValue).toBe('workspace-write')
   })
 
+  it('pins standard on an orb subdirectory to the live overlay preset', () => {
+    const home = isolatedHome()
+    const presets = recordingPresets()
+    pinOrbWorkspacePermission(
+      presets,
+      sessionOf('orb-child', join(orbWorkspacePath(), 'write-a-word-document'), 'standard'),
+    )
+    expect(presets.applied).toEqual(['danger-full-access'])
+    expect(orbWorkspacePath()).toBe(join(home, 'dsh_orb'))
+  })
+
+  it('leaves a sibling of the orb workspace unchanged', () => {
+    const home = isolatedHome()
+    const presets = recordingPresets()
+    pinOrbWorkspacePermission(
+      presets,
+      sessionOf('orb-sibling', `${orbWorkspacePath()}-extra`, 'standard'),
+    )
+    expect(presets.applied).toEqual([])
+    expect(presets.currentValue).toBe('workspace-write')
+    expect(`${orbWorkspacePath()}-extra`.startsWith(join(home, 'dsh_orb'))).toBe(true)
+  })
+
   it('appends nothing when the live preset is already current', () => {
     isolatedHome()
     const presets = recordingPresets('danger-full-access')

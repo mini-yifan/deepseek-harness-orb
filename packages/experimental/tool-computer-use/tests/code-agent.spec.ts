@@ -6,19 +6,25 @@ import type { UserMessage } from '@deepseek-ai/dsh-session'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
-import { apply, inject, name, TOOL_NAME } from '../src/code-agent.ts'
+import { apply, inject, name, slugFromTask, STATUS_TOOL_NAME, STOP_TOOL_NAME, TOOL_NAME, uniqueDirectory } from '../src/code-agent.ts'
 import {
   COMPLETION_BODY_MAX_CHARS,
   COMPLETION_PLUGIN,
   watchCodeAgentCompletion,
 } from '../src/code-agent-completion.ts'
+import { autoAnswerQuestions, UNATTENDED_CUSTOM_ANSWER } from '../src/code-agent-unattended.ts'
 import { POLICY } from '../src/policy.ts'
 import type {} from '@deepseek-ai/dsh-api-session-controller/types'
 
 const SIGNAL = new AbortController().signal
 const CALLER = SessionId('cu-orb')
+const CALLER_B = SessionId('cu-orb-b')
 const STANDARD = SessionId('session-standard-1')
 const STANDARD_B = SessionId('session-standard-2')
+
+function autoCwd(task: string, parent = '/workspace'): string {
+  return uniqueDirectory(parent, slugFromTask(task))
+}
 
 interface CreateRequest {
   readonly agentPreset?: string
@@ -56,13 +62,20 @@ interface FakeAgent {
   readonly warnings: string[]
   readonly whenIdleCalls: number
   readonly statusSubscriptions: number
+  readonly cancelCalls: Array<{ cause: unknown; options?: { keepInbox?: boolean } }>
   readonly session: { deriveMessages(): FakeMessage[] }
   whenIdle(): Promise<void>
   followup(message: UserMessage): void
+  cancel(cause: unknown, options?: { keepInbox?: boolean }): void
+  emitWaterfall(event: string, payload: unknown): Promise<unknown>
   readonly ctx: {
     logger: { warn(message?: string): void }
     effect(callback: () => (() => undefined) | undefined): () => undefined
-    on(event: string, handler: (payload?: unknown) => void): () => void
+    on(
+      event: string,
+      handler: (payload?: unknown, next?: () => Promise<unknown>) => unknown,
+      options?: { prepend?: boolean },
+    ): () => void
   }
   setRunning(): void
   resolveIdle(): void
@@ -92,6 +105,8 @@ function createFakeAgent(id: SessionId, options: {
   const inbox = { nextTurn: [] as UserMessage[], nextStep: [] as UserMessage[] }
   let whenIdleCalls = 0
   let statusSubscriptions = 0
+  const extra = new Map<string, Array<(payload?: unknown, next?: () => Promise<unknown>) => unknown>>()
+  const cancelCalls: Array<{ cause: unknown; options?: { keepInbox?: boolean } }> = []
   const fake: FakeAgent = {
     id,
     get status() {
@@ -109,6 +124,7 @@ function createFakeAgent(id: SessionId, options: {
     get statusSubscriptions() {
       return statusSubscriptions
     },
+    cancelCalls,
     session: {
       deriveMessages() {
         options.onDerive?.()
@@ -126,6 +142,26 @@ function createFakeAgent(id: SessionId, options: {
       if (options.followupError !== undefined) throw options.followupError
       followups.push(message)
     },
+    cancel(cause, cancelOptions) {
+      if (cancelOptions === undefined) cancelCalls.push({ cause })
+      else cancelCalls.push({ cause, options: cancelOptions })
+      if (cancelOptions?.keepInbox !== true) {
+        inbox.nextTurn.length = 0
+        inbox.nextStep.length = 0
+      }
+      if (status !== 'idle') fake.resolveIdle()
+    },
+    async emitWaterfall(event, payload) {
+      const handlers = extra.get(event) ?? []
+      let index = 0
+      const next = async (): Promise<unknown> => {
+        const handler = handlers[index]
+        index += 1
+        if (handler === undefined) throw new Error(`no ${event} handler`)
+        return handler(payload, next)
+      }
+      return next()
+    },
     ctx: {
       logger: {
         warn(message) {
@@ -142,7 +178,7 @@ function createFakeAgent(id: SessionId, options: {
           dispose?.()
         }
       },
-      on(event, handler) {
+      on(event, handler, eventOptions) {
         if (event === 'agent/status') {
           const wrapped = (payload: { status: 'idle' | 'running' }): void => {
             handler(payload)
@@ -167,7 +203,13 @@ function createFakeAgent(id: SessionId, options: {
             disposedListeners.delete(wrapped)
           }
         }
-        return () => {}
+        const list = extra.get(event) ?? []
+        if (eventOptions?.prepend === true) list.unshift(handler)
+        else list.push(handler)
+        extra.set(event, list)
+        return () => {
+          extra.set(event, (extra.get(event) ?? []).filter(entry => entry !== handler))
+        }
       },
     },
     setRunning() {
@@ -347,11 +389,12 @@ function execute(
   ctx: Context,
   args: Record<string, unknown>,
   agent: object | null = callerAgent(),
+  toolName: string = TOOL_NAME,
 ) {
   return ctx.tools.execute({
     signal: SIGNAL,
     callId: ToolCallId('code-agent-1'),
-    name: TOOL_NAME,
+    name: toolName,
     arguments: args,
     ...(agent === null ? {} : { agent: agent as never }),
   })
@@ -373,7 +416,7 @@ describe('code_agent plugin', () => {
     const { ctx, created, prompted, selected } = await setup()
     const result = await execute(ctx, { task: 'Write a Word document' })
     expect(result.isError).toBe(false)
-    expect(created).toEqual([{ agentPreset: 'standard', cwd: '/workspace' }])
+    expect(created).toEqual([{ agentPreset: 'standard', cwd: autoCwd('Write a Word document') }])
     expect(selected).toEqual([])
     expect(created[0]).not.toHaveProperty('origin')
     expect(created[0]).not.toHaveProperty('parentAgent')
@@ -405,54 +448,62 @@ describe('code_agent plugin', () => {
 
   it('does not select a model when continuing an existing session', async () => {
     const { ctx, created, selected, operations } = await setup({
-      headers: {
-        [STANDARD]: { id: STANDARD, agentPreset: 'standard', cwd: '/workspace' },
-      },
       orbModel: { provider: 'deepseek-official', model: 'deepseek-chat', reasoningEffort: 'high' },
     })
+    await execute(ctx, { task: 'Write a Word document' })
     const result = await execute(ctx, {
       task: 'Make the Word font green',
       session_id: STANDARD,
     })
     expect(result.isError).toBe(false)
-    expect(created).toEqual([])
-    expect(selected).toEqual([])
-    expect(operations).toEqual(['prompt'])
+    expect(created).toHaveLength(1)
+    expect(selected).toEqual([{
+      sessionId: STANDARD,
+      provider: 'deepseek-official',
+      model: 'deepseek-chat',
+      reasoningEffort: 'high',
+      saveAsDefault: false,
+    }])
+    expect(operations).toEqual(['selectModel', 'prompt', 'prompt'])
   })
 
-  it('creates with workspaceId when caller cwd matches a workspace', async () => {
+  it('creates with workspaceId when an explicit cwd matches a workspace', async () => {
     const { ctx, created } = await setup({ workspaceId: 'ws-orb' })
-    const result = await execute(ctx, { task: 'Write a Word document' })
+    const result = await execute(ctx, { task: 'Write a Word document', cwd: '/workspace' })
     expect(result.isError).toBe(false)
     expect(created).toEqual([{ agentPreset: 'standard', workspaceId: 'ws-orb' }])
   })
 
+  it('omits workspaceId when minting a subdirectory even if the parent workspace resolves', async () => {
+    const { ctx, created } = await setup({ workspaceId: 'ws-orb' })
+    const result = await execute(ctx, { task: 'Write a Word document' })
+    expect(result.isError).toBe(false)
+    expect(created).toEqual([{ agentPreset: 'standard', cwd: autoCwd('Write a Word document') }])
+  })
+
   it('falls back to cwd when workspace lookup misses, throws, or is not a resolver', async () => {
     const miss = await setup({ workspace: 'miss' })
-    await execute(miss.ctx, { task: 'Write a Word document' })
-    expect(miss.created).toEqual([{ agentPreset: 'standard', cwd: '/workspace' }])
+    await execute(miss.ctx, { task: 'Write a Word document', cwd: '/docs' })
+    expect(miss.created).toEqual([{ agentPreset: 'standard', cwd: '/docs' }])
     const boom = await setup({ workspace: 'throw' })
-    await execute(boom.ctx, { task: 'Write a Word document' })
-    expect(boom.created).toEqual([{ agentPreset: 'standard', cwd: '/workspace' }])
+    await execute(boom.ctx, { task: 'Write a Word document', cwd: '/docs' })
+    expect(boom.created).toEqual([{ agentPreset: 'standard', cwd: '/docs' }])
     const invalid = await setup({ workspace: 'invalid' })
-    await execute(invalid.ctx, { task: 'Write a Word document' })
-    expect(invalid.created).toEqual([{ agentPreset: 'standard', cwd: '/workspace' }])
+    await execute(invalid.ctx, { task: 'Write a Word document', cwd: '/docs' })
+    expect(invalid.created).toEqual([{ agentPreset: 'standard', cwd: '/docs' }])
   })
 
   it('continues the same session when session_id is supplied', async () => {
-    const { ctx, created, prompted } = await setup({
-      headers: {
-        [STANDARD]: { id: STANDARD, agentPreset: 'standard', cwd: '/workspace' },
-      },
-    })
+    const { ctx, created, prompted } = await setup()
+    await execute(ctx, { task: 'Write a Word document' })
     const result = await execute(ctx, {
       task: 'Make the Word font green',
       session_id: STANDARD,
     })
     expect(result.isError).toBe(false)
-    expect(created).toEqual([])
-    expect(prompted).toHaveLength(1)
-    expect(prompted[0]?.sessionId).toBe(STANDARD)
+    expect(created).toHaveLength(1)
+    expect(prompted).toHaveLength(2)
+    expect(prompted[1]?.sessionId).toBe(STANDARD)
     expect(result.value).toMatchObject({ created: false, session_id: STANDARD })
     expect(text(result)).toContain(STANDARD)
   })
@@ -464,40 +515,18 @@ describe('code_agent plugin', () => {
     expect(prompted.map(request => request.sessionId)).toEqual([STANDARD, STANDARD_B])
   })
 
-  it('refuses this Computer Use session, subagent sessions, non-standard presets, and cwd conflicts', async () => {
-    const { ctx } = await setup({
-      headers: {
-        [CALLER]: { id: CALLER, agentPreset: 'computer-use', cwd: '/workspace' },
-        [SessionId('sub')]: { id: SessionId('sub'), origin: 'subagent', agentPreset: 'standard' },
-        [SessionId('cu')]: { id: SessionId('cu'), agentPreset: 'computer-use' },
-        [STANDARD]: { id: STANDARD, agentPreset: 'standard', cwd: '/docs' },
-      },
-    })
+  it('refuses this Computer Use session, unregistered sessions, and cwd conflicts', async () => {
+    const { ctx } = await setup()
     const self = await execute(ctx, { task: 'no', session_id: CALLER })
     expect(self.isError).toBe(true)
     expect(text(self)).toContain('this Computer Use session')
-    const sub = await execute(ctx, { task: 'no', session_id: 'sub' })
-    expect(sub.isError).toBe(true)
-    expect(text(sub)).toContain('subagent')
-    const cu = await execute(ctx, { task: 'no', session_id: 'cu' })
-    expect(cu.isError).toBe(true)
-    expect(text(cu)).toContain('standard')
+    const foreign = await execute(ctx, { task: 'no', session_id: STANDARD })
+    expect(foreign.isError).toBe(true)
+    expect(text(foreign)).toContain('this Computer Use agent started')
+    await execute(ctx, { task: 'Write a Word document', cwd: '/docs' })
     const cwd = await execute(ctx, { task: 'no', session_id: STANDARD, cwd: '/other' })
     expect(cwd.isError).toBe(true)
     expect(text(cwd)).toContain('cwd')
-  })
-
-  it('refuses a runtime-owned subagent child without header origin', async () => {
-    const child = SessionId('child')
-    const { ctx } = await setup({
-      owned: true,
-      headers: {
-        [child]: { id: child, agentPreset: 'standard', parentSession: CALLER },
-      },
-    })
-    const result = await execute(ctx, { task: 'no', session_id: child })
-    expect(result.isError).toBe(true)
-    expect(text(result)).toContain('subagent')
   })
 
   it('refuses a blank task, blank session_id, missing caller, and unknown session', async () => {
@@ -521,7 +550,10 @@ describe('code_agent plugin', () => {
     let created = 0
     ctx.provide('sessionController', {
       async create(request: CreateRequest) {
-        expect(request).toEqual({ agentPreset: 'standard', cwd: '/workspace' })
+        expect(request).toEqual({
+          agentPreset: 'standard',
+          cwd: created === 0 ? autoCwd('Write a Word document') : autoCwd('Make a gobang game'),
+        })
         const id = created === 0 ? STANDARD : STANDARD_B
         created += 1
         sessions.set(id, Session.create(id))
@@ -564,29 +596,6 @@ describe('code_agent plugin', () => {
     expect(omitted.created).toEqual([{ agentPreset: 'standard' }])
   })
 
-  it('names an unspecified preset as unknown', async () => {
-    const { ctx } = await setup({
-      headers: {
-        [STANDARD]: { id: STANDARD, cwd: '/workspace' },
-      },
-    })
-    const unknown = await execute(ctx, { task: 'no', session_id: STANDARD })
-    expect(unknown.isError).toBe(true)
-    expect(text(unknown)).toContain('unknown')
-  })
-
-  it('treats a parentSession as ordinary when agents cannot confirm ownership', async () => {
-    const child = SessionId('plain-child')
-    const { ctx, prompted } = await setup({
-      headers: {
-        [child]: { id: child, agentPreset: 'standard', parentSession: CALLER },
-      },
-    })
-    const result = await execute(ctx, { task: 'continue', session_id: child })
-    expect(result.isError).toBe(false)
-    expect(prompted[0]?.sessionId).toBe(child)
-  })
-
   it('pins GUI versus code_agent routing in policy and the tool description', async () => {
     const { ctx } = await setup()
     expect(POLICY).toContain('opening WeChat')
@@ -596,6 +605,13 @@ describe('code_agent plugin', () => {
     expect(POLICY).toContain('making a gobang game')
     expect(POLICY).toContain('tell the user the background Code agent is running')
     expect(POLICY).toContain('Do not call wait, long_wait, or bash sleep')
+    expect(POLICY).toContain('today\'s weather')
+    expect(POLICY).toContain('research report')
+    expect(POLICY).toContain('write the report as HTML')
+    expect(POLICY).toContain('<frontmost_folder> is absent')
+    expect(POLICY).toContain('Do not guess')
+    expect(POLICY).toContain('code_agent_status')
+    expect(POLICY).toContain('code_agent_stop')
     expect(POLICY).toContain('plugin notice')
     const schema = ctx.tools.schemas().find(entry => entry.name === TOOL_NAME)
     expect(schema?.description).toContain('Omit session_id')
@@ -871,5 +887,133 @@ describe('code_agent plugin', () => {
       })
     }).not.toThrow()
     expect(caller.followups).toEqual([])
+  })
+
+  it('lists only this caller\'s sessions and reports running or idle', async () => {
+    const caller = createFakeAgent(CALLER, { status: 'idle' })
+    const other = createFakeAgent(CALLER_B, { status: 'idle' })
+    const code = createFakeAgent(STANDARD, { status: 'running' })
+    const second = createFakeAgent(STANDARD_B, { status: 'idle' })
+    const { ctx } = await setup({
+      live: new Map([
+        [CALLER, caller],
+        [CALLER_B, other],
+        [STANDARD, code],
+        [STANDARD_B, second],
+      ]),
+    })
+    const empty = await execute(ctx, {}, callerAgent(), STATUS_TOOL_NAME)
+    expect(empty.value).toEqual({ count: 0, tasks: [] })
+    await execute(ctx, { task: 'Write a Word document' })
+    await execute(ctx, { task: 'Make a gobang game' })
+    const listed = await execute(ctx, {}, callerAgent(), STATUS_TOOL_NAME)
+    expect(listed.isError).toBe(false)
+    expect(listed.value).toEqual({
+      count: 2,
+      tasks: [
+        {
+          session_id: STANDARD,
+          task: 'Write a Word document',
+          cwd: autoCwd('Write a Word document'),
+          status: 'running',
+        },
+        {
+          session_id: STANDARD_B,
+          task: 'Make a gobang game',
+          cwd: autoCwd('Make a gobang game'),
+          status: 'idle',
+        },
+      ],
+    })
+    const hidden = await execute(ctx, {}, {
+      id: CALLER_B,
+      session: { header: { id: CALLER_B, agentPreset: 'computer-use', cwd: '/workspace' } },
+    }, STATUS_TOOL_NAME)
+    expect(hidden.value).toEqual({ count: 0, tasks: [] })
+  })
+
+  it('stops the running turn and queued follow-ups without deleting the session', async () => {
+    const caller = createFakeAgent(CALLER, { status: 'idle' })
+    const code = createFakeAgent(STANDARD, { status: 'running', assistant: 'Wrote the Word document.' })
+    const { ctx, prompted } = await setup({ live: new Map([[CALLER, caller], [STANDARD, code]]) })
+    await execute(ctx, { task: 'Write a Word document' })
+    await execute(ctx, { task: 'Make the font green', session_id: STANDARD })
+    expect(code.inbox.nextTurn).toHaveLength(2)
+    const stopped = await execute(ctx, { session_id: STANDARD }, callerAgent(), STOP_TOOL_NAME)
+    expect(stopped.isError).toBe(false)
+    expect(stopped.value).toEqual({ accepted: true, session_id: STANDARD })
+    expect(code.cancelCalls).toEqual([{ cause: { kind: 'user' } }])
+    expect(code.inbox.nextTurn).toEqual([])
+    expect(code.status).toBe('idle')
+    expect(caller.followups).toEqual([])
+    const continued = await execute(ctx, { task: 'Make the pieces green and white', session_id: STANDARD })
+    expect(continued.isError).toBe(false)
+    expect(prompted).toHaveLength(3)
+    const foreign = await execute(ctx, { session_id: STANDARD_B }, callerAgent(), STOP_TOOL_NAME)
+    expect(foreign.isError).toBe(true)
+    expect(text(foreign)).toContain('this Computer Use agent started')
+  })
+
+  it('does not deliver a completion notice after stop', async () => {
+    const caller = createFakeAgent(CALLER, { status: 'idle' })
+    const code = createFakeAgent(STANDARD, { status: 'running', assistant: 'Wrote the Word document.' })
+    const { ctx } = await setup({ live: new Map([[CALLER, caller], [STANDARD, code]]) })
+    await execute(ctx, { task: 'Write a Word document' })
+    await expect.poll(() => code.whenIdleCalls).toBeGreaterThan(0)
+    await execute(ctx, { session_id: STANDARD }, callerAgent(), STOP_TOOL_NAME)
+    expect(caller.followups).toEqual([])
+  })
+
+  it('auto-allows approval and auto-answers ask_user on the Code agent', async () => {
+    const caller = createFakeAgent(CALLER, { status: 'idle' })
+    const code = createFakeAgent(STANDARD, { status: 'running' })
+    const { ctx } = await setup({ live: new Map([[CALLER, caller], [STANDARD, code]]) })
+    await execute(ctx, { task: 'Write a Word document' })
+    await expect(code.emitWaterfall('approval/request', { toolName: 'bash' })).resolves.toBe('allowed-once')
+    await expect(code.emitWaterfall('user-questions/request', {
+      questions: [{
+        id: 'q1',
+        question: 'Which color?',
+        options: [{ label: 'Green (Recommended)' }, { label: 'Blue' }],
+      }],
+    })).resolves.toEqual({
+      answers: [{ id: 'q1', selected: ['Green (Recommended)'] }],
+    })
+  })
+
+  it('picks recommended, first, plan-review, and free-text answers for unattended questions', () => {
+    expect(autoAnswerQuestions([
+      {
+        id: 'plan',
+        question: 'Ship this plan?',
+        options: [{ label: 'Approve' }, { label: 'Reject' }],
+        intent: { kind: 'plan-review', approve: 'Approve' },
+      },
+      {
+        id: 'rec',
+        question: 'Color?',
+        options: [{ label: 'Red' }, { label: 'Green (Recommended)' }],
+      },
+      {
+        id: 'first',
+        question: 'Pick one',
+        options: [{ label: 'A' }, { label: 'B' }],
+      },
+      {
+        id: 'all',
+        question: 'Pick many',
+        options: [{ label: 'A' }, { label: 'B' }],
+        multiSelect: true,
+      },
+      { id: 'free', question: 'Anything else?' },
+    ])).toEqual({
+      answers: [
+        { id: 'plan', selected: ['Approve'] },
+        { id: 'rec', selected: ['Green (Recommended)'] },
+        { id: 'first', selected: ['A'] },
+        { id: 'all', selected: ['A', 'B'] },
+        { id: 'free', selected: [], custom: UNATTENDED_CUSTOM_ANSWER },
+      ],
+    })
   })
 })

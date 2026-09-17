@@ -10,7 +10,7 @@ English | [中文](2026-09-15-computer-use-code-agent-completion.zh.md)
 
 ## Decision
 
-After `session.prompt({ mode: 'queue' })` accepts, `code_agent` starts a watch owned by the calling Computer Use agent's `ctx.effect`, under `agents.withoutInitiator`. `execute` still returns immediately and does not take `exec.signal` into the watch, so a later Computer Use Stop does not cancel the first-class Code session.
+After `session.prompt({ mode: 'queue' })` accepts, `code_agent` starts a watch owned by the calling Computer Use agent's `ctx.effect`, under `agents.withoutInitiator`. `execute` still returns immediately and does not take `exec.signal` into the watch, so a later Computer Use Stop does not cancel the first-class Code session. `code_agent_stop` aborts that watch so a cancelled turn does not later followup a finish notice; [Overlay Computer Use background dispatch](2026-09-17-orb-code-agent-dispatch.md) owns stop.
 
 The Code interval runs from that prompt's durable `rpcId` through the next whole-agent idle. If the Code agent is still `idle` and the prompt remains in its inbox, the watch waits for `running` (or dispose) before `whenIdle()`, so an idle `whenIdle()` cannot resolve before the work starts. Extra sidebar prompts on that Code session delay the notice until that session is idle.
 

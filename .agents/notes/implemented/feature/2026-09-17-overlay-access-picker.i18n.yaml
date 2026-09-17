@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-17-overlay-access-picker.md
-2026-09-17-overlay-access-picker.md: e8378a6e2455f66e4bb581ded83e74e2f9da9d93
-2026-09-17-overlay-access-picker.zh.md: d12177d42641ce7f6ac28dddbdd6648391346e40
+2026-09-17-overlay-access-picker.md: 0bb01edefa86cfb796ffeec3cbf0b425046677c8
+2026-09-17-overlay-access-picker.zh.md: 4920918427e0acd85a0cdf437d91bb370b68d65a

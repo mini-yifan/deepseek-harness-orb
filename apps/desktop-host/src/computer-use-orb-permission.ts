@@ -3,7 +3,7 @@
  * @module @deepseek-ai/dsh-desktop-host/computer-use-orb-permission
  */
 
-import { join, resolve } from 'node:path'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type PermissionPresetService from '@deepseek-ai/dsh-permission-presets'
@@ -82,11 +82,25 @@ export function clearOrbPermissionPreset(): void {
   live = undefined
 }
 
+/**
+ * True when `cwd` is the overlay workspace or a real subdirectory of it.
+ * @param cwd - session cwd.
+ * @param orbCwd - overlay workspace path.
+ * @returns whether overlay Access applies.
+ */
+function isOrbWorkspaceDirectory(cwd: string, orbCwd: string): boolean {
+  const resolved = resolve(cwd)
+  const orb = resolve(orbCwd)
+  if (resolved === orb) return true
+  const rel = relative(orb, resolved)
+  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
+}
+
 function isOrbWorkspaceSession(session: Session, orbCwd: string): boolean {
   const agentPreset = session.header.agentPreset
   return (agentPreset === 'computer-use' || agentPreset === 'standard')
     && session.header.cwd !== undefined
-    && resolve(session.header.cwd) === resolve(orbCwd)
+    && isOrbWorkspaceDirectory(session.header.cwd, orbCwd)
 }
 
 /**

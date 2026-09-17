@@ -29,7 +29,7 @@ Patch this private overlay onto a running Web composition when you want a dedica
 
 ### When to choose it
 
-Choose it when a vision model should drive visible GUI chrome that bash cannot reach, and you want a catalog limited to Shell, web search and fetch, the thirteen GUI tools, `code_agent`, and `ask_user_question`. Avoid it for ordinary coding sessions, text-only routes, and any host that must not grant Screen Recording, Accessibility, and Automation for Finder. It is not a Skill, not a capability seam, and not part of `dsh-base`. Desktop macOS also mounts this overlay as a signed runtime extra so the floating ball can lock a Computer Use session.
+Choose it when a vision model should drive visible GUI chrome that bash cannot reach, and you want a catalog limited to Shell, web search and fetch, the thirteen GUI tools, `code_agent`, `code_agent_status`, `code_agent_stop`, and `ask_user_question`. Avoid it for ordinary coding sessions, text-only routes, and any host that must not grant Screen Recording, Accessibility, and Automation for Finder. It is not a Skill, not a capability seam, and not part of `dsh-base`. Desktop macOS also mounts this overlay as a signed runtime extra so the floating ball can lock a Computer Use session.
 
 ### Minimal configuration
 
@@ -80,12 +80,14 @@ There is no `observe` tool. The first user turn already includes the current fro
 | `list_apps` | none | list running regular apps, recapture |
 | `open_app` | `name` (display name or bundle id) | activate or launch, wait, recapture |
 | `code_agent` | `task`, optional `session_id`, optional `cwd` | enqueue on a first-class standard session and return that `session_id`; a plugin notice follows after both sessions are idle |
+| `code_agent_status` | none | list this Computer Use chat's background sessions (count, latest task, cwd, running or idle) |
+| `code_agent_stop` | `session_id` | cancel that session's running turn and queued follow-ups; the session stays idle and continuable |
 
 The thirteen GUI tools run exclusive. `presentCall` is generic. Each observation starts with `<frontmost_app>` (plus `<frontmost_window>` when the window has a title, `<frontmost_folder>` when Finder or 访达 is frontmost, or `<focus_note>` when no remaining window remains after skipping the overlay). The optional screen envelope then names index 0 and the 0–1000 space of that window. They never include pixel sizes, downscale multipliers, or a screenshot filesystem path. When no operable window remains, the observation is those tags only — there is no desktop panorama.
 
 Tests inject a fake desktop through `applyComputerUse(ctx, backend, config)` rather than a Config `driver` hook.
 
-On Desktop, omitting `session_id` applies the floating-ball Background Agent Settings when the Host publishes that selection. Passing `session_id` leaves the continued session's model unchanged. Other compositions keep the deployment Agent default.
+On Desktop, omitting `session_id` applies the floating-ball Background Agent Settings when the Host publishes that selection. Passing `session_id` leaves the continued session's model unchanged. Omitting `cwd` mints a unique subdirectory under this Computer Use session's cwd. Other compositions keep the deployment Agent default.
 
 -----
 
@@ -114,15 +116,16 @@ Desktop `code_agent` create reads optional `ctx.get('orbCodeAgentModel')` after 
 | [`src/plugin.ts`](src/plugin.ts) | Shared `applyComputerUse`: policy, thirteen GUI tools, first-frame pre-step |
 | [`src/selection-turn.ts`](src/selection-turn.ts) | Detect Desktop selection-toolbar user turns so first-frame capture is omitted |
 | [`src/observe.ts`](src/observe.ts) | Frontmost-window capture, overlay-skip foreground inspect, and model-facing envelopes |
-| [`src/code-agent.ts`](src/code-agent.ts) | Computer Use-only `code_agent`: `session.create`, optional Desktop `selectModel` on create, `session.prompt` |
-| [`src/code-agent-completion.ts`](src/code-agent-completion.ts) | Parked plugin notice after the Code session and the Computer Use caller are idle |
+| [`src/code-agent.ts`](src/code-agent.ts) | Computer Use-only `code_agent`, `code_agent_status`, and `code_agent_stop`: caller-owned registry, subdirectory cwd, `session.create`, optional Desktop `selectModel` on create, `session.prompt` |
+| [`src/code-agent-completion.ts`](src/code-agent-completion.ts) | Parked plugin notice after the Code session and the Computer Use caller are idle; abortable on stop |
+| [`src/code-agent-unattended.ts`](src/code-agent-unattended.ts) | Prepended auto-allow for `approval/request` and auto-answer for `user-questions/request` on the live Code agent |
 | [`src/macos.ts`](src/macos.ts) | Darwin capture via a full `screencapture` plus `sips` crop of the frontmost-app window union, or ScreenCaptureKit helper `--region=` when overlay window ids are set; click, scroll, hotkey, long-press, and drag via JXA `CGEvent`; `input_text` pastes via NSPasteboard; `list_apps` / `open_app` via NSWorkspace; `open_in_browser` / `open_in_finder` via `/usr/bin/open`; `inspectForeground` binds `CGWindowListCopyWindowInfo` then unwraps (skip overlay ids) plus Finder AppleScript |
 | [`src/macos-sck-capture.swift`](src/macos-sck-capture.swift) | Darwin helper: window capture or display-exclude region crop that still omits overlay CGWindowIDs; starts `NSApplication` on the main actor first |
 | [`src/open.ts`](src/open.ts) | `long_press` duration, `open_in_browser` URL, and `open_in_finder` path validation |
 | [`src/wait-args.ts`](src/wait-args.ts) | Fixed 1s `wait` and `long_wait` 10/30/60/120 buckets |
 | [`src/screenshot.ts`](src/screenshot.ts) | Desktop filenames and unique-path write for `screenshot` |
 | [`src/overlay-guard.ts`](src/overlay-guard.ts) | Optional Desktop overlay cloak: `wrapDesktopBackend` around listScreens, capture, inspect, HID, `open_app`, and `withGuiTurn`; `list_apps` / `open_in_browser` / `open_in_finder` / `copyImageToClipboard` stay unwrapped |
-| [`presets/computer-use/`](presets/computer-use/) | Computer Use agent preset: Shell, web, GUI tools, `code_agent`, `ask_user_question`, compaction |
+| [`presets/computer-use/`](presets/computer-use/) | Computer Use agent preset: Shell, web, GUI tools, `code_agent` family, `ask_user_question`, compaction |
 | — | No runtime invariant companion is published because this plugin introduces no new session events; observations ride existing `user/message` and `tool/result`. |
 
 </details>
@@ -133,13 +136,14 @@ Desktop `code_agent` create reads optional `ctx.get('orbCodeAgentModel')` after 
 ## Further Exploration
 
 - [Experimental group](../README.md) — private prototypes and the public Agent Teams exceptions.
-- [Generated tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-experimental-tool-computer-use) — the thirteen GUI schemas and `code_agent`.
+- [Generated tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-experimental-tool-computer-use) — the thirteen GUI schemas and the `code_agent` family.
 - [Adding a tool](../../../docs/cookbook/adding-a-tool.md) — UI render intent (`generic`) and image blocks in content.
 - [Computer Use Agent Note](../../../.agents/notes/implemented/feature/2026-09-13-experimental-computer-use.md) — plugin vs Skill vs loop, the Computer Use agent preset, observation-in-result, and the consent gate.
 - [Computer Use pointer and open tools](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-pointer-and-open-tools.md) — `long_press`, `drag`, `open_in_browser`, `open_in_finder`, overlay-guard split, and path/URL rejects.
 - [Computer Use wait and long_wait](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-wait-and-long-wait.md) — fixed 1s `wait`, `long_wait` buckets, and why the 10s floor is not Config.
 - [Computer Use screenshot export](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-screenshot.md) — Desktop file plus clipboard, not an observe tool.
 - [Computer Use parks Code agent completion](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-code-agent-completion.md) — parked plugin notice after both sessions are idle.
+- [Overlay Computer Use background dispatch](../../../.agents/notes/implemented/feature/2026-09-17-orb-code-agent-dispatch.md) — subdirectory cwd, caller-owned registry, status/stop, and unattended Code-agent answerers.
 - [Computer Use observation foreground](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-observation-foreground.md) — overlay-window skip, Finder folder, and focus fallback on existing `user/message` / `tool/result`.
 - [Computer Use focused-window observation](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-focused-window-observation.md) — one overlay-skipped frontmost window, `list_apps` / `open_app`, and no desktop panorama.
 - [Computer Use app-window observation](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-app-window-observation.md) — frontmost-app family window union and always-region capture.
@@ -190,11 +194,22 @@ When the latest screenshot still shows a loader, spinner, or a control that has 
 
 Route the user's request yourself:
 - Visible GUI such as opening WeChat or clicking a button in Pages → GUI tools only. Do not call code_agent.
-- New background work such as writing a Word document → code_agent without session_id.
+- Short lookup such as today's weather or current headlines → web_search or web_fetch in this chat. Do not call code_agent or GUI tools.
+- Long background work such as writing a Word document, a PPT, an Excel file, a website, or a research report (write the report as HTML) → code_agent without session_id.
 - Follow-up on the same artifact such as making that Word document's font green → code_agent with the session_id from that earlier result.
 - Unrelated new background work such as making a gobang game after the Word document → code_agent without session_id. Do not reuse the Word session.
 
+Working directory for a new code_agent session:
+- When the user names a path (Desktop, a home folder, or an absolute path) → pass that path as cwd.
+- When the user says "here", "this folder", or "the current window" and <frontmost_folder> is present → pass that folder as cwd.
+- When the user says "here", "this folder", or "the current window" and <frontmost_folder> is absent → do not call code_agent. Tell the user the frontmost window is not Finder, so the current folder path is unknown; they should click that Finder window or give a path.
+- Otherwise omit cwd; the tool creates a new subdirectory under this session's workspace.
+
+If the user's request names a folder or window that does not match the screenshot or <frontmost_folder>, ask_user_question in this chat. Do not guess. Do not fall back to this session's workspace.
+
 After code_agent returns, tell the user the background Code agent is running, then end the turn. Do not call wait, long_wait, or bash sleep to poll that session.
+
+Call code_agent_status when the user asks how many background tasks there are, what they are, where they run, or whether they are still running. Call code_agent_stop when the user wants a background task cancelled. Stopping leaves the session idle; a later code_agent with the same session_id continues that artifact.
 
 When a plugin notice reports that a Code agent session finished, tell the user which background task completed and what it produced.
 
@@ -213,7 +228,7 @@ Prefix-stable while the policy text and tool schemas remain unchanged. First-fra
 
 #### What the model sees
 
-The model sees the generated [`click`, `input_text`, `scroll`, `hotkey`, `wait`, `long_wait`, `screenshot`, `long_press`, `drag`, `open_in_browser`, `open_in_finder`, `list_apps`, `open_app`, and `code_agent` schemas](../../../docs/tool-catalog.md#deepseek-aidsh-experimental-tool-computer-use). There is no observe tool. Text-only routes still receive the GUI schemas and are refused at execute. `code_agent` is registered only in the Computer Use preset.
+The model sees the generated [`click`, `input_text`, `scroll`, `hotkey`, `wait`, `long_wait`, `screenshot`, `long_press`, `drag`, `open_in_browser`, `open_in_finder`, `list_apps`, `open_app`, `code_agent`, `code_agent_status`, and `code_agent_stop` schemas](../../../docs/tool-catalog.md#deepseek-aidsh-experimental-tool-computer-use). There is no observe tool. Text-only routes still receive the GUI schemas and are refused at execute. The `code_agent` family is registered only in the Computer Use preset.
 
 #### Token effect
 
@@ -221,7 +236,7 @@ Fixed schema cost on every request in that tool view.
 
 #### KV Cache effect
 
-Prefix-stable while the fourteen definitions and order are unchanged. Registration lifecycle may invalidate reuse from the first changed schema token.
+Prefix-stable while the sixteen definitions and order are unchanged. Registration lifecycle may invalidate reuse from the first changed schema token.
 
 ## Known Limitations and Deferred Work
 
@@ -237,7 +252,7 @@ These limits are current package constraints. The plugin drives the real unsandb
 - **Retina vs attached size** — backing scale and request rasters can differ from the capture; pass 0–1000 fractions of the visible screenshot.
 - **Fixed settle wait** — post-action delay is `postActionWaitMs` before inspect and capture pixels; there is no pixel-diff stall.
 - **No lasso or `manage_files`** — GUI coverage is click, type, scroll, hotkey, wait, long_wait, screenshot, long-press, drag, open-in-browser, open-in-finder, list-apps, and open-app. Switch apps with `open_app`; do not click the Dock. Background documents and code go through `code_agent`.
-- **`code_agent` notice needs live Agents** — execute still returns after queue accept. A missing live Code agent, a disposed Computer Use caller, or a Code session that never returns to idle drops the notice. Policy cannot stop a model that still calls `wait` or `long_wait`.
+- **`code_agent` notice needs live Agents** — execute still returns after queue accept. A missing live Code agent, a disposed Computer Use caller, or a Code session that never returns to idle drops the notice. `code_agent_stop` aborts the watch for that interval. Background Code agents auto-allow approval and auto-answer ask-user prompts; Computer Use itself still shows questions on the ball. Policy cannot stop a model that still calls `wait` or `long_wait`.
 - **Desktop overlay is macOS-only** — Windows Desktop keeps a single main window. The experimental package is a signed runtime extra, not a Desktop Host npm dependency.
 - **Experimental prototype with no stability promise** — the package is private; schemas and backends can change freely.
 

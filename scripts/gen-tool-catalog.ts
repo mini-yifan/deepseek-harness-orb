@@ -578,6 +578,8 @@ const TOOL_PACKAGES: ToolPackage[] = [
       scroll: 'packages/experimental/tool-computer-use/src/plugin.ts',
       wait: 'packages/experimental/tool-computer-use/src/plugin.ts',
       code_agent: 'packages/experimental/tool-computer-use/src/code-agent.ts',
+      code_agent_status: 'packages/experimental/tool-computer-use/src/code-agent.ts',
+      code_agent_stop: 'packages/experimental/tool-computer-use/src/code-agent.ts',
     },
     requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.attachments', 'ctx.llm + an image-capable route (execution and first-frame screenshot)', 'ctx.sessionController (code_agent)'],
     writes: ['tool/call', 'durable attachment (saveImage)', 'user/message first-frame notice', 'tool/result', 'session.create + session.prompt (code_agent)', 'user/message plugin notice (code_agent completion)'],
@@ -592,7 +594,7 @@ const TOOL_PACKAGES: ToolPackage[] = [
       await ctx.plugin(ToolCodeAgent)
     },
     note:
-      'Experimental opt-in GUI tools plus Computer Use-only code_agent. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no observe tool: the first user turn and every GUI result attach the overlay-skipped frontmost window plus foreground tags. screenshot writes Desktop files and the clipboard when the user asked for a file or paste. list_apps and open_app switch applications without clicking the Dock. code_agent is registered only with the Computer Use preset; the catalog stub satisfies inject so the schema is harvestable.',
+      'Experimental opt-in GUI tools plus Computer Use-only code_agent, code_agent_status, and code_agent_stop. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no observe tool: the first user turn and every GUI result attach the overlay-skipped frontmost window plus foreground tags. screenshot writes Desktop files and the clipboard when the user asked for a file or paste. list_apps and open_app switch applications without clicking the Dock. code_agent tools are registered only with the Computer Use preset; the catalog stub satisfies inject so the schema is harvestable.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-todo',

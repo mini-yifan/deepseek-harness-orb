@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-`session.prompt({ mode: 'queue' })` 接受之后，`code_agent` 在调用方 Computer Use agent 的 `ctx.effect` 上启动监视，并放在 `agents.withoutInitiator` 下。`execute` 仍然立即返回，也不会把 `exec.signal` 带进监视，因此之后 Computer Use 的停止不会取消那条一等 Code 会话。
+`session.prompt({ mode: 'queue' })` 接受之后，`code_agent` 在调用方 Computer Use agent 的 `ctx.effect` 上启动监视，并放在 `agents.withoutInitiator` 下。`execute` 仍然立即返回，也不会把 `exec.signal` 带进监视，因此之后 Computer Use 的停止不会取消那条一等 Code 会话。`code_agent_stop` 会中止该监视，避免为被取消的那一轮再 followup 完成通知；[Overlay Computer Use 后台调度](2026-09-17-orb-code-agent-dispatch.zh.md) 拥有停止。
 
 Code 区间从该提示词的持久 `rpcId` 起到下一次整 agent 空闲。若 Code agent 仍是 `idle` 且提示词还在收件箱里，监视会先等到 `running`（或销毁）再调用 `whenIdle()`，避免空闲时的 `whenIdle()` 在工作开始前就结束。用户在侧栏继续给那条 Code 会话发消息，会把通知推迟到该会话空闲。
 

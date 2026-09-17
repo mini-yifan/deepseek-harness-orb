@@ -48,16 +48,22 @@ After a drag-select in another app, a toolbar offers **Search** (Bing in the def
 
 The input placeholder is “Ask the desktop agent…”. Sends go to the Computer Use session. The ball defaults to DeepSeek-V41-Flash at Max thinking until you change **Floating Agent Settings**; that choice does not change the main window’s New Chat model. Stop cancels only that Computer Use session, not sidebar standard sessions. Right-click the ball for **Open Main Window**, **Floating Agent Settings** and **Background Agent Settings** (independent model and reasoning effort; background apply is for new `code_agent` sessions only), enable or disable the selection toolbar, and **Quit DeepSeek Harness**; only an explicit Quit ends the process.
 
-The ball’s Computer Use bash and filesystem, and new background `code_agent` sessions on `dsh_orb`, follow the Access chip on the ball (default Full access, stored as a Desktop preference). Changing Access in the main window applies while you keep chatting there; sending from the ball writes the chip on the ball back onto that agent.
+The ball’s Computer Use bash and filesystem, and new background `code_agent` sessions on `dsh_orb` or a subdirectory of it, follow the Access chip on the ball (default Full access, stored as a Desktop preference). A background session on a named folder outside that tree stays ordinary Workspace Write; that agent also answers its own approval and ask-user prompts. Changing Access in the main window applies while you keep chatting there; sending from the ball writes the chip on the ball back onto that agent.
 
 ## How the ball routes background work
 
 The Computer Use agent on the ball decides how to handle the current sentence. There is no extra runtime classifier:
 
 - Visible GUI (open WeChat, click a button in Pages) uses GUI tools (click, input_text, scroll, hotkey, wait, long_wait, screenshot, long_press, drag, open_in_browser, open_in_finder) and does not call the background agent.
+- Short lookup (today's weather, current headlines) uses web_search or web_fetch in the ball chat. It does not start a background agent or click around the GUI.
+- Long work (Word, PPT, Excel, a website, or a research report written as HTML) starts a background Code agent. The ball tells you it is running and ends the turn.
 - Asking for a screenshot file uses screenshot: it writes the capture onto Desktop and copies it to the clipboard.
-- A follow-up on the same artifact (after writing a Word document, make the font green) sends another message on that existing standard session.
-- Unrelated new background work (after the Word document, make a gobang game) creates a blank standard session.
+- A follow-up on the same artifact (after writing a Word document, make the font green) sends another message on that existing standard session, even if it is still running.
+- Unrelated new background work (after the Word document, make a gobang game) creates another standard session.
+
+When you name a folder (Desktop, a home path), that background session uses it. When you say here / this folder / the current window and Finder is frontmost, it uses that Finder folder. When you say those words and Finder is not frontmost, the ball asks you to click that Finder window or give a path. Otherwise it creates a new subdirectory under `dsh_orb`. If you name a folder or window that does not match what the ball sees, it asks instead of guessing.
+
+Ask the ball what is running, and it lists only the background agents this Computer Use chat started (count, latest task, folder, running or idle). New chat starts with an empty list. Ask it to stop one, and that session's current turn and queued follow-ups die; the session stays so you can continue the same artifact later. Overlay Stop still cancels only Computer Use.
 
 After enqueue, the Computer Use agent tells you the background session is running and ends its turn, so you can keep chatting or give it new GUI work. When that standard session finishes and the ball is idle, Computer Use reports what the background agent produced.
 
