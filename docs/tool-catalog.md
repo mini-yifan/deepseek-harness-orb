@@ -38,7 +38,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-subagent-control` | `interrupt_agent`, `list_agents`, `send_message` | `ctx.tools`, `ctx.subagents`, `ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`, `tool/result`, `child session events through ctx.subagents` | - | The globally named control tools over continuable background subagents: provider-bound `tool-subagent` instances register distinct delegation tools, while this package registers `send_message` and `interrupt_agent` once, plus `list_agents` from its separately loaded `/list-agents` plugin (whose catalog rows use the sessionProjections and live Agent registries). |
 | `@deepseek-ai/dsh-tool-jobs` | `job_kill`, `job_list`, `job_output` | `ctx.tools`, `ctx.jobs`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `user/message via agent.inject() for background completion notices` | - | The kind-agnostic background-job controller: background bash commands, PTY sends, and subagents are read, listed, and killed through the same three tools. Loading the plugin attaches the controller that arms producers' `ctx.jobs.start()`. |
 | `@deepseek-ai/dsh-experimental-tool-agent-team` | `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | All nine tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
-| `@deepseek-ai/dsh-experimental-tool-computer-use` | `click`, `code_agent`, `drag`, `hotkey`, `input_text`, `list_apps`, `long_press`, `long_wait`, `open_app`, `open_in_browser`, `open_in_finder`, `screenshot`, `scroll`, `wait` | `ctx.tools`, `ctx.systemPrompt`, `ctx.attachments`, `ctx.llm + an image-capable route (execution and first-frame screenshot)`, `ctx.sessionController (code_agent)` | `tool/call`, `durable attachment (saveImage)`, `user/message first-frame notice`, `tool/result`, `session.create + session.prompt (code_agent)`, `user/message plugin notice (code_agent completion)` | - | Experimental opt-in GUI tools plus Computer Use-only code_agent. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no observe tool: the first user turn and every GUI result attach the overlay-skipped frontmost window plus foreground tags. screenshot writes Desktop files and the clipboard when the user asked for a file or paste. list_apps and open_app switch applications without clicking the Dock. code_agent is registered only with the Computer Use preset; the catalog stub satisfies inject so the schema is harvestable. |
+| `@deepseek-ai/dsh-experimental-tool-computer-use` | `click`, `code_agent`, `code_agent_status`, `code_agent_stop`, `drag`, `hotkey`, `input_text`, `list_apps`, `long_press`, `long_wait`, `open_app`, `open_in_browser`, `open_in_finder`, `screenshot`, `scroll`, `wait` | `ctx.tools`, `ctx.systemPrompt`, `ctx.attachments`, `ctx.llm + an image-capable route (execution and first-frame screenshot)`, `ctx.sessionController (code_agent)` | `tool/call`, `durable attachment (saveImage)`, `user/message first-frame notice`, `tool/result`, `session.create + session.prompt (code_agent)`, `user/message plugin notice (code_agent completion)` | - | Experimental opt-in GUI tools plus Computer Use-only code_agent, code_agent_status, and code_agent_stop. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no observe tool: the first user turn and every GUI result attach the overlay-skipped frontmost window plus foreground tags. screenshot writes Desktop files and the clipboard when the user asked for a file or paste. list_apps and open_app switch applications without clicking the Dock. code_agent tools are registered only with the Computer Use preset; the catalog stub satisfies inject so the schema is harvestable. |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
@@ -2126,7 +2126,7 @@ Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/ex
 
 ### `code_agent`
 
-Delegate background coding and document work to a standard-mode Code agent that appears in the desktop sidebar like a user-created session. Do not call this tool for visible GUI work such as opening WeChat or clicking a button in Pages — use the GUI tools instead. Omit session_id to create a new blank standard session: write a Word document, make a gobang game, or any task that is not a follow-up to a previous code_agent result. Pass session_id with the id returned by an earlier code_agent result when continuing the same artifact, for example making that Word document's font green. Do not pass a previous id when the new work is unrelated. task is the user message to enqueue. The call returns after the standard session accepts the message; it does not wait for that session to finish. Tell the user the background Code agent is running, then end the turn. Do not call wait, long_wait, or bash sleep to poll that session. A plugin notice arrives later when that session is idle and this session is idle; then tell the user what the Code agent produced. cwd defaults to this session's workspace; omit it unless the new session needs a different directory. session_id cannot target this Computer Use session, a subagent child, or a non-standard session.
+Delegate background coding and document work to a standard-mode Code agent that appears in the desktop sidebar like a user-created session. Do not call this tool for visible GUI work such as opening WeChat or clicking a button in Pages — use the GUI tools instead. Do not call this tool for a short lookup such as today's weather or current headlines — use web_search or web_fetch in this chat. Omit session_id to create a new blank standard session: write a Word document, make a gobang game, write an HTML research report, or any task that is not a follow-up to a previous code_agent result. Pass session_id with the id returned by an earlier code_agent result when continuing the same artifact, for example making that Word document's font green. Do not pass a previous id when the new work is unrelated. session_id must be a session this Computer Use agent started. task is the user message to enqueue. The call returns after the standard session accepts the message; it does not wait for that session to finish. Tell the user the background Code agent is running, then end the turn. Do not call wait, long_wait, or bash sleep to poll that session. A plugin notice arrives later when that session is idle and this session is idle; then tell the user what the Code agent produced. Pass cwd when the user named a path or said this folder and <frontmost_folder> is present. Omit cwd to create a new subdirectory under this session's workspace. session_id cannot target this Computer Use session, a subagent child, or a non-standard session.
 
 ```json
 {
@@ -2138,15 +2138,49 @@ Delegate background coding and document work to a standard-mode Code agent that 
     },
     "session_id": {
       "type": "string",
-      "description": "Existing standard session to continue. Omit to create a blank session. Required when following up on the same artifact; forbidden when starting unrelated work."
+      "description": "Existing standard session this Computer Use agent started. Omit to create a blank session. Required when following up on the same artifact; forbidden when starting unrelated work."
     },
     "cwd": {
       "type": "string",
-      "description": "Workspace directory for a newly created session. Defaults to this Computer Use session's cwd."
+      "description": "Workspace directory for a newly created session. Pass a named path or <frontmost_folder>. Omit to create a new subdirectory under this Computer Use session's cwd."
     }
   },
   "required": [
     "task"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/code-agent.ts`](../packages/experimental/tool-computer-use/src/code-agent.ts)
+
+### `code_agent_status`
+
+List background Code agent sessions this Computer Use agent started. Returns the count plus each task name, working directory, and running or idle status. Does not include sessions from other Computer Use chats or the main window. Stopped and finished sessions stay listed as idle so they can be continued.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/code-agent.ts`](../packages/experimental/tool-computer-use/src/code-agent.ts)
+
+### `code_agent_stop`
+
+Stop a background Code agent this Computer Use agent started. Cancels the current turn and drops queued follow-ups. The session stays idle so a later code_agent call with the same session_id can continue. Does not delete files. session_id is required and must be a session this Computer Use agent started.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "description": "Background Code agent session this Computer Use agent started. Required."
+    }
+  },
+  "required": [
+    "session_id"
   ]
 }
 ```
@@ -2468,7 +2502,7 @@ Pause 1 second, then return a fresh frontmost-window screenshot without moving t
 
 Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
 
-Experimental opt-in GUI tools plus Computer Use-only code_agent. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no observe tool: the first user turn and every GUI result attach the overlay-skipped frontmost window plus foreground tags. screenshot writes Desktop files and the clipboard when the user asked for a file or paste. list_apps and open_app switch applications without clicking the Dock. code_agent is registered only with the Computer Use preset; the catalog stub satisfies inject so the schema is harvestable.
+Experimental opt-in GUI tools plus Computer Use-only code_agent, code_agent_status, and code_agent_stop. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no observe tool: the first user turn and every GUI result attach the overlay-skipped frontmost window plus foreground tags. screenshot writes Desktop files and the clipboard when the user asked for a file or paste. list_apps and open_app switch applications without clicking the Dock. code_agent tools are registered only with the Computer Use preset; the catalog stub satisfies inject so the schema is harvestable.
 
 <a id="deepseek-aidsh-tool-todo"></a>
 

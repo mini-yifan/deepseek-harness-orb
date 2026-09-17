@@ -42,7 +42,7 @@
 | `@deepseek-ai/dsh-tool-subagent-control` | `interrupt_agent`、`list_agents`、`send_message` | `ctx.tools`、`ctx.subagents`、`ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`、`tool/result`、`child session events through ctx.subagents` | - | 这些是控制可继续后台 subagent 的全局命名工具：绑定提供方的 `tool-subagent` 实例注册不同的委派工具；本包注册一次 `send_message` 和 `interrupt_agent`，另由 `list_agents` 通过单独加载的 `/list-agents` 插件提供，其目录行使用 sessionProjections 和实时 Agent 注册表。 |
 | `@deepseek-ai/dsh-tool-jobs` | `job_kill`、`job_list`、`job_output` | `ctx.tools`、`ctx.jobs`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`user/message via agent.inject() for background completion notices` | - | 与任务种类无关的后台任务控制器：后台 bash 命令、PTY 发送和 subagent 都通过相同的 3 个工具读取、列出和终止。加载该插件会挂接控制器，从而启用生产方的 `ctx.jobs.start()`。 |
 | `@deepseek-ai/dsh-experimental-tool-agent-team` | `interrupt_agent`、`list_agents`、`send_message`、`spawn_teammate`、`team_task_create`、`team_task_get`、`team_task_list`、`team_task_update`、`wait_agent` | `ctx.tools`、`ctx.systemPrompt`、`ctx.agentTeams`、`an exact live Team member Agent` | `tool/call`、`team/member`、`team/message/queued`、`team/message/delivered`、`team/task`、`tool/result` | - | 这 9 个工具限定于隐式 Team Lead 与持久 teammate 作用域。随产品发布的 dsh-base bundle 默认禁用该包；文档中的 Agent Teams profile patch 会启用它，并禁用旧 continuable child 的同名控制工具。 |
-| `@deepseek-ai/dsh-experimental-tool-computer-use` | `click`、`code_agent`、`drag`、`hotkey`、`input_text`、`list_apps`、`long_press`、`long_wait`、`open_app`、`open_in_browser`、`open_in_finder`、`screenshot`、`scroll`、`wait` | `ctx.tools`、`ctx.systemPrompt`、`ctx.attachments`、`ctx.llm + an image-capable route (execution and first-frame screenshot)`、`ctx.sessionController (code_agent)` | `tool/call`、`durable attachment (saveImage)`、`user/message first-frame notice`、`tool/result`、`session.create + session.prompt (code_agent)`、`user/message plugin notice (code_agent completion)` | - | 实验性可选 GUI 工具，外加仅 Computer Use 的 code_agent。不在 dsh-base 中。生产环境的捕获与输入仅 macOS 实现，其他平台在执行时失败。测试与 snapshot 通过 applyComputerUse 注入假桌面；本目录引导使用生产 apply，只注册 schema，不发送输入。没有 observe 工具：首次用户回合和每次 GUI 结果都会附上跳过 overlay 后的最前窗口以及前台标签。screenshot 会在用户要文件或粘贴时写入桌面文件和剪贴板。list_apps 与 open_app 用于切换应用，不要去点 Dock。code_agent 只随 Computer Use preset 注册；本目录桩满足 inject，以便采集 schema。 |
+| `@deepseek-ai/dsh-experimental-tool-computer-use` | `click`、`code_agent`、`code_agent_status`、`code_agent_stop`、`drag`、`hotkey`、`input_text`、`list_apps`、`long_press`、`long_wait`、`open_app`、`open_in_browser`、`open_in_finder`、`screenshot`、`scroll`、`wait` | `ctx.tools`、`ctx.systemPrompt`、`ctx.attachments`、`ctx.llm + an image-capable route (execution and first-frame screenshot)`、`ctx.sessionController (code_agent)` | `tool/call`、`durable attachment (saveImage)`、`user/message first-frame notice`、`tool/result`、`session.create + session.prompt (code_agent)`、`user/message plugin notice (code_agent completion)` | - | 实验性可选 GUI 工具，外加仅 Computer Use 的 code_agent、code_agent_status 和 code_agent_stop。不在 dsh-base 中。生产环境的捕获与输入仅 macOS 实现，其他平台在执行时失败。测试与 snapshot 通过 applyComputerUse 注入假桌面；本目录引导使用生产 apply，只注册 schema，不发送输入。没有 observe 工具：首次用户回合和每次 GUI 结果都会附上跳过 overlay 后的最前窗口以及前台标签。screenshot 会在用户要文件或粘贴时写入桌面文件和剪贴板。list_apps 与 open_app 用于切换应用，不要去点 Dock。code_agent 工具只随 Computer Use preset 注册；本目录桩满足 inject，以便采集 schema。 |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`、`owning Agent session` | `tool/call`、`todo/write`、`tool/result` | - | todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为检查清单。`allowParallelInProgress` 是没有默认值的必填项，因此本目录明确选择 `true`，对应描述允许同时存在多个 `in_progress` 项。选择 `false` 的部署会获得同一工具，但描述会要求只能有 1 个活动任务。 |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`、`ctx.workflowEngine`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents the script children)` | `tool/call`、`tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-web` | `web_fetch`、`web_search` | `ctx.tools`、`ctx.web`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | web_search 和 web_fetch 将提供方选择置于 ctx.web 之后，使模型可见 schema 在更换后端时保持稳定。 |
@@ -2132,7 +2132,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 ### `code_agent`
 
-把后台编码和文档工作委派给标准模式的 Code agent，它会像用户创建的会话一样出现在桌面侧栏。可见 GUI 工作不要调用此工具，例如打开微信或在 Pages 里点击按钮——改用 GUI 工具。省略 session_id 以新建空白 standard 会话：写一份 Word、做一个五子棋，或任何不是先前 code_agent 结果之续写的任务。续写同一产物时传入先前 code_agent 结果返回的 id，例如把那份 Word 的字体改成绿色。新工作无关时不要传入先前 id。task 是要入队的用户消息。调用在 standard 会话接受该消息后返回；不等待该会话完成。告诉用户后台 Code agent 正在运行，然后结束本回合。不要调用 wait、long_wait 或 bash sleep 去轮询该会话。之后当该会话空闲且本会话也空闲时会到达一条插件通知；然后告诉用户 Code agent 做成了什么。cwd 默认为此会话的工作区；除非新会话需要不同目录，否则省略。session_id 不能指向本 Computer Use 会话、subagent 子会话或非 standard 会话。
+把后台编码和文档工作委派给标准模式的 Code agent，它会像用户创建的会话一样出现在桌面侧栏。可见 GUI 工作不要调用此工具，例如打开微信或在 Pages 里点击按钮——改用 GUI 工具。短查询不要调用此工具，例如今天的天气或当前新闻标题——改用本对话里的 web_search 或 web_fetch。省略 session_id 以新建空白 standard 会话：写一份 Word、做一个五子棋、写一份 HTML 调研报告，或任何不是先前 code_agent 结果之续写的任务。续写同一产物时传入先前 code_agent 结果返回的 id，例如把那份 Word 的字体改成绿色。新工作无关时不要传入先前 id。session_id 必须是这个 Computer Use agent 启动过的会话。task 是要入队的用户消息。调用在 standard 会话接受该消息后返回；不等待该会话完成。告诉用户后台 Code agent 正在运行，然后结束本回合。不要调用 wait、long_wait 或 bash sleep 去轮询该会话。之后当该会话空闲且本会话也空闲时会到达一条插件通知；然后告诉用户 Code agent 做成了什么。用户点名了路径或说了这个文件夹且存在 <frontmost_folder> 时传入 cwd。省略 cwd 会在本会话工作区下新建子目录。session_id 不能指向本 Computer Use 会话、subagent 子会话或非 standard 会话。
 
 ```json
 {
@@ -2144,15 +2144,49 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
     },
     "session_id": {
       "type": "string",
-      "description": "Existing standard session to continue. Omit to create a blank session. Required when following up on the same artifact; forbidden when starting unrelated work."
+      "description": "Existing standard session this Computer Use agent started. Omit to create a blank session. Required when following up on the same artifact; forbidden when starting unrelated work."
     },
     "cwd": {
       "type": "string",
-      "description": "Workspace directory for a newly created session. Defaults to this Computer Use session's cwd."
+      "description": "Workspace directory for a newly created session. Pass a named path or <frontmost_folder>. Omit to create a new subdirectory under this Computer Use session's cwd."
     }
   },
   "required": [
     "task"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-computer-use/src/code-agent.ts`](../packages/experimental/tool-computer-use/src/code-agent.ts)
+
+### `code_agent_status`
+
+列出这个 Computer Use agent 启动过的后台 Code agent 会话。返回数量以及每个任务名、工作目录、running 或 idle 状态。不含其他 Computer Use 对话或主窗口的会话。已停止和已完成的会话仍列为 idle，以便续写。
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+来源：[`packages/experimental/tool-computer-use/src/code-agent.ts`](../packages/experimental/tool-computer-use/src/code-agent.ts)
+
+### `code_agent_stop`
+
+停止这个 Computer Use agent 启动过的后台 Code agent。取消当前回合并丢掉已排队的追加。会话保持 idle，之后用同一 session_id 再调 code_agent 可以续写。不删除文件。session_id 必填，且必须是这个 Computer Use agent 启动过的会话。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "description": "Background Code agent session this Computer Use agent started. Required."
+    }
+  },
+  "required": [
+    "session_id"
   ]
 }
 ```
@@ -2474,7 +2508,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 来源：[`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
 
-实验性可选 GUI 工具，外加仅 Computer Use 的 code_agent。不在 dsh-base 中。生产环境的捕获与输入仅 macOS 实现，其他平台在执行时失败。测试与 snapshot 通过 applyComputerUse 注入假桌面；本目录引导使用生产 apply，只注册 schema，不发送输入。没有 observe 工具：首次用户回合和每次 GUI 结果都会附上跳过 overlay 后的最前窗口以及前台标签。screenshot 会在用户要文件或粘贴时写入桌面文件和剪贴板。list_apps 与 open_app 用于切换应用，不要去点 Dock。code_agent 只随 Computer Use preset 注册；本目录桩满足 inject，以便采集 schema。
+实验性可选 GUI 工具，外加仅 Computer Use 的 code_agent、code_agent_status 和 code_agent_stop。不在 dsh-base 中。生产环境的捕获与输入仅 macOS 实现，其他平台在执行时失败。测试与 snapshot 通过 applyComputerUse 注入假桌面；本目录引导使用生产 apply，只注册 schema，不发送输入。没有 observe 工具：首次用户回合和每次 GUI 结果都会附上跳过 overlay 后的最前窗口以及前台标签。screenshot 会在用户要文件或粘贴时写入桌面文件和剪贴板。list_apps 与 open_app 用于切换应用，不要去点 Dock。code_agent 工具只随 Computer Use preset 注册；本目录桩满足 inject，以便采集 schema。
 
 <a id="deepseek-aidsh-tool-todo"></a>
 

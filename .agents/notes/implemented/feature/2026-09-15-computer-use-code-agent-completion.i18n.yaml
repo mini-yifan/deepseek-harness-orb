@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-15-computer-use-code-agent-completion.md
-2026-09-15-computer-use-code-agent-completion.md: 11c44ac638e5bc0328db1462a68e2532b551f24a
-2026-09-15-computer-use-code-agent-completion.zh.md: 14892883b835984343ebbac2b2c1a8c88ec6ec4e
+2026-09-15-computer-use-code-agent-completion.md: e9e51fda5c24fbdc6410802494e9252cc5092fcf
+2026-09-15-computer-use-code-agent-completion.zh.md: 97a1d248403a695c687518c946ed2ecb12979a7a

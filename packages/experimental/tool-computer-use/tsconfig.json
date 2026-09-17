@@ -16,6 +16,8 @@
     { "path": "../../core/agent" },
     { "path": "../../util/brand" },
     { "path": "../../api/session-controller/tsconfig.host.json" },
+    { "path": "../../interaction/user-approval" },
+    { "path": "../../interaction/user-questions" },
     { "path": "../../attachment/attachment" },
     { "path": "../../llm/llm" }
   ]

@@ -38,8 +38,10 @@ export interface CodeAgentCompletionWatch {
  * session's next idle and the Computer Use caller is idle. Does not throw;
  * missing context or a disposed caller drops the notice.
  * @param watch - live caller, live Code agent, and the accepted prompt.
+ * @returns the abort controller for this interval, or undefined when the
+ *   watch could not be owned.
  */
-export function watchCodeAgentCompletion(watch: CodeAgentCompletionWatch): void {
+export function watchCodeAgentCompletion(watch: CodeAgentCompletionWatch): AbortController | undefined {
   const abort = new AbortController()
   try {
     watch.caller.ctx.effect(() => {
@@ -49,7 +51,7 @@ export function watchCodeAgentCompletion(watch: CodeAgentCompletionWatch): void 
     })
   } catch {
     // Computer Use agent context already disposed; no owner for the watch.
-    return
+    return undefined
   }
   try {
     watch.agents.withoutInitiator(() => {
@@ -58,7 +60,9 @@ export function watchCodeAgentCompletion(watch: CodeAgentCompletionWatch): void 
   } catch {
     // Agent initiator scope is closing; a watch would outlive its owner.
     abort.abort()
+    return undefined
   }
+  return abort
 }
 
 async function runWatch(watch: CodeAgentCompletionWatch, signal: AbortSignal): Promise<void> {
