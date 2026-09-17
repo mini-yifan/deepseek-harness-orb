@@ -529,7 +529,7 @@ it('places Stop at the opposite pill end from the ball', () => {
   expect(css).not.toMatch(/body\.expand-right #stop \{\s*left:/u)
 })
 
-it('places History at the top-left opposite New', () => {
+it('places History and New on the transcript edge opposite the input pill', () => {
   const html = readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8')
   const css = readFileSync(new URL('../renderer/floating.css', import.meta.url), 'utf8')
   expect(html.indexOf('id="history"')).toBeGreaterThan(-1)
@@ -538,6 +538,17 @@ it('places History at the top-left opposite New', () => {
   expect(html).toContain('id="history-list"')
   expect(css).toMatch(/#history \{\s*left: 12px/u)
   expect(css).toMatch(/#new-conversation \{\s*right: 12px/u)
+  expect(css).toMatch(/#history,\s*#new-conversation \{[^}]*top: 12px/u)
+  expect(css).toMatch(
+    /body\.expand-down #history,\s*body\.expand-down #new-conversation \{\s*top: auto;\s*bottom: 12px/u,
+  )
+  expect(css).toMatch(
+    /body\.expand-down #panel \{\s*padding-top: calc\(var\(--ball\) \+ 10px\);\s*padding-bottom: 20px/u,
+  )
+  expect(css).toMatch(
+    /body\.expand-down #transcript,\s*body\.expand-down #history-list,\s*body\.expand-down #question \{/u,
+  )
+  expect(css).toMatch(/body\.expand-down #question \{\s*padding-top: 0;\s*padding-bottom: 36px/u)
 })
 
 it('lists orb Computer Use chats and reopens the selected session', async () => {
