@@ -1,5 +1,6 @@
 /** Electron shell: desktop project ownership, custom protocol, windows, and lifecycle. */
 
+import { randomUUID } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
 import { extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -39,6 +40,11 @@ import {
   readFloatingSessionId,
   writeFloatingSessionId,
 } from './floating-session.ts'
+import {
+  readOrbAgentModels,
+  writeOrbAgentModels,
+  type OrbAgentModelSelection,
+} from './orb-agent-models.ts'
 import { createSelectionToolbarWindow, hideSelectionToolbar } from './selection-toolbar-window.ts'
 import { SelectionToolbarController } from './selection-toolbar-controller.ts'
 
@@ -264,6 +270,12 @@ async function main(): Promise<void> {
     }, () => { app.quit() }, {
       enabled: () => selection?.enabled() === true,
       toggle: () => { selection?.toggle() },
+    }, {
+      loadCatalog: loadFloatingModelCatalog,
+      overlay: () => readOrbAgentModels(activeProject).overlay,
+      background: () => readOrbAgentModels(activeProject).background,
+      onSelectOverlay: persistOverlayModel,
+      onSelectBackground: persistBackgroundModel,
     })
     app.setActivationPolicy('regular')
     app.dock?.show()
@@ -333,13 +345,93 @@ async function main(): Promise<void> {
         }
       },
       fetch: (request: Request) => host.fetch(request),
+      setOrbCodeAgentModel: (selection: OrbAgentModelSelection) => { host.setOrbCodeAgentModel(selection) },
     }
   }, (state) => {
     if (state.phase === 'starting' && !emergencyDocument) pageError = undefined
     publishBackend(backendState())
-    if (state.phase === 'ready') ensureFloating()
+    if (state.phase === 'ready') {
+      pushBackgroundModel()
+      ensureFloating()
+    }
     if (state.phase === 'error') void navigateMain(startupUrl).catch((error: unknown) => { console.error(error) })
   })
+
+  function pushBackgroundModel(): void {
+    backend.host?.setOrbCodeAgentModel(readOrbAgentModels(activeProject).background)
+  }
+
+  async function loadFloatingModelCatalog(): Promise<{
+    readonly groups: readonly {
+      readonly id: string
+      readonly name: string
+      readonly models: readonly {
+        readonly id: string
+        readonly name: string
+        readonly reasoning?: {
+          readonly efforts: readonly { readonly id: string; readonly name: string }[]
+          readonly defaultEffort?: string
+        }
+      }[]
+    }[]
+  } | undefined> {
+    const host = backend.host
+    if (host === undefined) return undefined
+    const rpcId = randomUUID()
+    const response = await host.fetch(new Request(`${SCHEME}://app/api/session/modelCatalog`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        type: 'client-request',
+        rpcId,
+        method: 'session/modelCatalog',
+        payload: { args: {} },
+      }),
+    }))
+    if (!response.ok) return undefined
+    const envelope: unknown = await response.json()
+    if (typeof envelope !== 'object' || envelope === null) return undefined
+    const record = envelope as {
+      type?: unknown
+      rpcId?: unknown
+      result?: { ok?: unknown; value?: unknown }
+    }
+    if (record.type !== 'server-response' || record.rpcId !== rpcId || record.result?.ok !== true) {
+      return undefined
+    }
+    const value = record.result.value
+    if (typeof value !== 'object' || value === null || !('groups' in value) || !Array.isArray(value.groups)) {
+      return undefined
+    }
+    return value as {
+      readonly groups: readonly {
+        readonly id: string
+        readonly name: string
+        readonly models: readonly {
+          readonly id: string
+          readonly name: string
+          readonly reasoning?: {
+            readonly efforts: readonly { readonly id: string; readonly name: string }[]
+            readonly defaultEffort?: string
+          }
+        }[]
+      }[]
+    }
+  }
+
+  function persistOverlayModel(selection: OrbAgentModelSelection): void {
+    const current = readOrbAgentModels(activeProject)
+    writeOrbAgentModels(activeProject, { overlay: selection, background: current.background })
+    if (floatingWindow !== undefined && !floatingWindow.isDestroyed()) {
+      floatingWindow.webContents.send(DESKTOP_IPC.floatingOverlayModel, selection)
+    }
+  }
+
+  function persistBackgroundModel(selection: OrbAgentModelSelection): void {
+    const current = readOrbAgentModels(activeProject)
+    writeOrbAgentModels(activeProject, { overlay: current.overlay, background: selection })
+    pushBackgroundModel()
+  }
 
   const publishUpdate = (state: DesktopUpdateState): DesktopUpdateState => {
     updateState = state
@@ -534,6 +626,10 @@ async function main(): Promise<void> {
       throw new Error('dsh desktop: floating session id must be a non-empty string')
     }
     writeFloatingSessionId(activeProject, sessionId)
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingOverlayModelGet, (event) => {
+    requireFloatingWindow(event)
+    return readOrbAgentModels(activeProject).overlay
   })
   ipcMain.handle(DESKTOP_IPC.floatingOrbWorkspace, (event) => {
     requireFloatingWindow(event)

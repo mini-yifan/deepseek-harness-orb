@@ -193,6 +193,12 @@ it('creates a Computer Use session on dsh_orb and sends from the overlay', async
       setExpanded,
       orbWorkspacePath: async () => '/tmp/dsh_orb',
       setSessionRunning: vi.fn(),
+      overlayModel: async () => ({
+        provider: 'deepseek-official',
+        model: 'deepseek-flash',
+        reasoningEffort: 'max',
+      }),
+      onOverlayModel: () => () => {},
       onSelectionPrompt: () => () => {},
     },
   }
@@ -213,6 +219,7 @@ it('creates a Computer Use session on dsh_orb and sends from the overlay', async
         provider: 'deepseek-official',
         model: 'deepseek-flash',
         reasoningEffort: 'max',
+        saveAsDefault: false,
       },
     })
     expect(calls.some(call => call.method === 'session/page')).toBe(false)
@@ -324,6 +331,12 @@ it('collapses then moves by the ball grab offset instead of the window origin', 
       setExpanded,
       orbWorkspacePath: async () => '/tmp/dsh_orb',
       setSessionRunning: vi.fn(),
+      overlayModel: async () => ({
+        provider: 'deepseek-official',
+        model: 'deepseek-flash',
+        reasoningEffort: 'max',
+      }),
+      onOverlayModel: () => () => {},
       onSelectionPrompt: () => () => {},
     },
   }
@@ -408,6 +421,12 @@ async function mountPointerOverlay() {
       setExpanded,
       orbWorkspacePath: async () => '/tmp/dsh_orb',
       setSessionRunning: vi.fn(),
+      overlayModel: async () => ({
+        provider: 'deepseek-official',
+        model: 'deepseek-flash',
+        reasoningEffort: 'max',
+      }),
+      onOverlayModel: () => () => {},
       onSelectionPrompt: () => () => {},
     },
   }
@@ -622,6 +641,12 @@ it('lists orb Computer Use chats and reopens the selected session', async () => 
       setExpanded: async (expanded: boolean) => ({ expanded, horizontal: 'left', vertical: 'up' }),
       orbWorkspacePath: async () => '/tmp/dsh_orb',
       setSessionRunning: vi.fn(),
+      overlayModel: async () => ({
+        provider: 'deepseek-official',
+        model: 'deepseek-flash',
+        reasoningEffort: 'max',
+      }),
+      onOverlayModel: () => () => {},
       onSelectionPrompt: () => () => {},
     },
   }
@@ -776,6 +801,12 @@ async function mountQuestionOverlay() {
         setExpanded,
         orbWorkspacePath: async () => '/tmp/dsh_orb',
         setSessionRunning: vi.fn(),
+        overlayModel: async () => ({
+          provider: 'deepseek-official',
+          model: 'deepseek-flash',
+          reasoningEffort: 'max',
+        }),
+        onOverlayModel: () => () => {},
         onSelectionPrompt: () => () => {},
       },
     },
@@ -1079,6 +1110,12 @@ it('expands and session/prompts a Desktop selection-toolbar message', async () =
       setExpanded,
       orbWorkspacePath: async () => '/tmp/dsh_orb',
       setSessionRunning,
+      overlayModel: async () => ({
+        provider: 'deepseek-official',
+        model: 'deepseek-flash',
+        reasoningEffort: 'max',
+      }),
+      onOverlayModel: () => () => {},
       onSelectionPrompt(listener: (payload: { text: string }) => void) {
         selectionPrompt = listener
         return () => {}
@@ -1101,5 +1138,97 @@ it('expands and session/prompts a Desktop selection-toolbar message', async () =
     })
     expect(setExpanded.mock.calls.some(call => call[0] === true)).toBe(true)
     expect(setSessionRunning).toHaveBeenCalledWith(true)
+  } finally { dom.window.close() }
+})
+
+it('applies a live overlay model change without writing the Agent default', async () => {
+  const html = readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8')
+  const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'dsh-app://shell/floating.html' })
+  const calls: { method: string; payload: unknown }[] = []
+  const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+    if (isRemoteStream(_input)) return hangingStreamResponse(init?.signal)
+    const body = JSON.parse(String(init?.body)) as {
+      rpcId: string
+      method: string
+      payload: { args: Record<string, unknown> }
+    }
+    calls.push({ method: body.method, payload: body.payload.args })
+    let value: unknown = {}
+    if (body.method === 'workspace/create') {
+      value = { workspace: { workspaceId: 'ws-orb' }, created: true }
+    }
+    if (body.method === 'session/create') value = { sessionId: 'session-orb', agentPreset: 'computer-use' }
+    if (body.method === 'session/list') {
+      value = { items: [{ sessionId: 'session-orb', running: false, projections: { asOfSeq: 0 } }] }
+    }
+    return rpcResponse(body.rpcId, value)
+  })
+  Object.defineProperty(dom.window, 'fetch', { value: fetchMock })
+  Object.defineProperty(dom.window, 'crypto', { value: globalThis.crypto })
+  const setSessionId = vi.fn()
+  let overlayListener: ((selection: {
+    provider: string
+    model: string
+    reasoningEffort?: string
+  }) => void) | undefined
+  Object.defineProperty(dom.window, 'dshDesktop', {
+    value: {
+      locale: async () => resolveDesktopLocale('en'),
+      backend: { status: async () => ({ phase: 'ready' }), subscribe: vi.fn() },
+      floating: {
+        sessionId: async () => undefined,
+        setSessionId,
+        move: vi.fn(),
+        clamp: vi.fn(),
+        setExpanded: vi.fn(async (expanded: boolean) => ({
+          expanded, horizontal: 'left', vertical: 'up',
+        })),
+        orbWorkspacePath: async () => '/tmp/dsh_orb',
+        setSessionRunning: vi.fn(),
+        overlayModel: async () => ({
+          provider: 'deepseek-official',
+          model: 'deepseek-chat',
+          reasoningEffort: 'high',
+        }),
+        onOverlayModel(listener: (selection: {
+          provider: string
+          model: string
+          reasoningEffort?: string
+        }) => void) {
+          overlayListener = listener
+          return () => {}
+        },
+        onSelectionPrompt: () => () => {},
+      },
+    },
+  })
+  try {
+    runInContext(readFileSync(new URL('../renderer/floating.js', import.meta.url), 'utf8'), dom.getInternalVMContext())
+    await expect.poll(() => setSessionId.mock.calls).toEqual([['session-orb']])
+    expect(calls.find(call => call.method === 'session/selectModel')?.payload).toEqual({
+      request: {
+        sessionId: 'session-orb',
+        provider: 'deepseek-official',
+        model: 'deepseek-chat',
+        reasoningEffort: 'high',
+        saveAsDefault: false,
+      },
+    })
+    if (overlayListener === undefined) throw new Error('missing overlay model listener')
+    overlayListener({
+      provider: 'deepseek-official',
+      model: 'deepseek-flash',
+      reasoningEffort: 'max',
+    })
+    await expect.poll(() => calls.filter(call => call.method === 'session/selectModel')).toHaveLength(2)
+    expect(calls.filter(call => call.method === 'session/selectModel').at(-1)?.payload).toEqual({
+      request: {
+        sessionId: 'session-orb',
+        provider: 'deepseek-official',
+        model: 'deepseek-flash',
+        reasoningEffort: 'max',
+        saveAsDefault: false,
+      },
+    })
   } finally { dom.window.close() }
 })

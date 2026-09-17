@@ -16,6 +16,14 @@ import type {} from '@deepseek-ai/dsh-tools'
 
 type WorkspaceId = NonNullable<SessionCreateRequest['workspaceId']>
 
+interface OrbCodeAgentModel {
+  currentSelection(): {
+    readonly provider: string
+    readonly model: string
+    readonly reasoningEffort?: string
+  } | undefined
+}
+
 /** Cordis plugin name. */
 export const name = 'tool-code-agent'
 
@@ -176,6 +184,16 @@ export function apply(ctx: Context): void {
         })
         sessionId = createdSession.sessionId
         created = true
+        const pref = (ctx.get('orbCodeAgentModel') as OrbCodeAgentModel | undefined)?.currentSelection()
+        if (pref !== undefined) {
+          await ctx.sessionController.selectModel({
+            sessionId,
+            provider: pref.provider,
+            model: pref.model,
+            ...(pref.reasoningEffort === undefined ? {} : { reasoningEffort: pref.reasoningEffort }),
+            saveAsDefault: false,
+          })
+        }
       } else {
         sessionId = brandString<SessionId>(args.session_id)
         if (sessionId === caller.id) {

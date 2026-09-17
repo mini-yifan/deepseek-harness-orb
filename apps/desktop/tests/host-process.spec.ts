@@ -360,4 +360,40 @@ function onRequestFrame() {}
     await expect(host.start()).rejects.toThrow(/protocol 4 does not match Electron protocol 5/u)
     await host.stop().catch(() => undefined)
   })
+
+  it('pushes the background Code-agent model over Host IPC', async () => {
+    const runtime = projectWithHost(`
+let lastModel = null
+process.on('message', message => {
+  if (message.type === 'orb-code-agent-model') lastModel = message
+})
+process.send({ type: 'ready', protocolVersion: ${String(DESKTOP_HOST_PROTOCOL_VERSION)}, dshVersion: 'orb-model' })
+function onRequestFrame(frame) {
+  if (frame.type !== 1) return
+  responseStart(frame.streamId, { headers: [['content-type', 'application/json']] })
+  responseData(frame.streamId, JSON.stringify(lastModel))
+  responseEnd(frame.streamId)
+}
+`)
+    const host = new DesktopHostProcess(process.execPath, runtime, runtime)
+    try {
+      await host.start()
+      host.setOrbCodeAgentModel({
+        provider: 'deepseek-official',
+        model: 'deepseek-chat',
+        reasoningEffort: 'high',
+      })
+      await expect.poll(async () => {
+        const response = await host.fetch(new Request('dsh-app://app/orb-model'))
+        return await response.json() as unknown
+      }).toEqual({
+        type: 'orb-code-agent-model',
+        provider: 'deepseek-official',
+        model: 'deepseek-chat',
+        reasoningEffort: 'high',
+      })
+    } finally {
+      await host.stop()
+    }
+  })
 })

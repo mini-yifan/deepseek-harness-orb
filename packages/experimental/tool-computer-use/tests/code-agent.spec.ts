@@ -28,6 +28,14 @@ interface CreateRequest {
   readonly parentAgent?: unknown
 }
 
+interface SelectModelRequest {
+  readonly sessionId: string
+  readonly provider: string
+  readonly model: string
+  readonly reasoningEffort?: string
+  readonly saveAsDefault?: boolean
+}
+
 interface PromptRequest {
   readonly requestId?: string
   readonly sessionId: string
@@ -223,6 +231,11 @@ async function setup(options: {
   readonly workspace?: 'miss' | 'throw' | 'invalid'
   readonly live?: Map<SessionId, FakeAgent>
   readonly withoutInitiatorThrows?: boolean
+  readonly orbModel?: {
+    readonly provider: string
+    readonly model: string
+    readonly reasoningEffort?: string
+  }
 } = {}) {
   const ctx = new Context()
   contexts.push(ctx)
@@ -230,6 +243,8 @@ async function setup(options: {
   await ctx.plugin(ToolRuntime)
   const created: CreateRequest[] = []
   const prompted: PromptRequest[] = []
+  const selected: SelectModelRequest[] = []
+  const operations: string[] = []
   let nextId = options.createId ?? STANDARD
   const headers = new Map<string, HeaderFacts>(Object.entries(options.headers ?? {}))
   const live = options.live
@@ -246,7 +261,12 @@ async function setup(options: {
       })
       return { sessionId: id, agentPreset: request.agentPreset }
     },
+    async selectModel(request: SelectModelRequest) {
+      operations.push('selectModel')
+      selected.push(request)
+    },
     async prompt(request: PromptRequest) {
+      operations.push('prompt')
       prompted.push(request)
       const code = live?.get(SessionId(request.sessionId))
       if (code !== undefined && request.requestId !== undefined) {
@@ -313,8 +333,14 @@ async function setup(options: {
   } else if (options.workspace === 'invalid') {
     ctx.provide('workspaceRegistry', {})
   }
+  if (options.orbModel !== undefined) {
+    const orbModel = options.orbModel
+    ctx.provide('orbCodeAgentModel', {
+      currentSelection: () => orbModel,
+    })
+  }
   apply(ctx)
-  return { ctx, created, prompted, get agentsGetCalls() { return agentsGetCalls } }
+  return { ctx, created, prompted, selected, operations, get agentsGetCalls() { return agentsGetCalls } }
 }
 
 function execute(
@@ -344,10 +370,11 @@ describe('code_agent plugin', () => {
   })
 
   it('creates a standard session without subagent origin and queues the task', async () => {
-    const { ctx, created, prompted } = await setup()
+    const { ctx, created, prompted, selected } = await setup()
     const result = await execute(ctx, { task: 'Write a Word document' })
     expect(result.isError).toBe(false)
     expect(created).toEqual([{ agentPreset: 'standard', cwd: '/workspace' }])
+    expect(selected).toEqual([])
     expect(created[0]).not.toHaveProperty('origin')
     expect(created[0]).not.toHaveProperty('parentAgent')
     expect(prompted[0]).toMatchObject({
@@ -358,6 +385,39 @@ describe('code_agent plugin', () => {
     expect(result.value).toEqual({ accepted: true, created: true, session_id: STANDARD })
     expect(text(result)).toContain(STANDARD)
     expect(text(result)).toContain('Tell the user the background Code agent is running')
+  })
+
+  it('selects the stored background model before queueing a newly created session', async () => {
+    const { ctx, selected, operations } = await setup({
+      orbModel: { provider: 'deepseek-official', model: 'deepseek-chat', reasoningEffort: 'high' },
+    })
+    const result = await execute(ctx, { task: 'Write a Word document' })
+    expect(result.isError).toBe(false)
+    expect(selected).toEqual([{
+      sessionId: STANDARD,
+      provider: 'deepseek-official',
+      model: 'deepseek-chat',
+      reasoningEffort: 'high',
+      saveAsDefault: false,
+    }])
+    expect(operations).toEqual(['selectModel', 'prompt'])
+  })
+
+  it('does not select a model when continuing an existing session', async () => {
+    const { ctx, created, selected, operations } = await setup({
+      headers: {
+        [STANDARD]: { id: STANDARD, agentPreset: 'standard', cwd: '/workspace' },
+      },
+      orbModel: { provider: 'deepseek-official', model: 'deepseek-chat', reasoningEffort: 'high' },
+    })
+    const result = await execute(ctx, {
+      task: 'Make the Word font green',
+      session_id: STANDARD,
+    })
+    expect(result.isError).toBe(false)
+    expect(created).toEqual([])
+    expect(selected).toEqual([])
+    expect(operations).toEqual(['prompt'])
   })
 
   it('creates with workspaceId when caller cwd matches a workspace', async () => {

@@ -85,6 +85,8 @@ The thirteen GUI tools run exclusive. `presentCall` is generic. Each observation
 
 Tests inject a fake desktop through `applyComputerUse(ctx, backend, config)` rather than a Config `driver` hook.
 
+On Desktop, omitting `session_id` applies the floating-ball Background Agent Settings when the Host publishes that selection. Passing `session_id` leaves the continued session's model unchanged. Other compositions keep the deployment Agent default.
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -101,6 +103,8 @@ The plugin is one experimental package on purpose. The existing agent-loop alrea
 
 First-frame attachment uses `agent/pre-step`: the listener always awaits `next()`, then appends a plugin `user` notice with `form: 'notice'` when the claimed batch contains a `source.kind === 'user'` message and the route declares image input, except when that user text starts with `Desktop selection. Answer in this chat only. Do not call GUI tools or code_agent.` `agent.inject()` would land only on the next step.
 
+Desktop `code_agent` create reads optional `ctx.get('orbCodeAgentModel')` after `session.create` and before `session.prompt`, passing `saveAsDefault: false`. Continue-by-`session_id` does not. This package does not import Desktop Host.
+
 ### Source map
 
 | File | Role |
@@ -110,7 +114,7 @@ First-frame attachment uses `agent/pre-step`: the listener always awaits `next()
 | [`src/plugin.ts`](src/plugin.ts) | Shared `applyComputerUse`: policy, thirteen GUI tools, first-frame pre-step |
 | [`src/selection-turn.ts`](src/selection-turn.ts) | Detect Desktop selection-toolbar user turns so first-frame capture is omitted |
 | [`src/observe.ts`](src/observe.ts) | Frontmost-window capture, overlay-skip foreground inspect, and model-facing envelopes |
-| [`src/code-agent.ts`](src/code-agent.ts) | Computer Use-only `code_agent`: `session.create` / `session.prompt` |
+| [`src/code-agent.ts`](src/code-agent.ts) | Computer Use-only `code_agent`: `session.create`, optional Desktop `selectModel` on create, `session.prompt` |
 | [`src/code-agent-completion.ts`](src/code-agent-completion.ts) | Parked plugin notice after the Code session and the Computer Use caller are idle |
 | [`src/macos.ts`](src/macos.ts) | Darwin capture via a full `screencapture` plus `sips` crop of the frontmost-app window union, or ScreenCaptureKit helper `--region=` when overlay window ids are set; click, scroll, hotkey, long-press, and drag via JXA `CGEvent`; `input_text` pastes via NSPasteboard; `list_apps` / `open_app` via NSWorkspace; `open_in_browser` / `open_in_finder` via `/usr/bin/open`; `inspectForeground` binds `CGWindowListCopyWindowInfo` then unwraps (skip overlay ids) plus Finder AppleScript |
 | [`src/macos-sck-capture.swift`](src/macos-sck-capture.swift) | Darwin helper: window capture or display-exclude region crop that still omits overlay CGWindowIDs; starts `NSApplication` on the main actor first |
@@ -144,6 +148,7 @@ First-frame attachment uses `agent/pre-step`: the listener always awaits `next()
 - [Computer Use 0–1000 fraction coordinates](../../../.agents/notes/implemented/bug-fix/2026-09-15-computer-use-fraction-coordinates.md) — model-facing 0–1000 is a fraction of the visible screenshot, not capture pixels.
 - [Image handle omits request-preview pixels](../../../.agents/notes/implemented/bug-fix/2026-09-15-omit-request-preview-handle-dimensions.md) — the shared image handle names identity, not request-preview width and height.
 - [Desktop floating orb](../../../.agents/notes/implemented/feature/2026-09-14-desktop-floating-orb.md) — macOS overlay, runtime extra, and first-class `code_agent` sessions.
+- [Floating-ball Agent model menus](../../../.agents/notes/implemented/feature/2026-09-17-orb-agent-model-menus.md) — overlay and background model persistence, `saveAsDefault: false`, create-only `code_agent` apply.
 - [Desktop overlay guard](../../../.agents/notes/implemented/architecture/2026-09-14-desktop-overlay-guard.md) — capture exclusion and HID click-through for the floating ball.
 - [Headless computer-use snapshot](../../../snapshots/session/computer-use/snapshot.yml) — authored click loop over a fake desktop and a vision model.
 

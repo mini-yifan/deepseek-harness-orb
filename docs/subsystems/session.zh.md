@@ -747,7 +747,8 @@ inspect( sessionId: SessionId, signal?: AbortSignal, ): Promise<SessionInspectio
 
 /**
  * Select one Session-local model after explicitly resuming the Session.
- * @param request - Session identity and requested model selection.
+ * @param request - Session identity and requested model selection. `saveAsDefault: false`
+ *   skips writing `agent-default-model`.
  * @returns the normalized selection installed for the Session.
  */
 @Remote('selectModel') selectModel(request: SessionSelectModelRequest): Promise<SessionSelectModelValue>

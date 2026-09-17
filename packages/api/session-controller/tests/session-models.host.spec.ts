@@ -595,6 +595,37 @@ describe('Web session model selection', () => {
     await ctx.fiber.dispose()
   })
 
+  it('skips the Agent default when saveAsDefault is false', async () => {
+    const { ctx, sessionId } = await harness()
+    const saved: unknown[] = []
+    const remote = createSessionTestRemote(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      saveDefaultModelSelection: (selection) => {
+        saved.push(selection)
+      },
+      cwd: '/tmp',
+    })
+
+    expectValue(await remote.selectModel(request({
+      sessionId,
+      provider: 'deepseek-official',
+      model: 'deepseek-reasoner',
+      reasoningEffort: 'max',
+      saveAsDefault: false,
+    })))
+    expect(saved).toEqual([])
+    expect(currentSelection(ctx, sessionId))
+      .toEqual({ provider: 'deepseek-official', model: 'deepseek-reasoner', reasoningEffort: 'max' })
+
+    expectValue(await remote.selectModel(request({
+      sessionId, provider: 'deepseek-official', model: 'deepseek-chat', saveAsDefault: true,
+    })))
+    expect(saved).toEqual([
+      { provider: 'deepseek-official', model: 'deepseek-chat', reasoningEffort: 'high' },
+    ])
+    await ctx.fiber.dispose()
+  })
+
   it('refuses a prompt no adapter can route, and reports it on the directory', async () => {
     const { ctx, sessionId } = await harness()
     const remote = createSessionTestRemote(ctx, {

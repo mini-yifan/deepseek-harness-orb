@@ -307,6 +307,25 @@ export class DesktopHostProcess {
     child.send(message, (error) => { if (error !== null) this.fail(error) })
   }
 
+  /**
+   * Push the background Code-agent model selection into the Host child.
+   * @param selection - stored background route.
+   */
+  setOrbCodeAgentModel(selection: {
+    readonly provider: string
+    readonly model: string
+    readonly reasoningEffort?: string
+  }): void {
+    const child = this.child
+    if (child === undefined || !child.connected) return
+    this.send({
+      type: 'orb-code-agent-model',
+      provider: selection.provider,
+      model: selection.model,
+      ...(selection.reasoningEffort === undefined ? {} : { reasoningEffort: selection.reasoningEffort }),
+    })
+  }
+
   private acceptResponseBytes(chunk: Buffer): void {
     try {
       for (const frame of this.responseDecoder.push(chunk)) this.handleResponseFrame(frame)

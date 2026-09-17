@@ -26,6 +26,10 @@ import {
 const workArea = { x: 100, y: 50, width: 1000, height: 800 }
 const messages = {
   floatingOpenMain: 'Open Main Window',
+  floatingAgentSettings: 'Floating Agent Settings',
+  floatingBackgroundAgentSettings: 'Background Agent Settings',
+  floatingNoModels: 'No models available.',
+  floatingEffortDefault: 'Default',
   floatingQuit: 'Quit DeepSeek Harness',
   selectionToolbarEnable: 'Enable Selection Toolbar',
   selectionToolbarDisable: 'Disable Selection Toolbar',
@@ -182,6 +186,96 @@ describe('floating window context menu', () => {
       { label: 'Disable Selection Toolbar', click: onToggle },
       { type: 'separator' },
       { label: 'Quit DeepSeek Harness', click: onQuit },
+    ])
+  })
+
+  it('inserts overlay and background model submenus before the selection toolbar', () => {
+    const onSelectOverlay = vi.fn()
+    const onSelectBackground = vi.fn()
+    const onToggle = vi.fn()
+    const template = floatingContextMenuTemplate(
+      { isEditable: false, editFlags: { canCut: false, canCopy: false, canPaste: false } },
+      messages,
+      onOpenMain,
+      onQuit,
+      { enabled: false, onToggle },
+      {
+        catalog: {
+          groups: [{
+            id: 'deepseek-official',
+            name: 'DeepSeek',
+            models: [{
+              id: 'deepseek-flash',
+              name: 'DeepSeek-V41-Flash',
+              reasoning: {
+                efforts: [{ id: 'high', name: 'High' }, { id: 'max', name: 'Max' }],
+                defaultEffort: 'high',
+              },
+            }, {
+              id: 'deepseek-chat',
+              name: 'DeepSeek-V41',
+              reasoning: {
+                efforts: [{ id: 'high', name: 'High' }, { id: 'max', name: 'Max' }],
+                defaultEffort: 'high',
+              },
+            }],
+          }],
+        },
+        overlay: { provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'max' },
+        background: { provider: 'deepseek-official', model: 'deepseek-chat', reasoningEffort: 'high' },
+        onSelectOverlay,
+        onSelectBackground,
+      },
+    )
+    expect(template.map(item => item.label ?? item.type)).toEqual([
+      'Open Main Window',
+      'separator',
+      'Floating Agent Settings',
+      'Background Agent Settings',
+      'separator',
+      'Enable Selection Toolbar',
+      'separator',
+      'Quit DeepSeek Harness',
+    ])
+    const overlay = template[2]
+    expect(overlay?.submenu).toEqual([
+      { label: 'DeepSeek', enabled: false },
+      {
+        label: 'DeepSeek-V41-Flash',
+        checked: true,
+        submenu: [
+          { label: 'High', type: 'radio', checked: false, click: expect.any(Function) },
+          { label: 'Max', type: 'radio', checked: true, click: expect.any(Function) },
+        ],
+      },
+      {
+        label: 'DeepSeek-V41',
+        checked: false,
+        submenu: [
+          { label: 'High', type: 'radio', checked: false, click: expect.any(Function) },
+          { label: 'Max', type: 'radio', checked: false, click: expect.any(Function) },
+        ],
+      },
+    ])
+    const background = template[3]
+    expect(background?.submenu).toEqual([
+      { label: 'DeepSeek', enabled: false },
+      {
+        label: 'DeepSeek-V41-Flash',
+        checked: false,
+        submenu: [
+          { label: 'High', type: 'radio', checked: false, click: expect.any(Function) },
+          { label: 'Max', type: 'radio', checked: false, click: expect.any(Function) },
+        ],
+      },
+      {
+        label: 'DeepSeek-V41',
+        checked: true,
+        submenu: [
+          { label: 'High', type: 'radio', checked: true, click: expect.any(Function) },
+          { label: 'Max', type: 'radio', checked: false, click: expect.any(Function) },
+        ],
+      },
     ])
   })
 })

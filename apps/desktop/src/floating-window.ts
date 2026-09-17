@@ -2,6 +2,11 @@
 
 import { BrowserWindow, Menu, type MenuItemConstructorOptions, screen } from 'electron'
 import type { DesktopMessages } from './locale.ts'
+import {
+  floatingAgentModelItems,
+  type FloatingModelCatalog,
+} from './floating-agent-menu.ts'
+import type { OrbAgentModelSelection } from './orb-agent-models.ts'
 
 /** Electron `context-menu` fields that choose overlay right-click items. */
 export interface FloatingContextEditState {
@@ -13,31 +18,83 @@ export interface FloatingContextEditState {
   }
 }
 
+/** Live overlay and background model menus rebuilt on every right-click. */
+export interface FloatingAgentMenuState {
+  readonly catalog: FloatingModelCatalog | undefined
+  readonly overlay: OrbAgentModelSelection
+  readonly background: OrbAgentModelSelection
+  readonly onSelectOverlay: (selection: OrbAgentModelSelection) => void
+  readonly onSelectBackground: (selection: OrbAgentModelSelection) => void
+}
+
+/** Catalog load and stored selections for the overlay context menu. */
+export interface FloatingAgentMenuSource {
+  readonly loadCatalog: () => Promise<FloatingModelCatalog | undefined>
+  readonly overlay: () => OrbAgentModelSelection
+  readonly background: () => OrbAgentModelSelection
+  readonly onSelectOverlay: (selection: OrbAgentModelSelection) => void
+  readonly onSelectBackground: (selection: OrbAgentModelSelection) => void
+}
+
 /**
- * Overlay right-click items: cut/copy/paste when the target is editable, then Open Main and Quit.
+ * Overlay right-click items: cut/copy/paste when the target is editable, then Open Main,
+ * Agent model menus, selection toolbar, and Quit.
  * @param params - Electron context-menu editability.
  * @param messages - locale dictionary for the overlay actions.
  * @param onOpenMain - show the Desktop main window.
  * @param onQuit - quit the application.
+ * @param selection - optional selection-toolbar toggle.
+ * @param agents - optional catalog-driven overlay and background model menus.
  * @returns Electron menu template.
  */
 export function floatingContextMenuTemplate(
   params: FloatingContextEditState,
   messages: Pick<
     DesktopMessages,
-    'floatingOpenMain' | 'floatingQuit' | 'selectionToolbarEnable' | 'selectionToolbarDisable'
+    | 'floatingOpenMain'
+    | 'floatingAgentSettings'
+    | 'floatingBackgroundAgentSettings'
+    | 'floatingNoModels'
+    | 'floatingEffortDefault'
+    | 'floatingQuit'
+    | 'selectionToolbarEnable'
+    | 'selectionToolbarDisable'
   >,
   onOpenMain: () => void,
   onQuit: () => void,
   selection?: { readonly enabled: boolean; readonly onToggle: () => void },
+  agents?: FloatingAgentMenuState,
 ): MenuItemConstructorOptions[] {
+  const labels = { empty: messages.floatingNoModels, defaultEffort: messages.floatingEffortDefault }
   const actions: MenuItemConstructorOptions[] = [
     { label: messages.floatingOpenMain, click: onOpenMain },
     { type: 'separator' },
+    ...(agents === undefined ? [] : [
+      {
+        label: messages.floatingAgentSettings,
+        submenu: floatingAgentModelItems(
+          agents.catalog,
+          agents.overlay,
+          agents.onSelectOverlay,
+          labels,
+        ),
+      },
+      {
+        label: messages.floatingBackgroundAgentSettings,
+        submenu: floatingAgentModelItems(
+          agents.catalog,
+          agents.background,
+          agents.onSelectBackground,
+          labels,
+        ),
+      },
+      { type: 'separator' as const },
+    ]),
     { label: messages.floatingQuit, click: onQuit },
   ]
   if (selection !== undefined) {
-    actions.splice(2, 0, {
+    const quitIndex = actions.findIndex(item => item.label === messages.floatingQuit)
+    actions.splice(quitIndex, 0, {
       label: selection.enabled ? messages.selectionToolbarDisable : messages.selectionToolbarEnable,
       click: selection.onToggle,
     }, { type: 'separator' })
@@ -193,6 +250,7 @@ function currentBallOrigin(window: BrowserWindow, workArea: OverlayRect): { x: n
  * @param onOpenMain - show the Desktop main window.
  * @param onQuit - quit the application.
  * @param selection - optional selection-toolbar toggle on the overlay menu.
+ * @param agents - optional catalog-driven overlay and background model menus.
  * @returns the overlay window.
  */
 export function createFloatingWindow(
@@ -201,6 +259,7 @@ export function createFloatingWindow(
   onOpenMain: () => void,
   onQuit: () => void,
   selection?: { readonly enabled: () => boolean; readonly toggle: () => void },
+  agents?: FloatingAgentMenuSource,
 ): BrowserWindow {
   const window = new BrowserWindow({
     width: FLOATING_BALL_SIZE,
@@ -227,15 +286,36 @@ export function createFloatingWindow(
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('context-menu', (_event, params) => {
-    Menu.buildFromTemplate(floatingContextMenuTemplate(
-      params,
-      messages,
-      onOpenMain,
-      onQuit,
-      selection === undefined ? undefined : { enabled: selection.enabled(), onToggle: selection.toggle },
-    )).popup({ window })
+    void popupFloatingContextMenu(window, params, messages, onOpenMain, onQuit, selection, agents)
   })
   return window
+}
+
+async function popupFloatingContextMenu(
+  window: BrowserWindow,
+  params: FloatingContextEditState,
+  messages: DesktopMessages,
+  onOpenMain: () => void,
+  onQuit: () => void,
+  selection: { readonly enabled: () => boolean; readonly toggle: () => void } | undefined,
+  agents: FloatingAgentMenuSource | undefined,
+): Promise<void> {
+  const catalog = agents === undefined ? undefined : await agents.loadCatalog().catch(() => undefined)
+  if (window.isDestroyed()) return
+  Menu.buildFromTemplate(floatingContextMenuTemplate(
+    params,
+    messages,
+    onOpenMain,
+    onQuit,
+    selection === undefined ? undefined : { enabled: selection.enabled(), onToggle: selection.toggle },
+    agents === undefined ? undefined : {
+      catalog,
+      overlay: agents.overlay(),
+      background: agents.background(),
+      onSelectOverlay: agents.onSelectOverlay,
+      onSelectBackground: agents.onSelectBackground,
+    },
+  )).popup({ window })
 }
 
 /**
