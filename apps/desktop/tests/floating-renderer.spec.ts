@@ -237,6 +237,7 @@ it('creates a Computer Use session on dsh_orb and sends from the overlay', async
     expect(document.querySelector('.bubble.user')).toBeNull()
     const frame = document.querySelector<HTMLIFrameElement>('#transcript iframe')
     if (frame === null) throw new Error('missing overlay chat iframe')
+    expect(frame.getAttribute('allow')).toBe('clipboard-write')
     const posts = recordIframePosts(frame)
     const win = document.defaultView
     if (win === null) throw new Error('missing overlay window')
@@ -743,6 +744,7 @@ it('lists orb Computer Use chats and reopens the selected session', async () => 
     await expect.poll(() => historyList.hidden).toBe(true)
     expect(transcript.hidden).toBe(false)
     expect(document.querySelector('#transcript iframe')?.getAttribute('src')).toBe(OVERLAY_CHAT_SRC)
+    expect(document.querySelector('#transcript iframe')?.getAttribute('allow')).toBe('clipboard-write')
     expect(document.querySelector('.bubble.assistant')).toBeNull()
     history.click()
     await expect.poll(() => [...document.querySelectorAll('.history-row')].some(node => node.textContent === 'Click Pages')).toBe(true)

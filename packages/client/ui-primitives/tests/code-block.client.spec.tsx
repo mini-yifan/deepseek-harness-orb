@@ -162,6 +162,7 @@ describe('CodeBlock', () => {
       configurable: true,
       value: { writeText },
     })
+    Object.defineProperty(document, 'execCommand', { configurable: true, value: undefined })
     render(<CodeBlock code="plain body" />)
     fireEvent.click(screen.getByRole('button', { name: '复制' }))
     await act(async () => {

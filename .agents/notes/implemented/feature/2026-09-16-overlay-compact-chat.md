@@ -14,7 +14,7 @@ The overlay document stays [`apps/desktop/renderer/floating.html`](../../../../a
 
 ClientSessions selection on the overlay document persists under `dsh.overlay.sessions.current`. The iframe shares the `dsh-app://app` origin with the main window; a shared `dsh.sessions.current` cell would steal the main-window selection. The shell posts `{ type: 'dsh.overlay.session', sessionId }` from `dsh-app://shell`; the iframe replies `{ type: 'dsh.overlay.ready' }` and calls `sessions.open` without reloading.
 
-Vanilla chrome stays: 320×420 panel, 72px ball, grey input pill, History / New, Stop, Computer Use + Flash/Max, `floating-session.json`, and the ask-user card. History still hides `#transcript`. A question no longer hides the transcript. ChatView owns follow (`FOLLOW_THRESHOLD` 24px). Overlay CSS sets `--dsh-chat-content-width: 100%` and `--dsh-composer-side-clearance: 0px`, and hides `[data-chat-turn-rail]`.
+Vanilla chrome stays: 320×420 panel, 72px ball, grey input pill, History / New, Stop, Computer Use + Flash/Max, `floating-session.json`, and the ask-user card. History still hides `#transcript`. A question no longer hides the transcript. ChatView owns follow (`FOLLOW_THRESHOLD` 24px). Overlay CSS sets `--dsh-chat-content-width: 100%` and `--dsh-composer-side-clearance: 0px`, and hides `[data-chat-turn-rail]`. [Overlay message actions](../bug-fix/2026-09-17-overlay-message-actions-narrow.md) owns IconActions overflow, iframe clipboard-write, and the overlay `conversation.input.overlay` seat.
 
 See [Desktop floating orb](2026-09-14-desktop-floating-orb.md) for overlay construction and [floating orb user questions](2026-09-15-floating-orb-user-questions.md) for the shell waterfall.
 

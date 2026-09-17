@@ -214,6 +214,7 @@ describe('ReadBlock copy', () => {
       configurable: true,
       value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
     })
+    Object.defineProperty(document, 'execCommand', { configurable: true, value: undefined })
     render(<ReadBlock label="a" lines={lines(1)} totalLines={1} />)
     fireEvent.click(screen.getByRole('button', { name: '复制' }))
     await act(async () => {

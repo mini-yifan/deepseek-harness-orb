@@ -258,6 +258,8 @@ describe('HoverCard', () => {
   it('keeps its content when the clipboard rejects the write', async () => {
     const writeText = vi.fn(async () => { throw new Error('denied') })
     const restoreClipboard = installClipboard(writeText)
+    const priorExec = Object.getOwnPropertyDescriptor(document, 'execCommand')
+    Object.defineProperty(document, 'execCommand', { configurable: true, value: undefined })
     try {
       const { wrapper } = mount({ copyText: 'value', copiedLabel: 'Copied' })
       fireEvent.pointerEnter(wrapper)
@@ -267,6 +269,8 @@ describe('HoverCard', () => {
       expect(screen.getByText('card body')).toBeTruthy()
     } finally {
       restoreClipboard()
+      if (priorExec === undefined) Reflect.deleteProperty(document, 'execCommand')
+      else Object.defineProperty(document, 'execCommand', priorExec)
     }
   })
 

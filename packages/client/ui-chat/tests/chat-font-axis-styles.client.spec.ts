@@ -48,11 +48,25 @@ describe('chat flow font-size axis', () => {
     // Both clocks read the secondary tier: the assistant tail's meta line
     // (the whole-line usage trigger) and the user row's clock stay one step
     // under the body size so the two rows match.
+    expect(declarationsFrom(actions, '.actions')).toEqual(expect.arrayContaining([
+      'min-width: 0',
+      'max-width: 100%',
+    ]))
     expect(declarationsFrom(actions, '.timeStart')).toEqual(expect.arrayContaining([
+      'min-width: 0',
+      'overflow: hidden',
       'font-size: var(--dsh-content-font-size-secondary, 13px)',
+      'text-overflow: ellipsis',
     ]))
     expect(declarationsFrom(actions, '.timeEnd')).toEqual(expect.arrayContaining([
+      'min-width: 0',
+      'overflow: hidden',
       'font-size: var(--dsh-content-font-size-secondary, 13px)',
+      'text-overflow: ellipsis',
+    ]))
+    expect(declarationsFrom(actions, '.action')).toEqual(expect.arrayContaining([
+      'flex: none',
+      'width: calc(28px + var(--dsh-content-font-delta, 0px))',
     ]))
     expect(declarationsFrom(actions, '.action svg')).toEqual(expect.arrayContaining([
       'width: calc(15px + var(--dsh-content-font-delta, 0px))',
@@ -124,6 +138,7 @@ describe('chat flow font-size axis', () => {
     // keeps the row's plain 8px rhythm instead of overlapping.
     const css = read('TurnUsagePanel.module.css')
     const narrow = /@media \(max-width: 480px\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? ''
+    expect(narrow).toMatch(/\.root,\n  \.trigger \{\s*flex: none/)
     expect(narrow).toMatch(/\.trigger \{[^}]*justify-content: center/)
     expect(narrow).toMatch(/\.trigger \{[^}]*width: calc\(28px \+ var\(--dsh-content-font-delta, 0px\)\)/)
     expect(narrow).toMatch(/\.trigger \{[^}]*padding: 6px/)

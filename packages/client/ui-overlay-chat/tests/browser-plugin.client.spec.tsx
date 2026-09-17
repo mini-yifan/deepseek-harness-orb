@@ -53,6 +53,7 @@ describe('ui-overlay-chat browser half', () => {
     const { ctx, fiber } = await bench()
     expect(ctx.slots.entries('root')).toHaveLength(0)
     expect(ctx.slots.spec('conversation.view')).toBeUndefined()
+    expect(ctx.slots.spec('conversation.input.overlay')).toBeUndefined()
     await fiber.dispose()
   })
 
@@ -62,10 +63,12 @@ describe('ui-overlay-chat browser half', () => {
     const { ctx, fiber } = await bench()
     expect(ctx.slots.entries('root')).toHaveLength(1)
     expect(ctx.slots.spec('conversation.view')).toEqual({ kind: 'list', scope: 'session' })
+    expect(ctx.slots.spec('conversation.input.overlay')).toEqual({ kind: 'list', scope: 'session' })
     expect(parent).toHaveBeenCalledWith({ type: OVERLAY_READY_MESSAGE_TYPE }, OVERLAY_SHELL_ORIGIN)
     await fiber.dispose()
     expect(ctx.slots.entries('root')).toHaveLength(0)
     expect(ctx.slots.spec('conversation.view')).toBeUndefined()
+    expect(ctx.slots.spec('conversation.input.overlay')).toBeUndefined()
   })
 
   it('opens the posted Session id without a reload', async () => {
@@ -143,6 +146,7 @@ describe('OverlayChatRoot', () => {
     expect(css).toContain('--dsh-chat-content-width: 100%')
     expect(css).toContain('--dsh-composer-side-clearance: 0px')
     expect(css).toContain('[data-chat-turn-rail]')
+    expect(css).toContain('.inputOverlay')
     const view = vi.fn((
       _name: string,
       _owner: {
@@ -167,6 +171,7 @@ describe('OverlayChatRoot', () => {
     expect(view).toHaveBeenCalledWith('conversation.view', expect.objectContaining({
       viewRequest: null,
     }), { only: 'chat' })
+    expect(view).toHaveBeenCalledWith('conversation.input.overlay', {})
     const seat = view.mock.calls[0]![1]
     seat.openView('chat', 'focus')
     seat.completeViewRequest()

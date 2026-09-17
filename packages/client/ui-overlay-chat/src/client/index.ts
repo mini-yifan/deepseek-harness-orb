@@ -34,6 +34,7 @@ export function apply(ctx: ClientContext): void {
     name: 'root',
     children: {
       'conversation.view': { kind: 'list', scope: 'session' },
+      'conversation.input.overlay': { kind: 'list', scope: 'session' },
     },
   }, OverlayChatRoot), 'ui-overlay-chat: compact root')
 

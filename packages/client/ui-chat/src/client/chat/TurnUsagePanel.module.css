@@ -59,6 +59,11 @@
    label-padding rebate no longer applies, so the pair keeps the row's plain
    8px rhythm. The dialogs keep the words. */
 @media (max-width: 480px) {
+  .root,
+  .trigger {
+    flex: none;
+  }
+
   .trigger {
     justify-content: center;
     width: calc(28px + var(--dsh-content-font-delta, 0px));
