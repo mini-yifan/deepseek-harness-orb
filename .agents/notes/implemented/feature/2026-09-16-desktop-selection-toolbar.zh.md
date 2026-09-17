@@ -10,7 +10,7 @@ macOS 用户在其他应用里划选文字后，期望能搜索、翻译和 Agen
 
 ## 决策
 
-macOS Desktop 在 Electron 壳内拥有该功能。派生的 Darwin helper（`apps/desktop/src/macos-selection.swift`，编译到 `lib/macos-selection`）监视超过 8px 的左键拖拽，然后读取 `AXSelectedText`（及选区边界），或回退到剪贴板 `Cmd+C` 并备份/恢复。它忽略 Electron PID。选区载荷始终带上鼠标松开点。工具条放在该点下方 8px，而不用 AX 矩形：浏览器常把 `kAXBoundsForRangeParameterizedAttribute` 报成窗口局部或 chrome 原点矩形，会把条钉在窗口左上角。3 秒的 `pid + bundle + text` 去重、窗外按下、Escape 和新的拖拽会隐藏工具条。辅助功能关闭时发出 `untrusted` 且不截获事件；该事件首次出现时通过 `systemPreferences.isTrustedAccessibilityClient(true)` 打开系统设置。Windows 不启动监视器。
+macOS Desktop 在 Electron 壳内拥有该功能。派生的 Darwin helper（`apps/desktop/src/macos-selection.swift`，编译到 `lib/macos-selection`）监视超过 8px 的左键拖拽，然后读取 `AXSelectedText`（及选区边界），或回退到剪贴板 `Cmd+C` 并备份/恢复。它忽略 Electron PID。选区载荷始终带上鼠标松开点。工具条放在该点下方 8px，而不用 AX 矩形：浏览器常把 `kAXBoundsForRangeParameterizedAttribute` 报成窗口局部或 chrome 原点矩形，会把条钉在窗口左上角。3 秒的 `pid + bundle + text` 去重、工具条窗外的左键按下、任意按键、右键或中键按下、非惯性滚轮和新的拖拽会隐藏工具条。helper 不为剪贴板回退里它投递的 `Cmd+C` 发出 `key`，触控板惯性（`momentumPhase`）也不会隐藏，因此划选后残留的滚动不会收起工具条。辅助功能关闭时发出 `untrusted` 且不截获事件；该事件首次出现时通过 `systemPreferences.isTrustedAccessibilityClient(true)` 打开系统设置。Windows 不启动监视器。
 
 helper 是应用包内已签名的子进程（`asarUnpack: lib/macos-selection`），不是 `dlopen` 的 dylib。辅助功能/剪贴板投递的 TCC 身份以及 Electron 打包，在 helper 作为紧挨未打包主脚本的普通可执行文件时更简单。
 
@@ -42,4 +42,4 @@ helper 是应用包内已签名的子进程（`asarUnpack: lib/macos-selection`�
 
 ## 测试
 
-Desktop 测试覆盖配置读写、Bing URL、提示词拼接、helper NDJSON 解析（含 AX 边界加鼠标松开点）、工具条几何（鼠标下方，含语言菜单向下增高与向上翻转）、控制器的搜索/翻译/讲解/去重/暂停、忽略窗口原点 AX 边界的定位、翻译/讲解后恢复划词 pid 并跳过 Electron pid、可见 overlay 窗口的 overlay 排除 id、darwin 工具条构造、linux 跳过、overlay IPC `session/prompt`、翻译/讲解时抑制 activate、interact 与 setContentSize IPC，以及 locale 拥有的工具条文案。Computer Use pre-step 测试在钉死的前导上跳过，并在普通用户轮次仍附加首帧；`tools.spec.ts` 与 `snapshots/session/computer-use/system-prompt.expected.md` 钉住 POLICY 段落。
+Desktop 测试覆盖配置读写、Bing URL、提示词拼接、helper NDJSON 解析（含 AX 边界加鼠标松开点，以及 `dismiss`）、工具条几何（鼠标下方，含语言菜单向下增高与向上翻转）、控制器的搜索/翻译/讲解/去重/暂停、`key`/`dismiss`/窗外 mouse-down 隐藏以及点在条内保持可见、忽略窗口原点 AX 边界的定位、翻译/讲解后恢复划词 pid 并跳过 Electron pid、可见 overlay 窗口的 overlay 排除 id、darwin 工具条构造、linux 跳过、overlay IPC `session/prompt`、翻译/讲解时抑制 activate、interact 与 setContentSize IPC，以及 locale 拥有的工具条文案。Computer Use pre-step 测试在钉死的前导上跳过，并在普通用户轮次仍附加首帧；`tools.spec.ts` 与 `snapshots/session/computer-use/system-prompt.expected.md` 钉住 POLICY 段落。

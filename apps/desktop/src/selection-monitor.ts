@@ -20,6 +20,8 @@ export type SelectionHelperEvent =
   | { readonly type: 'mouse-down'; readonly x: number; readonly y: number }
   | { readonly type: 'mouse-up'; readonly x: number; readonly y: number }
   | { readonly type: 'key' }
+  /** Right-click, middle-click, or non-momentum scroll; hides without hit-testing the toolbar. */
+  | { readonly type: 'dismiss' }
   | {
     readonly type: 'selection'
     readonly text: string
@@ -84,6 +86,8 @@ export function parseSelectionHelperLine(line: string): SelectionHelperEvent | u
       return { type: 'untrusted' }
     case 'key':
       return { type: 'key' }
+    case 'dismiss':
+      return { type: 'dismiss' }
     case 'mouse-down':
     case 'mouse-up':
       if (!isFiniteNumber(record.x) || !isFiniteNumber(record.y)) return undefined

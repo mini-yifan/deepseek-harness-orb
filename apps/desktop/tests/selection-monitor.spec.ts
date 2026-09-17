@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { parseSelectionHelperLine, startSelectionMonitor } from '../src/selection-monitor.ts'
 
 describe('selection helper protocol', () => {
-  it('parses ready, untrusted, pointer, key, and selection lines', () => {
+  it('parses ready, untrusted, pointer, key, dismiss, and selection lines', () => {
     expect(parseSelectionHelperLine('{"type":"ready"}')).toEqual({ type: 'ready' })
     expect(parseSelectionHelperLine('{"type":"untrusted"}')).toEqual({ type: 'untrusted' })
     expect(parseSelectionHelperLine('{"type":"key"}')).toEqual({ type: 'key' })
+    expect(parseSelectionHelperLine('{"type":"dismiss"}')).toEqual({ type: 'dismiss' })
     expect(parseSelectionHelperLine('{"type":"mouse-down","x":10,"y":20}')).toEqual({
       type: 'mouse-down',
       x: 10,

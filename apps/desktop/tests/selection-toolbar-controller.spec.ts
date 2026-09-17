@@ -168,6 +168,46 @@ describe('selection toolbar controller', () => {
     expect(toolbar.bounds.height).toBe(120)
   })
 
+  it('hides on key, dismiss, and outside mouse-down, and stays for a click on the bar', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-selection-dismiss-'))
+    roots.push(root)
+    const controller = new SelectionToolbarController(root, {
+      electronPid: 99,
+      openExternal: async () => undefined,
+      promptOverlay: vi.fn(),
+      requestAccessibility: () => false,
+      startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid: vi.fn() }),
+    })
+    const toolbar = fakeToolbar()
+    controller.setToolbarWindow(toolbar as never)
+    controller.start()
+    controller.onHelperEvent({ type: 'selection', text: 'hello', x: 40, y: 50 })
+    expect(toolbar.visible).toBe(true)
+
+    toolbar.hide.mockClear()
+    controller.onHelperEvent({ type: 'mouse-down', x: 50, y: 70 })
+    expect(toolbar.hide).not.toHaveBeenCalled()
+    expect(toolbar.visible).toBe(true)
+
+    controller.onHelperEvent({ type: 'key' })
+    expect(toolbar.hide).toHaveBeenCalled()
+    expect(toolbar.visible).toBe(false)
+
+    toolbar.hide.mockClear()
+    controller.onHelperEvent({ type: 'selection', text: 'again', pid: 2, x: 40, y: 50 })
+    expect(toolbar.visible).toBe(true)
+    controller.onHelperEvent({ type: 'dismiss' })
+    expect(toolbar.hide).toHaveBeenCalled()
+    expect(toolbar.visible).toBe(false)
+
+    toolbar.hide.mockClear()
+    controller.onHelperEvent({ type: 'selection', text: 'third', pid: 3, x: 40, y: 50 })
+    expect(toolbar.visible).toBe(true)
+    controller.onHelperEvent({ type: 'mouse-down', x: 1, y: 1 })
+    expect(toolbar.hide).toHaveBeenCalled()
+    expect(toolbar.visible).toBe(false)
+  })
+
   it('places the toolbar below the mouse even when AX bounds sit at the window origin', () => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-selection-browser-'))
     roots.push(root)
