@@ -5,6 +5,7 @@ import type { DesktopLocale } from './locale.ts'
 import type { DesktopBackendState } from './backend-controller.ts'
 import type { FloatingExpandState } from './floating-window.ts'
 import type { OrbAgentModelSelection } from './orb-agent-models.ts'
+import type { OrbPermissionPreset } from './orb-permission.ts'
 import type { SelectionTranslateLanguage } from './selection-prompt.ts'
 
 /** IPC channel names kept private to the desktop application bundle. */
@@ -31,6 +32,8 @@ export const DESKTOP_IPC = {
   floatingSessionSet: 'dsh-desktop:floating-session-set',
   floatingOverlayModelGet: 'dsh-desktop:floating-overlay-model-get',
   floatingOverlayModel: 'dsh-desktop:floating-overlay-model',
+  floatingOverlayPermissionGet: 'dsh-desktop:floating-overlay-permission-get',
+  floatingOverlayPermissionSet: 'dsh-desktop:floating-overlay-permission-set',
   floatingOrbWorkspace: 'dsh-desktop:floating-orb-workspace',
   floatingFocusMain: 'dsh-desktop:floating-focus-main',
   floatingQuit: 'dsh-desktop:floating-quit',
@@ -92,6 +95,8 @@ export interface DshDesktopApi {
     setSessionId(sessionId: string): Promise<void>
     overlayModel(): Promise<OrbAgentModelSelection>
     onOverlayModel(listener: (selection: OrbAgentModelSelection) => void): () => void
+    overlayPermission(): Promise<OrbPermissionPreset>
+    setOverlayPermission(preset: OrbPermissionPreset, sessionId?: string): Promise<void>
     orbWorkspacePath(): Promise<string>
     focusMain(): Promise<void>
     quit(): Promise<void>

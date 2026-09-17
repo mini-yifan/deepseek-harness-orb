@@ -198,6 +198,8 @@ it('creates a Computer Use session on dsh_orb and sends from the overlay', async
         model: 'deepseek-flash',
         reasoningEffort: 'max',
       }),
+      overlayPermission: async () => 'danger-full-access',
+      setOverlayPermission: vi.fn(),
       onOverlayModel: () => () => {},
       onSelectionPrompt: () => () => {},
     },
@@ -245,11 +247,26 @@ it('creates a Computer Use session on dsh_orb and sends from the overlay', async
       && (post.data as { sessionId?: string }).sessionId === 'session-orb'
       && post.origin === 'dsh-app://app')).toBe(true)
     expect(document.querySelector<HTMLButtonElement>('#stop')?.hidden).toBe(true)
+    expect(document.querySelector('#permission-label')?.textContent).toBe('Full access')
+    document.querySelector<HTMLButtonElement>('#permission-button')?.click()
+    await expect.poll(() => document.querySelector<HTMLElement>('#permission-menu')?.hidden).toBe(false)
+    const workspaceWrite = [...document.querySelectorAll<HTMLButtonElement>('#permission-menu button')]
+      .find(node => node.textContent === 'Workspace Write')
+    workspaceWrite?.click()
+    await expect.poll(() => (api.floating.setOverlayPermission as ReturnType<typeof vi.fn>).mock.calls)
+      .toEqual([['workspace-write', 'session-orb']])
+    expect(calls.some(call => call.method === 'commands/execute')).toBe(false)
+    expect(document.querySelector('#permission-label')?.textContent).toBe('Workspace Write')
     const prompt = document.querySelector<HTMLInputElement>('#prompt')
     if (prompt === null) throw new Error('missing prompt')
     prompt.value = 'Write a Word document'
     document.querySelector<HTMLFormElement>('#composer')?.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }))
     await expect.poll(() => calls.some(call => call.method === 'session/prompt')).toBe(true)
+    expect((api.floating.setOverlayPermission as ReturnType<typeof vi.fn>).mock.calls).toEqual([
+      ['workspace-write', 'session-orb'],
+      ['workspace-write', 'session-orb'],
+    ])
+    expect(calls.some(call => call.method === 'commands/execute')).toBe(false)
     expect(calls.find(call => call.method === 'session/prompt')?.payload).toMatchObject({
       request: {
         sessionId: 'session-orb',
@@ -336,6 +353,8 @@ it('collapses then moves by the ball grab offset instead of the window origin', 
         model: 'deepseek-flash',
         reasoningEffort: 'max',
       }),
+      overlayPermission: async () => 'danger-full-access',
+      setOverlayPermission: vi.fn(),
       onOverlayModel: () => () => {},
       onSelectionPrompt: () => () => {},
     },
@@ -426,6 +445,8 @@ async function mountPointerOverlay() {
         model: 'deepseek-flash',
         reasoningEffort: 'max',
       }),
+      overlayPermission: async () => 'danger-full-access',
+      setOverlayPermission: vi.fn(),
       onOverlayModel: () => () => {},
       onSelectionPrompt: () => () => {},
     },
@@ -529,18 +550,20 @@ it('places Stop at the opposite pill end from the ball', () => {
   expect(css).not.toMatch(/body\.expand-right #stop \{\s*left:/u)
 })
 
-it('places History and New on the transcript edge opposite the input pill', () => {
+it('places History, Access, and New on the transcript edge opposite the input pill', () => {
   const html = readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8')
   const css = readFileSync(new URL('../renderer/floating.css', import.meta.url), 'utf8')
   expect(html.indexOf('id="history"')).toBeGreaterThan(-1)
-  expect(html.indexOf('id="history"')).toBeLessThan(html.indexOf('id="new-conversation"'))
+  expect(html.indexOf('id="history"')).toBeLessThan(html.indexOf('id="permission"'))
+  expect(html.indexOf('id="permission"')).toBeLessThan(html.indexOf('id="new-conversation"'))
   expect(html).toContain('id="new-conversation" type="button">+</button>')
   expect(html).toContain('id="history-list"')
   expect(css).toMatch(/#history \{\s*left: 12px/u)
   expect(css).toMatch(/#new-conversation \{\s*right: 12px/u)
-  expect(css).toMatch(/#history,\s*#new-conversation \{[^}]*top: 12px/u)
+  expect(css).toMatch(/#permission \{\s*left: 50%/u)
+  expect(css).toMatch(/#history,\s*#new-conversation,\s*#permission \{[^}]*top: 12px/u)
   expect(css).toMatch(
-    /body\.expand-down #history,\s*body\.expand-down #new-conversation \{\s*top: auto;\s*bottom: 12px/u,
+    /body\.expand-down #history,\s*body\.expand-down #new-conversation,\s*body\.expand-down #permission \{\s*top: auto;\s*bottom: 12px/u,
   )
   expect(css).toMatch(
     /body\.expand-down #panel \{\s*padding-top: calc\(var\(--ball\) \+ 10px\);\s*padding-bottom: 20px/u,
@@ -671,6 +694,8 @@ it('lists orb Computer Use chats and reopens the selected session', async () => 
         model: 'deepseek-flash',
         reasoningEffort: 'max',
       }),
+      overlayPermission: async () => 'danger-full-access',
+      setOverlayPermission: vi.fn(),
       onOverlayModel: () => () => {},
       onSelectionPrompt: () => () => {},
     },
@@ -727,6 +752,9 @@ it('lists orb Computer Use chats and reopens the selected session', async () => 
       new dom.window.Event('submit', { bubbles: true, cancelable: true }),
     )
     await expect.poll(() => calls.some(call => call.method === 'session/prompt')).toBe(true)
+    expect((api.floating.setOverlayPermission as ReturnType<typeof vi.fn>).mock.calls.at(-1))
+      .toEqual(['danger-full-access', 'session-old'])
+    expect(calls.some(call => call.method === 'commands/execute')).toBe(false)
     expect(calls.findLast(call => call.method === 'session/prompt')?.payload).toMatchObject({
       request: {
         sessionId: 'session-old',
@@ -831,6 +859,8 @@ async function mountQuestionOverlay() {
           model: 'deepseek-flash',
           reasoningEffort: 'max',
         }),
+        overlayPermission: async () => 'danger-full-access',
+        setOverlayPermission: vi.fn(),
         onOverlayModel: () => () => {},
         onSelectionPrompt: () => () => {},
       },
@@ -1140,6 +1170,8 @@ it('expands and session/prompts a Desktop selection-toolbar message', async () =
         model: 'deepseek-flash',
         reasoningEffort: 'max',
       }),
+      overlayPermission: async () => 'danger-full-access',
+      setOverlayPermission: vi.fn(),
       onOverlayModel: () => () => {},
       onSelectionPrompt(listener: (payload: { text: string }) => void) {
         selectionPrompt = listener
@@ -1154,6 +1186,9 @@ it('expands and session/prompts a Desktop selection-toolbar message', async () =
     if (selectionPrompt === undefined) throw new Error('missing selection prompt listener')
     selectionPrompt({ text: promptText })
     await expect.poll(() => calls.some(call => call.method === 'session/prompt')).toBe(true)
+    expect((api.floating.setOverlayPermission as ReturnType<typeof vi.fn>).mock.calls)
+      .toEqual([['danger-full-access', 'session-orb']])
+    expect(calls.some(call => call.method === 'commands/execute')).toBe(false)
     expect(calls.find(call => call.method === 'session/prompt')?.payload).toMatchObject({
       request: {
         sessionId: 'session-orb',
@@ -1215,6 +1250,8 @@ it('applies a live overlay model change without writing the Agent default', asyn
           model: 'deepseek-chat',
           reasoningEffort: 'high',
         }),
+        overlayPermission: async () => 'danger-full-access',
+        setOverlayPermission: vi.fn(),
         onOverlayModel(listener: (selection: {
           provider: string
           model: string
@@ -1255,5 +1292,76 @@ it('applies a live overlay model change without writing the Agent default', asyn
         saveAsDefault: false,
       },
     })
+  } finally { dom.window.close() }
+})
+
+it('sends from the overlay when Access IPC is missing', async () => {
+  const html = readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8')
+  const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'dsh-app://shell/floating.html' })
+  const calls: { method: string; payload: unknown }[] = []
+  const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+    if (isRemoteStream(_input)) return hangingStreamResponse(init?.signal)
+    const body = JSON.parse(String(init?.body)) as {
+      rpcId: string
+      method: string
+      payload: { args: Record<string, unknown> }
+    }
+    calls.push({ method: body.method, payload: body.payload.args })
+    let value: unknown = {}
+    if (body.method === 'workspace/create') {
+      value = { workspace: { workspaceId: 'ws-orb' }, created: true }
+    }
+    if (body.method === 'session/create') value = { sessionId: 'session-orb', agentPreset: 'computer-use' }
+    if (body.method === 'session/list') {
+      value = { items: [{ sessionId: 'session-orb', running: false, projections: { asOfSeq: 0 } }] }
+    }
+    if (body.method === 'session/prompt') value = { accepted: true }
+    return rpcResponse(body.rpcId, value)
+  })
+  Object.defineProperty(dom.window, 'fetch', { value: fetchMock })
+  Object.defineProperty(dom.window, 'crypto', { value: globalThis.crypto })
+  const setSessionId = vi.fn()
+  Object.defineProperty(dom.window, 'dshDesktop', {
+    value: {
+      locale: async () => resolveDesktopLocale('en'),
+      backend: { status: async () => ({ phase: 'ready' }), subscribe: vi.fn() },
+      floating: {
+        sessionId: async () => undefined,
+        setSessionId,
+        move: vi.fn(),
+        clamp: vi.fn(),
+        setExpanded: vi.fn(async (expanded: boolean) => ({
+          expanded, horizontal: 'left', vertical: 'up',
+        })),
+        orbWorkspacePath: async () => '/tmp/dsh_orb',
+        setSessionRunning: vi.fn(),
+        overlayModel: async () => ({
+          provider: 'deepseek-official',
+          model: 'deepseek-flash',
+          reasoningEffort: 'max',
+        }),
+        onOverlayModel: () => () => {},
+        onSelectionPrompt: () => () => {},
+      },
+    },
+  })
+  try {
+    runInContext(readFileSync(new URL('../renderer/floating.js', import.meta.url), 'utf8'), dom.getInternalVMContext())
+    await expect.poll(() => setSessionId.mock.calls).toEqual([['session-orb']])
+    const prompt = dom.window.document.querySelector<HTMLInputElement>('#prompt')
+    if (prompt === null) throw new Error('missing prompt')
+    prompt.value = 'Open WeChat'
+    dom.window.document.querySelector<HTMLFormElement>('#composer')?.dispatchEvent(
+      new dom.window.Event('submit', { bubbles: true, cancelable: true }),
+    )
+    await expect.poll(() => calls.some(call => call.method === 'session/prompt')).toBe(true)
+    expect(calls.find(call => call.method === 'session/prompt')?.payload).toMatchObject({
+      request: {
+        sessionId: 'session-orb',
+        mode: 'queue',
+        content: [{ type: 'text', text: 'Open WeChat' }],
+      },
+    })
+    expect(calls.some(call => call.method === 'commands/execute')).toBe(false)
   } finally { dom.window.close() }
 })

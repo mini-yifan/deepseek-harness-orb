@@ -57,6 +57,10 @@ export type DesktopHostCommand = {
   readonly provider: string
   readonly model: string
   readonly reasoningEffort?: string
+} | {
+  readonly type: 'orb-permission'
+  readonly preset: 'read-only' | 'workspace-write' | 'danger-full-access'
+  readonly sessionId?: string
 }
 
 /** Lifecycle and overlay-guard events retained on Node IPC. */

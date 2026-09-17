@@ -111,6 +111,7 @@ const harness = await vi.hoisted(async () => {
       return this.exited.promise
     })
     readonly setOrbCodeAgentModel = vi.fn()
+    readonly setOrbPermissionPreset = vi.fn()
     constructor(
       readonly node: string,
       readonly runtime: string,
@@ -516,11 +517,13 @@ describe('desktop floating overlay', () => {
       model: 'deepseek-flash',
       reasoningEffort: 'max',
     })
+    expect(harness.hosts[0]!.setOrbPermissionPreset).toHaveBeenCalledWith('danger-full-access')
     expect(invokeFloating(DESKTOP_IPC.floatingOverlayModelGet)).toEqual({
       provider: 'deepseek-official',
       model: 'deepseek-flash',
       reasoningEffort: 'max',
     })
+    expect(invokeFloating(DESKTOP_IPC.floatingOverlayPermissionGet)).toBe('danger-full-access')
     const toolbar = harness.windows.find(window => window.options.focusable === false)
     expect(toolbar?.urls).toEqual(['dsh-app://shell/selection-toolbar.html'])
     expect(overlay?.contentProtection).toBe(false)

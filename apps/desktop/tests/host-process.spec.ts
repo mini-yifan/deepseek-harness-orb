@@ -361,6 +361,67 @@ function onRequestFrame() {}
     await host.stop().catch(() => undefined)
   })
 
+  it('pushes the overlay Access preset over Host IPC', async () => {
+    const runtime = projectWithHost(`
+let lastPermission = null
+process.on('message', message => {
+  if (message.type === 'orb-permission') lastPermission = message
+})
+process.send({ type: 'ready', protocolVersion: ${String(DESKTOP_HOST_PROTOCOL_VERSION)}, dshVersion: 'orb-permission' })
+function onRequestFrame(frame) {
+  if (frame.type !== 1) return
+  responseStart(frame.streamId, { headers: [['content-type', 'application/json']] })
+  responseData(frame.streamId, JSON.stringify(lastPermission))
+  responseEnd(frame.streamId)
+}
+`)
+    const host = new DesktopHostProcess(process.execPath, runtime, runtime)
+    try {
+      await host.start()
+      host.setOrbPermissionPreset('workspace-write')
+      await expect.poll(async () => {
+        const response = await host.fetch(new Request('dsh-app://app/orb-permission'))
+        return await response.json() as unknown
+      }).toEqual({
+        type: 'orb-permission',
+        preset: 'workspace-write',
+      })
+    } finally {
+      await host.stop()
+    }
+  })
+
+  it('includes an overlay session id on the Host permission push', async () => {
+    const runtime = projectWithHost(`
+let lastPermission = null
+process.on('message', message => {
+  if (message.type === 'orb-permission') lastPermission = message
+})
+process.send({ type: 'ready', protocolVersion: ${String(DESKTOP_HOST_PROTOCOL_VERSION)}, dshVersion: 'orb-permission-session' })
+function onRequestFrame(frame) {
+  if (frame.type !== 1) return
+  responseStart(frame.streamId, { headers: [['content-type', 'application/json']] })
+  responseData(frame.streamId, JSON.stringify(lastPermission))
+  responseEnd(frame.streamId)
+}
+`)
+    const host = new DesktopHostProcess(process.execPath, runtime, runtime)
+    try {
+      await host.start()
+      host.setOrbPermissionPreset('read-only', 'session-orb')
+      await expect.poll(async () => {
+        const response = await host.fetch(new Request('dsh-app://app/orb-permission'))
+        return await response.json() as unknown
+      }).toEqual({
+        type: 'orb-permission',
+        preset: 'read-only',
+        sessionId: 'session-orb',
+      })
+    } finally {
+      await host.stop()
+    }
+  })
+
   it('pushes the background Code-agent model over Host IPC', async () => {
     const runtime = projectWithHost(`
 let lastModel = null

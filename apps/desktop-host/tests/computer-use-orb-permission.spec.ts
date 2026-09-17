@@ -8,16 +8,19 @@ import SessionStore, { Session, SessionId, SESSION_FORMAT_VERSION } from '@deeps
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import {
   apply,
+  clearOrbPermissionPreset,
   inject,
   name,
   orbWorkspacePath,
-  pinOrbComputerUseFullAccess,
+  pinOrbWorkspacePermission,
+  setOrbPermissionPreset,
 } from '../src/computer-use-orb-permission.ts'
 
 const homes: string[] = []
 
 afterEach(() => {
   vi.unstubAllEnvs()
+  clearOrbPermissionPreset()
   for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true })
 })
 
@@ -80,28 +83,36 @@ function presetNames(session: Session): string[] {
     .map(event => event.data.preset)
 }
 
-describe('pinOrbComputerUseFullAccess', () => {
-  it('pins Computer Use on the orb workspace', () => {
+describe('pinOrbWorkspacePermission', () => {
+  it('pins Computer Use on the orb workspace to the live overlay preset', () => {
     const home = isolatedHome()
     const presets = recordingPresets()
-    pinOrbComputerUseFullAccess(presets, sessionOf('orb-cu', orbWorkspacePath(), 'computer-use'))
+    pinOrbWorkspacePermission(presets, sessionOf('orb-cu', orbWorkspacePath(), 'computer-use'))
     expect(presets.applied).toEqual(['danger-full-access'])
     expect(presets.currentValue).toBe('danger-full-access')
     expect(orbWorkspacePath()).toBe(join(home, 'dsh_orb'))
   })
 
-  it('leaves standard sessions on the orb workspace unchanged', () => {
+  it('pins standard on the orb workspace to the live overlay preset', () => {
     const presets = recordingPresets()
     isolatedHome()
-    pinOrbComputerUseFullAccess(presets, sessionOf('orb-std', orbWorkspacePath(), 'standard'))
-    expect(presets.applied).toEqual([])
-    expect(presets.currentValue).toBe('workspace-write')
+    pinOrbWorkspacePermission(presets, sessionOf('orb-std', orbWorkspacePath(), 'standard'))
+    expect(presets.applied).toEqual(['danger-full-access'])
+    expect(presets.currentValue).toBe('danger-full-access')
+  })
+
+  it('uses an Electron-pushed overlay preset', () => {
+    isolatedHome()
+    setOrbPermissionPreset('read-only')
+    const presets = recordingPresets()
+    pinOrbWorkspacePermission(presets, sessionOf('orb-cu', orbWorkspacePath(), 'computer-use'))
+    expect(presets.applied).toEqual(['read-only'])
   })
 
   it('leaves Computer Use on another workspace unchanged', () => {
     const home = isolatedHome()
     const presets = recordingPresets()
-    pinOrbComputerUseFullAccess(
+    pinOrbWorkspacePermission(
       presets,
       sessionOf('other-cu', join(home, 'other-project'), 'computer-use'),
     )
@@ -109,10 +120,10 @@ describe('pinOrbComputerUseFullAccess', () => {
     expect(presets.currentValue).toBe('workspace-write')
   })
 
-  it('appends nothing when Full access is already current', () => {
+  it('appends nothing when the live preset is already current', () => {
     isolatedHome()
     const presets = recordingPresets('danger-full-access')
-    pinOrbComputerUseFullAccess(presets, sessionOf('orb-cu-full', orbWorkspacePath(), 'computer-use'))
+    pinOrbWorkspacePermission(presets, sessionOf('orb-cu-full', orbWorkspacePath(), 'computer-use'))
     expect(presets.applied).toEqual([])
     expect(presets.currentValue).toBe('danger-full-access')
   })
@@ -135,8 +146,9 @@ describe('computer-use-orb-permission plugin', () => {
     expect(presetNames(session)).toEqual(['workspace-write', 'danger-full-access'])
   })
 
-  it('leaves standard on the orb workspace at workspace-write', async () => {
+  it('pins standard on the orb workspace to the live overlay preset', async () => {
     isolatedHome()
+    setOrbPermissionPreset('workspace-write')
     const ctx = await mountedPresets()
     await ctx.plugin({ name, inject, apply })
     const session = ctx.sessions.create(SessionId('orb-std'), {
@@ -165,11 +177,11 @@ describe('computer-use-orb-permission plugin', () => {
       meta: { cwd: orbWorkspacePath(), agentPreset: 'computer-use' },
     })
     expect(presetNames(session)).toEqual(['workspace-write', 'danger-full-access'])
-    pinOrbComputerUseFullAccess(ctx.permissionPresets, session)
+    pinOrbWorkspacePermission(ctx.permissionPresets, session)
     expect(presetNames(session)).toEqual(['workspace-write', 'danger-full-access'])
   })
 
-  it('upgrades an already-announced orb Computer Use session at apply', async () => {
+  it('leaves an already-announced orb Computer Use session unchanged at apply', async () => {
     isolatedHome()
     const ctx = await mountedPresets()
     const session = ctx.sessions.create(SessionId('orb-cu-resume'), {
@@ -177,6 +189,21 @@ describe('computer-use-orb-permission plugin', () => {
     })
     expect(ctx.permissionPresets.current(session)).toBe('workspace-write')
     await ctx.plugin({ name, inject, apply })
+    expect(ctx.permissionPresets.current(session)).toBe('workspace-write')
+    expect(presetNames(session)).toEqual(['workspace-write'])
+  })
+
+  it('pins an attached orb session when Electron pushes that session id', async () => {
+    isolatedHome()
+    const ctx = await mountedPresets()
+    const session = ctx.sessions.create(SessionId('orb-cu-live'), {
+      meta: { cwd: orbWorkspacePath(), agentPreset: 'computer-use' },
+    })
+    await ctx.plugin({ name, inject, apply })
+    expect(ctx.permissionPresets.current(session)).toBe('workspace-write')
+    setOrbPermissionPreset('read-only')
+    expect(ctx.permissionPresets.current(session)).toBe('workspace-write')
+    setOrbPermissionPreset('danger-full-access', String(session.id))
     expect(ctx.permissionPresets.current(session)).toBe('danger-full-access')
     expect(presetNames(session)).toEqual(['workspace-write', 'danger-full-access'])
   })

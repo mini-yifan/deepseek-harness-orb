@@ -12,7 +12,7 @@ History and New are `position: absolute; top: 12px` on the overlay panel. When t
 
 ## Decision
 
-History stays left and New stays right. Their vertical edge is the transcript side opposite the input pill: `top: 12px` for `expand-up`, `bottom: 12px` for `expand-down`. `expand-down` also swaps `#panel` padding so the pill's 72px band is the top inset, and moves the 36px transcript / history-list / question padding to the bottom so the last rows clear the buttons.
+History stays left and New stays right. Their vertical edge is the transcript side opposite the input pill: `top: 12px` for `expand-up`, `bottom: 12px` for `expand-down`. The Access chip between them uses that same vertical edge; [overlay Access picker](../feature/2026-09-17-overlay-access-picker.md) owns the chip. `expand-down` also swaps `#panel` padding so the pill's 72px band is the top inset, and moves the 36px transcript / history-list / question padding to the bottom so the last rows clear the buttons.
 
 ## Alternatives considered
 
@@ -26,4 +26,4 @@ Horizontal placement does not follow `expand-left` / `expand-right`. Unpinning a
 
 ## Testing
 
-`apps/desktop/tests/floating-renderer.spec.ts` pins History left, New right, `top: 12px` by default, `bottom: 12px` under `expand-down`, and the swapped panel and transcript padding for downward growth.
+`apps/desktop/tests/floating-renderer.spec.ts` pins History left, New right, the Access chip between them, `top: 12px` by default, `bottom: 12px` under `expand-down`, and the swapped panel and transcript padding for downward growth.

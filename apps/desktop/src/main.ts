@@ -45,6 +45,12 @@ import {
   writeOrbAgentModels,
   type OrbAgentModelSelection,
 } from './orb-agent-models.ts'
+import {
+  isOrbPermissionPreset,
+  readOrbPermission,
+  writeOrbPermission,
+  type OrbPermissionPreset,
+} from './orb-permission.ts'
 import { createSelectionToolbarWindow, hideSelectionToolbar } from './selection-toolbar-window.ts'
 import { SelectionToolbarController } from './selection-toolbar-controller.ts'
 
@@ -346,12 +352,17 @@ async function main(): Promise<void> {
       },
       fetch: (request: Request) => host.fetch(request),
       setOrbCodeAgentModel: (selection: OrbAgentModelSelection) => { host.setOrbCodeAgentModel(selection) },
+      setOrbPermissionPreset: (preset: OrbPermissionPreset, sessionId?: string) => {
+        if (sessionId === undefined) host.setOrbPermissionPreset(preset)
+        else host.setOrbPermissionPreset(preset, sessionId)
+      },
     }
   }, (state) => {
     if (state.phase === 'starting' && !emergencyDocument) pageError = undefined
     publishBackend(backendState())
     if (state.phase === 'ready') {
       pushBackgroundModel()
+      pushOrbPermission()
       ensureFloating()
     }
     if (state.phase === 'error') void navigateMain(startupUrl).catch((error: unknown) => { console.error(error) })
@@ -359,6 +370,10 @@ async function main(): Promise<void> {
 
   function pushBackgroundModel(): void {
     backend.host?.setOrbCodeAgentModel(readOrbAgentModels(activeProject).background)
+  }
+
+  function pushOrbPermission(): void {
+    backend.host?.setOrbPermissionPreset(readOrbPermission(activeProject))
   }
 
   async function loadFloatingModelCatalog(): Promise<{
@@ -630,6 +645,19 @@ async function main(): Promise<void> {
   ipcMain.handle(DESKTOP_IPC.floatingOverlayModelGet, (event) => {
     requireFloatingWindow(event)
     return readOrbAgentModels(activeProject).overlay
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingOverlayPermissionGet, (event) => {
+    requireFloatingWindow(event)
+    return readOrbPermission(activeProject)
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingOverlayPermissionSet, (event, preset: unknown, sessionId: unknown) => {
+    requireFloatingWindow(event)
+    if (!isOrbPermissionPreset(preset)) {
+      throw new Error('dsh desktop: overlay permission must be a known Access preset')
+    }
+    writeOrbPermission(activeProject, preset)
+    const id = typeof sessionId === 'string' && sessionId !== '' ? sessionId : undefined
+    backend.host?.setOrbPermissionPreset(preset, id)
   })
   ipcMain.handle(DESKTOP_IPC.floatingOrbWorkspace, (event) => {
     requireFloatingWindow(event)

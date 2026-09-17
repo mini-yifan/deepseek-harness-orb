@@ -326,6 +326,24 @@ export class DesktopHostProcess {
     })
   }
 
+  /**
+   * Push the overlay Access preset into the Host child.
+   * @param preset - stored overlay Access value.
+   * @param sessionId - overlay session to pin now; omitted, only later creates use `preset`.
+   */
+  setOrbPermissionPreset(
+    preset: 'read-only' | 'workspace-write' | 'danger-full-access',
+    sessionId?: string,
+  ): void {
+    const child = this.child
+    if (child === undefined || !child.connected) return
+    this.send({
+      type: 'orb-permission',
+      preset,
+      ...(sessionId === undefined ? {} : { sessionId }),
+    })
+  }
+
   private acceptResponseBytes(chunk: Buffer): void {
     try {
       for (const frame of this.responseDecoder.push(chunk)) this.handleResponseFrame(frame)

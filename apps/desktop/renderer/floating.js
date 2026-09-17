@@ -32,6 +32,7 @@ const OVERLAY_APP_ORIGIN = 'dsh-app://app'
 const OVERLAY_INDEX_HREF = 'dsh-app://app/index.html?surface=overlay'
 const OVERLAY_SESSION_MESSAGE_TYPE = 'dsh.overlay.session'
 const OVERLAY_READY_MESSAGE_TYPE = 'dsh.overlay.ready'
+const PERMISSION_PRESETS = ['read-only', 'workspace-write', 'danger-full-access']
 
 function orbComputerUseItems(items, orbPath) {
   return (items ?? []).filter(item =>
@@ -135,6 +136,10 @@ async function main() {
   const historyButton = document.querySelector('#history')
   historyButton.setAttribute('aria-label', messages.floatingHistory)
   historyButton.title = messages.floatingHistory
+  const permissionRoot = document.querySelector('#permission')
+  const permissionButton = document.querySelector('#permission-button')
+  const permissionLabel = document.querySelector('#permission-label')
+  const permissionMenu = document.querySelector('#permission-menu')
   document.querySelector('#input-label').textContent = messages.floatingPlaceholder
   const ball = document.querySelector('#ball')
   const panel = document.querySelector('#panel')
@@ -167,9 +172,17 @@ async function main() {
   questionSkip.textContent = messages.floatingQuestionSkip
   questionCustom.placeholder = messages.floatingQuestionCustomPlaceholder
   let sessionId = await api.floating.sessionId()
+  let overlayPermission = 'danger-full-access'
+  try {
+    const stored = await api.floating.overlayPermission?.()
+    if (PERMISSION_PRESETS.includes(stored)) overlayPermission = stored
+  } catch {
+    // Missing Desktop IPC uses shipped Full access so overlay send still binds.
+  }
   let workspaceId
   let orbWorkspacePath
   let historyOpen = false
+  let permissionOpen = false
   let dragging = false
   let skipClick = false
   let collapsing = false
@@ -401,10 +414,58 @@ async function main() {
     return createOrbSession()
   }
 
+  function permissionText(preset) {
+    if (preset === 'read-only') return messages.floatingAccessReadOnly
+    if (preset === 'workspace-write') return messages.floatingAccessWorkspaceWrite
+    return messages.floatingAccessFullAccess
+  }
+
+  function renderPermission() {
+    if (permissionLabel === null || permissionButton === null || permissionMenu === null) return
+    permissionLabel.textContent = permissionText(overlayPermission)
+    permissionButton.setAttribute('aria-label', permissionText(overlayPermission))
+    permissionButton.title = permissionText(overlayPermission)
+    for (const option of permissionMenu.querySelectorAll('[data-preset]')) {
+      option.setAttribute('aria-selected', String(option.dataset.preset === overlayPermission))
+    }
+  }
+
+  function setPermissionOpen(next) {
+    permissionOpen = next
+    if (permissionMenu === null || permissionButton === null) return
+    permissionMenu.hidden = !permissionOpen
+    permissionButton.setAttribute('aria-expanded', String(permissionOpen))
+  }
+
+  async function persistOverlayPermission(id) {
+    if (typeof api.floating.setOverlayPermission !== 'function') return
+    await api.floating.setOverlayPermission(overlayPermission, id)
+  }
+
+  async function promptOverlay(text) {
+    const id = await ensureSession()
+    setRunning(true)
+    try {
+      await persistOverlayPermission(id)
+    } catch {
+      // Overlay send still queues when Access persist is unavailable.
+    }
+    await rpc('session/prompt', {
+      request: {
+        requestId: rpcId(),
+        sessionId: id,
+        mode: 'queue',
+        content: [{ type: 'text', text }],
+      },
+    })
+    await refreshOverlay()
+  }
+
   function setHistoryOpen(next) {
     historyOpen = next
     historyList.hidden = !historyOpen
     historyButton.setAttribute('aria-pressed', String(historyOpen))
+    if (historyOpen) setPermissionOpen(false)
     syncQuestion()
   }
 
@@ -860,18 +921,9 @@ async function main() {
     const text = typeof payload?.text === 'string' ? payload.text.trim() : ''
     if (text === '') return
     setHistoryOpen(false)
-    const id = await ensureSession()
+    setPermissionOpen(false)
     await setExpanded(true, true)
-    setRunning(true)
-    await rpc('session/prompt', {
-      request: {
-        requestId: rpcId(),
-        sessionId: id,
-        mode: 'queue',
-        content: [{ type: 'text', text }],
-      },
-    })
-    await refreshOverlay()
+    await promptOverlay(text)
   })
   api.floating.onOverlayModel(selection => {
     if (sessionId === undefined) return
@@ -883,23 +935,46 @@ async function main() {
     if (text === '') return
     prompt.value = ''
     setHistoryOpen(false)
-    const id = await ensureSession()
-    setRunning(true)
-    await rpc('session/prompt', {
-      request: {
-        requestId: rpcId(),
-        sessionId: id,
-        mode: 'queue',
-        content: [{ type: 'text', text }],
-      },
-    })
-    await refreshOverlay()
+    setPermissionOpen(false)
+    await promptOverlay(text)
   })
   stop.addEventListener('click', async () => {
     if (sessionId === undefined) return
     await rpc('session/cancel', { request: { sessionId } })
     await refreshOverlay()
   })
+  if (permissionMenu !== null && permissionButton !== null && permissionRoot !== null) {
+    for (const preset of PERMISSION_PRESETS) {
+      const item = document.createElement('li')
+      const option = document.createElement('button')
+      option.type = 'button'
+      option.dataset.preset = preset
+      option.setAttribute('role', 'option')
+      option.textContent = permissionText(preset)
+      option.addEventListener('click', async () => {
+        overlayPermission = preset
+        setPermissionOpen(false)
+        renderPermission()
+        try {
+          await persistOverlayPermission(sessionId)
+        } catch {
+          // Chip selection stays local when Desktop persist is unavailable.
+        }
+      })
+      item.append(option)
+      permissionMenu.append(item)
+    }
+    renderPermission()
+    permissionButton.addEventListener('click', (event) => {
+      event.stopPropagation()
+      setHistoryOpen(false)
+      setPermissionOpen(!permissionOpen)
+    })
+    document.addEventListener('pointerdown', (event) => {
+      if (permissionRoot.contains(event.target)) return
+      setPermissionOpen(false)
+    })
+  }
   historyButton.addEventListener('click', async () => {
     setHistoryOpen(!historyOpen)
     await refreshOverlay()
@@ -912,6 +987,7 @@ async function main() {
   document.querySelector('#new-conversation').addEventListener('click', async () => {
     prompt.value = ''
     setHistoryOpen(false)
+    setPermissionOpen(false)
     setRunning(false)
     await createOrbSession()
     await refreshOverlay()
