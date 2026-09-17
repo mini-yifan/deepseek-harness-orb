@@ -34,6 +34,10 @@ const OVERLAY_SESSION_MESSAGE_TYPE = 'dsh.overlay.session'
 const OVERLAY_READY_MESSAGE_TYPE = 'dsh.overlay.ready'
 const PERMISSION_PRESETS = ['read-only', 'workspace-write', 'danger-full-access']
 
+function composeSelectionSendPrompt(instruction, selection) {
+  return `${instruction}\n\n${selection}`
+}
+
 function orbComputerUseItems(items, orbPath) {
   return (items ?? []).filter(item =>
     item.origin !== 'subagent'
@@ -162,6 +166,12 @@ async function main() {
   const status = document.querySelector('#status')
   const prompt = document.querySelector('#prompt')
   const stop = document.querySelector('#stop')
+  const selectionChip = document.querySelector('#selection-chip')
+  const selectionChipText = document.querySelector('#selection-chip-text')
+  const selectionChipDismiss = document.querySelector('#selection-chip-dismiss')
+  selectionChipDismiss.textContent = '\u00d7'
+  selectionChipDismiss.setAttribute('aria-label', messages.floatingSelectionDismiss)
+  selectionChipDismiss.title = messages.floatingSelectionDismiss
   questionCancel.textContent = '\u00d7'
   questionCancel.setAttribute('aria-label', messages.floatingQuestionCancel)
   questionCancel.title = messages.floatingQuestionCancel
@@ -193,6 +203,7 @@ async function main() {
   let lastOrigin = undefined
   let collapseTimer = undefined
   let collapseFrame = undefined
+  let attachedSelection = ''
   const orbSessionIds = new Set()
   const pendingBySession = new Map()
   const settledEventIds = new Set()
@@ -233,10 +244,24 @@ async function main() {
     return currentPending() !== undefined
   }
 
+  function hasSelectionChip() {
+    return attachedSelection !== ''
+  }
+
+  function setAttachedSelection(text) {
+    attachedSelection = text
+    if (pageClosed()) return
+    const show = attachedSelection !== ''
+    selectionChip.hidden = !show
+    document.body.classList.toggle('has-selection-chip', show)
+    selectionChipText.textContent = attachedSelection
+    syncGif()
+  }
+
   function syncGif() {
     if (pageClosed()) return
     const gif = document.querySelector('#ball-gif')
-    const play = expanded || running || asking()
+    const play = expanded || running || asking() || hasSelectionChip()
     if (play) {
       if (gif.dataset.mode !== 'play') {
         gif.dataset.mode = 'play'
@@ -287,7 +312,7 @@ async function main() {
       syncGif()
       return
     }
-    if (!force && (pinned || running || asking())) return
+    if (!force && (pinned || running || asking() || hasSelectionChip())) return
     expanded = false
     document.body.classList.remove('expanded')
     stop.hidden = true
@@ -310,7 +335,7 @@ async function main() {
   }
 
   function scheduleCollapse() {
-    if (pinned || running || asking() || dragging) return
+    if (pinned || running || asking() || dragging || hasSelectionChip()) return
     if (collapseTimer !== undefined) clearTimeout(collapseTimer)
     collapseTimer = setTimeout(() => {
       collapseTimer = undefined
@@ -925,15 +950,27 @@ async function main() {
     await setExpanded(true, true)
     await promptOverlay(text)
   })
+  api.floating.onSelectionAttach(async payload => {
+    const text = typeof payload?.text === 'string' ? payload.text : ''
+    if (text.trim() === '') return
+    setHistoryOpen(false)
+    setPermissionOpen(false)
+    setAttachedSelection(text)
+    await setExpanded(true, true)
+    prompt.focus()
+  })
   api.floating.onOverlayModel(selection => {
     if (sessionId === undefined) return
     void selectOverlayModel(sessionId, selection)
   })
   document.querySelector('#composer').addEventListener('submit', async event => {
     event.preventDefault()
-    const text = prompt.value.trim()
-    if (text === '') return
+    const instruction = prompt.value.trim()
+    if (instruction === '') return
     prompt.value = ''
+    const selection = attachedSelection
+    if (selection !== '') setAttachedSelection('')
+    const text = selection === '' ? instruction : composeSelectionSendPrompt(instruction, selection)
     setHistoryOpen(false)
     setPermissionOpen(false)
     await promptOverlay(text)
@@ -983,6 +1020,9 @@ async function main() {
     if (event.origin !== OVERLAY_APP_ORIGIN) return
     if (event.data?.type !== OVERLAY_READY_MESSAGE_TYPE) return
     postOverlaySession()
+  })
+  selectionChipDismiss.addEventListener('click', () => {
+    setAttachedSelection('')
   })
   document.querySelector('#new-conversation').addEventListener('click', async () => {
     prompt.value = ''

@@ -3,6 +3,7 @@ import { runInContext } from 'node:vm'
 import { JSDOM } from 'jsdom'
 import { expect, it, vi } from 'vitest'
 import { resolveDesktopLocale } from '../src/locale.ts'
+import { composeSelectionSendPrompt } from '../src/selection-prompt.ts'
 
 function isRemoteStream(input: string | URL): boolean {
   return String(input).includes('/.dsh/remote-stream')
@@ -202,6 +203,7 @@ it('creates a Computer Use session on dsh_orb and sends from the overlay', async
       setOverlayPermission: vi.fn(),
       onOverlayModel: () => () => {},
       onSelectionPrompt: () => () => {},
+      onSelectionAttach: () => () => {},
     },
   }
   Object.defineProperty(dom.window, 'dshDesktop', { value: api })
@@ -357,6 +359,7 @@ it('collapses then moves by the ball grab offset instead of the window origin', 
       setOverlayPermission: vi.fn(),
       onOverlayModel: () => () => {},
       onSelectionPrompt: () => () => {},
+      onSelectionAttach: () => () => {},
     },
   }
   Object.defineProperty(dom.window, 'dshDesktop', { value: api })
@@ -449,6 +452,7 @@ async function mountPointerOverlay() {
       setOverlayPermission: vi.fn(),
       onOverlayModel: () => () => {},
       onSelectionPrompt: () => () => {},
+      onSelectionAttach: () => () => {},
     },
   }
   Object.defineProperty(dom.window, 'dshDesktop', { value: api })
@@ -525,6 +529,18 @@ it('paints collapsed ball shadow, expanded hairline, and outer pin stroke', () =
   expect(css).toMatch(/body\.pinned #ball \{[^}]*box-shadow: 0 0 0 3px var\(--pin\)/u)
   expect(css).not.toContain('inset 0 0 0 3px')
   expect(css).not.toMatch(/#ball \{[^}]*overflow:\s*hidden/u)
+})
+
+it('places the selection chip on the transcript side of the input pill', () => {
+  const html = readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8')
+  const css = readFileSync(new URL('../renderer/floating.css', import.meta.url), 'utf8')
+  expect(html).toContain('id="selection-chip"')
+  expect(html).toContain('id="selection-chip-text"')
+  expect(html).toContain('id="selection-chip-dismiss"')
+  expect(css).toMatch(/body\.expand-up #selection-chip \{\s*bottom: var\(--ball\)/u)
+  expect(css).toMatch(/body\.expand-down #selection-chip \{\s*top: var\(--ball\)/u)
+  expect(css).toMatch(/#selection-chip-text \{[^}]*text-overflow: ellipsis/u)
+  expect(css).toMatch(/#selection-chip-text \{[^}]*white-space: nowrap/u)
 })
 
 it('forbids selecting overlay chrome except the composer and question fields', () => {
@@ -698,6 +714,7 @@ it('lists orb Computer Use chats and reopens the selected session', async () => 
       setOverlayPermission: vi.fn(),
       onOverlayModel: () => () => {},
       onSelectionPrompt: () => () => {},
+      onSelectionAttach: () => () => {},
     },
   }
   Object.defineProperty(dom.window, 'dshDesktop', { value: api })
@@ -863,6 +880,7 @@ async function mountQuestionOverlay() {
         setOverlayPermission: vi.fn(),
         onOverlayModel: () => () => {},
         onSelectionPrompt: () => () => {},
+        onSelectionAttach: () => () => {},
       },
     },
   })
@@ -1103,9 +1121,9 @@ it('keeps an unanswered question while History switches away and back', async ()
   } finally { overlay.dom.window.close() }
 })
 
-it('expands and session/prompts a Desktop selection-toolbar message', async () => {
+it('expands and session/prompts a Desktop selection-toolbar translate message', async () => {
   const preamble = 'Desktop selection. Answer in this chat only. Do not call GUI tools or code_agent.'
-  const promptText = `${preamble}\n\nExplain this text:\n\nhello`
+  const promptText = `${preamble}\n\nTranslate the following into Chinese:\n\nhello`
   const dom = new JSDOM(readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8'), {
     runScripts: 'outside-only',
     url: 'dsh-app://shell/floating.html',
@@ -1177,6 +1195,7 @@ it('expands and session/prompts a Desktop selection-toolbar message', async () =
         selectionPrompt = listener
         return () => {}
       },
+      onSelectionAttach: () => () => {},
     },
   }
   Object.defineProperty(dom.window, 'dshDesktop', { value: api })
@@ -1198,6 +1217,213 @@ it('expands and session/prompts a Desktop selection-toolbar message', async () =
     })
     expect(setExpanded.mock.calls.some(call => call[0] === true)).toBe(true)
     expect(setSessionRunning).toHaveBeenCalledWith(true)
+  } finally { dom.window.close() }
+})
+
+it('attaches selected text to the composer until the first send or dismiss', async () => {
+  const dom = new JSDOM(readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8'), {
+    runScripts: 'outside-only',
+    url: 'dsh-app://shell/floating.html',
+  })
+  const calls: { method: string; payload: unknown }[] = []
+  let created = 0
+  const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+    if (isRemoteStream(_input)) return hangingStreamResponse(init?.signal)
+    const body = JSON.parse(String(init?.body)) as {
+      rpcId: string
+      method: string
+      payload: { args: Record<string, unknown> }
+    }
+    calls.push({ method: body.method, payload: body.payload.args })
+    let value: unknown = {}
+    if (body.method === 'workspace/create') {
+      value = { workspace: { workspaceId: 'ws-orb' }, created: true }
+    }
+    if (body.method === 'session/create') {
+      created += 1
+      value = { sessionId: created === 1 ? 'session-orb' : 'session-new', agentPreset: 'computer-use' }
+    }
+    if (body.method === 'session/modelCatalog') {
+      value = { groups: [{ id: 'deepseek-official', models: [{ id: 'deepseek-flash' }] }] }
+    }
+    if (body.method === 'session/page') value = { records: [] }
+    if (body.method === 'session/list') {
+      value = {
+        items: [
+          { sessionId: 'session-orb', running: false, projections: { asOfSeq: 0 } },
+          ...(created > 1
+            ? [{ sessionId: 'session-new', running: false, projections: { asOfSeq: 0 } }]
+            : []),
+        ],
+      }
+    }
+    if (body.method === 'session/prompt') value = { accepted: true }
+    return {
+      ok: true,
+      json: async () => ({
+        type: 'server-response',
+        rpcId: body.rpcId,
+        result: { ok: true, value },
+      }),
+    }
+  })
+  Object.defineProperty(dom.window, 'fetch', { value: fetchMock })
+  Object.defineProperty(dom.window, 'crypto', { value: globalThis.crypto })
+  const setSessionId = vi.fn()
+  const setExpanded = vi.fn(async (expanded: boolean) => ({
+    expanded,
+    horizontal: 'left',
+    vertical: 'up',
+  }))
+  const promptFocus = vi.fn()
+  let selectionAttach: ((payload: { text: string }) => void) | undefined
+  const api = {
+    locale: async () => resolveDesktopLocale('en'),
+    backend: {
+      status: async () => ({ phase: 'ready' }),
+      subscribe: vi.fn(),
+    },
+    floating: {
+      sessionId: async () => undefined,
+      setSessionId,
+      move: vi.fn(),
+      clamp: vi.fn(),
+      setExpanded,
+      orbWorkspacePath: async () => '/tmp/dsh_orb',
+      setSessionRunning: vi.fn(),
+      overlayModel: async () => ({
+        provider: 'deepseek-official',
+        model: 'deepseek-flash',
+        reasoningEffort: 'max',
+      }),
+      overlayPermission: async () => 'danger-full-access',
+      setOverlayPermission: vi.fn(),
+      onOverlayModel: () => () => {},
+      onSelectionPrompt: () => () => {},
+      onSelectionAttach(listener: (payload: { text: string }) => void) {
+        selectionAttach = listener
+        return () => {}
+      },
+    },
+  }
+  Object.defineProperty(dom.window, 'dshDesktop', { value: api })
+  try {
+    runInContext(readFileSync(new URL('../renderer/floating.js', import.meta.url), 'utf8'), dom.getInternalVMContext())
+    const document = dom.window.document
+    await expect.poll(() => setSessionId.mock.calls).toEqual([['session-orb']])
+    const prompt = document.querySelector<HTMLInputElement>('#prompt')
+    const chip = document.querySelector<HTMLElement>('#selection-chip')
+    const chipText = document.querySelector('#selection-chip-text')
+    const dismiss = document.querySelector<HTMLButtonElement>('#selection-chip-dismiss')
+    if (prompt === null || chip === null || chipText === null || dismiss === null) {
+      throw new Error('missing composer chip')
+    }
+    Object.defineProperty(prompt, 'focus', { value: promptFocus })
+    if (selectionAttach === undefined) throw new Error('missing selection attach listener')
+    selectionAttach({ text: 'A long selected paragraph from another app' })
+    await expect.poll(() => chip.hidden).toBe(false)
+    expect(calls.some(call => call.method === 'session/prompt')).toBe(false)
+    expect(chipText.textContent).toBe('A long selected paragraph from another app')
+    expect(document.body.classList.contains('has-selection-chip')).toBe(true)
+    expect(document.body.classList.contains('expand-up')).toBe(true)
+    expect(promptFocus).toHaveBeenCalled()
+    document.querySelector<HTMLButtonElement>('#new-conversation')?.click()
+    await expect.poll(() => setSessionId.mock.calls).toEqual([['session-orb'], ['session-new']])
+    expect(chip.hidden).toBe(false)
+    prompt.value = 'Explain this'
+    document.querySelector<HTMLFormElement>('#composer')?.dispatchEvent(
+      new dom.window.Event('submit', { bubbles: true, cancelable: true }),
+    )
+    await expect.poll(() => calls.some(call => call.method === 'session/prompt')).toBe(true)
+    expect(calls.find(call => call.method === 'session/prompt')?.payload).toMatchObject({
+      request: {
+        sessionId: 'session-new',
+        mode: 'queue',
+        content: [{ type: 'text', text: composeSelectionSendPrompt('Explain this', 'A long selected paragraph from another app') }],
+      },
+    })
+    expect(chip.hidden).toBe(true)
+    expect(document.body.classList.contains('has-selection-chip')).toBe(false)
+    prompt.value = 'Follow up'
+    document.querySelector<HTMLFormElement>('#composer')?.dispatchEvent(
+      new dom.window.Event('submit', { bubbles: true, cancelable: true }),
+    )
+    await expect.poll(() => calls.filter(call => call.method === 'session/prompt')).toHaveLength(2)
+    expect(calls.filter(call => call.method === 'session/prompt').at(-1)?.payload).toMatchObject({
+      request: {
+        content: [{ type: 'text', text: 'Follow up' }],
+      },
+    })
+    selectionAttach({ text: 'second quote' })
+    await expect.poll(() => chip.hidden).toBe(false)
+    expect(chipText.textContent).toBe('second quote')
+    dismiss.click()
+    expect(chip.hidden).toBe(true)
+    expect(document.body.classList.contains('has-selection-chip')).toBe(false)
+  } finally { dom.window.close() }
+})
+
+it('places an attached selection chip below the input when the panel expands down', async () => {
+  const dom = new JSDOM(readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8'), {
+    runScripts: 'outside-only',
+    url: 'dsh-app://shell/floating.html',
+  })
+  const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+    if (isRemoteStream(_input)) return hangingStreamResponse(init?.signal)
+    const body = JSON.parse(String(init?.body)) as {
+      rpcId: string
+      method: string
+      payload: { args: Record<string, unknown> }
+    }
+    let value: unknown = {}
+    if (body.method === 'workspace/create') {
+      value = { workspace: { workspaceId: 'ws-orb' }, created: true }
+    }
+    if (body.method === 'session/create') value = { sessionId: 'session-orb', agentPreset: 'computer-use' }
+    if (body.method === 'session/list') {
+      value = { items: [{ sessionId: 'session-orb', running: false, projections: { asOfSeq: 0 } }] }
+    }
+    return rpcResponse(body.rpcId, value)
+  })
+  Object.defineProperty(dom.window, 'fetch', { value: fetchMock })
+  Object.defineProperty(dom.window, 'crypto', { value: globalThis.crypto })
+  let selectionAttach: ((payload: { text: string }) => void) | undefined
+  Object.defineProperty(dom.window, 'dshDesktop', {
+    value: {
+      locale: async () => resolveDesktopLocale('en'),
+      backend: { status: async () => ({ phase: 'ready' }), subscribe: vi.fn() },
+      floating: {
+        sessionId: async () => undefined,
+        setSessionId: vi.fn(),
+        move: vi.fn(),
+        clamp: vi.fn(),
+        setExpanded: async (expanded: boolean) => ({ expanded, horizontal: 'left', vertical: 'down' }),
+        orbWorkspacePath: async () => '/tmp/dsh_orb',
+        setSessionRunning: vi.fn(),
+        overlayModel: async () => ({
+          provider: 'deepseek-official',
+          model: 'deepseek-flash',
+          reasoningEffort: 'max',
+        }),
+        overlayPermission: async () => 'danger-full-access',
+        setOverlayPermission: vi.fn(),
+        onOverlayModel: () => () => {},
+        onSelectionPrompt: () => () => {},
+        onSelectionAttach(listener: (payload: { text: string }) => void) {
+          selectionAttach = listener
+          return () => {}
+        },
+      },
+    },
+  })
+  try {
+    runInContext(readFileSync(new URL('../renderer/floating.js', import.meta.url), 'utf8'), dom.getInternalVMContext())
+    const document = dom.window.document
+    await expect.poll(() => selectionAttach !== undefined).toBe(true)
+    selectionAttach?.({ text: 'quote' })
+    await expect.poll(() => document.body.classList.contains('expand-down')).toBe(true)
+    expect(document.querySelector<HTMLElement>('#selection-chip')?.hidden).toBe(false)
+    expect(document.body.classList.contains('has-selection-chip')).toBe(true)
   } finally { dom.window.close() }
 })
 
@@ -1261,6 +1487,7 @@ it('applies a live overlay model change without writing the Agent default', asyn
           return () => {}
         },
         onSelectionPrompt: () => () => {},
+        onSelectionAttach: () => () => {},
       },
     },
   })
@@ -1342,6 +1569,7 @@ it('sends from the overlay when Access IPC is missing', async () => {
         }),
         onOverlayModel: () => () => {},
         onSelectionPrompt: () => () => {},
+        onSelectionAttach: () => () => {},
       },
     },
   })

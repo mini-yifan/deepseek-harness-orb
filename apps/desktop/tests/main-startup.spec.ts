@@ -629,7 +629,7 @@ describe('desktop floating overlay', () => {
     expect(harness.app.setActivationPolicy).not.toHaveBeenCalled()
   })
 
-  it('does not show the main window when the selection toolbar translates or explains', async () => {
+  it('does not show the main window when the selection toolbar translates or attaches', async () => {
     vi.setSystemTime(1_000)
     vi.stubGlobal('process', { ...process, platform: 'darwin', resourcesPath: 'desktop-test-resources' })
     await import('../src/main.ts')
@@ -657,14 +657,24 @@ describe('desktop floating overlay', () => {
     expect(main.blur).toHaveBeenCalled()
     expect(main.show).not.toHaveBeenCalled()
     expect(main.focus).not.toHaveBeenCalled()
-    invokeSelection(DESKTOP_IPC.selectionExplain)
+    harness.selectionMonitor.activatePid.mockClear()
+    overlay?.focus.mockClear()
+    invokeSelection(DESKTOP_IPC.selectionAttach)
+    expect(overlay?.webContents.send).toHaveBeenCalledWith(
+      DESKTOP_IPC.selectionAttach,
+      { text: 'hello' },
+    )
+    expect(overlay?.focus).toHaveBeenCalled()
+    expect(harness.selectionMonitor.activatePid).not.toHaveBeenCalled()
     expect(main.show).not.toHaveBeenCalled()
     expect(main.focus).not.toHaveBeenCalled()
     invokeSelection(DESKTOP_IPC.selectionInteract)
     invokeSelection(DESKTOP_IPC.selectionSetContentSize, { width: 280, height: 120 })
     expect(toolbar?.bounds).toMatchObject({ width: 280, height: 120 })
+    overlay?.showInactive.mockClear()
     invokeFloating(DESKTOP_IPC.floatingSetExpanded, true)
-    expect(overlay?.showInactive).toHaveBeenCalled()
+    expect(overlay?.showInactive).not.toHaveBeenCalled()
+    expect(harness.selectionMonitor.activatePid).not.toHaveBeenCalled()
     harness.app.emit('activate')
     expect(main.show).not.toHaveBeenCalled()
     expect(main.focus).not.toHaveBeenCalled()

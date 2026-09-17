@@ -4,6 +4,7 @@
   --ball: 72px;
   --chrome: 12px;
   --panel-radius: 36px;
+  --selection-chip: 28px;
   --black: #111111;
   --white: #ffffff;
   --input-bg: #eeeeee;
@@ -68,6 +69,14 @@ body.expanded #panel {
 body.expand-down #panel {
   padding-top: calc(var(--ball) + 10px);
   padding-bottom: 20px;
+}
+
+body.has-selection-chip.expand-up #panel {
+  padding-bottom: calc(var(--ball) + var(--selection-chip) + 10px);
+}
+
+body.has-selection-chip.expand-down #panel {
+  padding-top: calc(var(--ball) + var(--selection-chip) + 10px);
 }
 
 #panel::after {
@@ -310,8 +319,68 @@ body.expand-down #composer {
 }
 
 body.running #composer,
-body.asking #composer {
+body.asking #composer,
+body.running #selection-chip,
+body.asking #selection-chip {
   visibility: hidden;
+}
+
+#selection-chip {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  height: var(--selection-chip);
+  width: calc(100% - var(--ball) - 28px);
+  padding: 0 12px;
+  color: var(--pin);
+  background: var(--input-bg);
+  border-radius: 999px;
+}
+
+#selection-chip[hidden] {
+  display: none;
+}
+
+body.expand-left #selection-chip {
+  left: 16px;
+}
+
+body.expand-right #selection-chip {
+  right: 16px;
+}
+
+body.expand-up #selection-chip {
+  bottom: var(--ball);
+}
+
+body.expand-down #selection-chip {
+  top: var(--ball);
+}
+
+#selection-chip-text {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+#selection-chip-dismiss {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  color: var(--pin);
+  background: transparent;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
 }
 
 .question-card {

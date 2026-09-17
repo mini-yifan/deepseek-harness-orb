@@ -34,10 +34,12 @@ export function composeSelectionTranslatePrompt(
 }
 
 /**
- * User-message text that asks the floating-ball Computer Use session to explain selected text.
- * @param text - selected source text.
- * @returns one user-message string starting with {@link DESKTOP_SELECTION_PREAMBLE}.
+ * Ordinary overlay user-message text that pairs a composer instruction with attached selection.
+ * Does not start with {@link DESKTOP_SELECTION_PREAMBLE}, so Computer Use keeps first-frame capture.
+ * @param instruction - text from the overlay composer.
+ * @param selection - full selected source text.
+ * @returns one user-message string.
  */
-export function composeSelectionExplainPrompt(text: string): string {
-  return `${DESKTOP_SELECTION_PREAMBLE}\n\nExplain this text:\n\n${text}`
+export function composeSelectionSendPrompt(instruction: string, selection: string): string {
+  return `${instruction}\n\n${selection}`
 }

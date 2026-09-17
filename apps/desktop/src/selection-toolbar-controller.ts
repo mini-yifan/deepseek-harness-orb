@@ -5,7 +5,6 @@ import { DESKTOP_IPC } from './ipc.ts'
 import type { SelectionHelperEvent, SelectionMonitor, SelectionMonitorHandlers } from './selection-monitor.ts'
 import { startSelectionMonitor } from './selection-monitor.ts'
 import {
-  composeSelectionExplainPrompt,
   composeSelectionTranslatePrompt,
   selectionSearchUrl,
   type SelectionTranslateLanguage,
@@ -36,6 +35,8 @@ export interface SelectionToolbarHost {
   openExternal(url: string): Promise<void>
   /** Send composed user-message text to the overlay renderer. */
   promptOverlay(text: string): void
+  /** Attach selected text to the overlay composer without prompting. */
+  attachOverlay(text: string): void
   /** Prompt macOS Accessibility TCC; returns whether the process is trusted. */
   requestAccessibility(): boolean
   /** Test override; production uses {@link startSelectionMonitor}. */
@@ -186,14 +187,15 @@ export class SelectionToolbarController {
     this.promptSelection(composeSelectionTranslatePrompt(this.lastText, this.config.translateTargetLanguage))
   }
 
-  /** Prompt the overlay Computer Use session to explain the last selection. */
-  explain(): void {
-    this.promptSelection(composeSelectionExplainPrompt(this.lastText))
+  /** Attach the last selection to the overlay composer. Does not prompt or restore the front app. */
+  sendToAgent(): void {
+    if (this.lastText === '') return
+    this.host.attachOverlay(this.lastText)
   }
 
   /**
    * Make the app that owned the last selection key again.
-   * Translate and Explain call this so Desktop does not stay the frontmost app.
+   * Translate calls this so Desktop does not stay the frontmost app.
    */
   restoreFrontApp(): void {
     const pid = this.lastPid
