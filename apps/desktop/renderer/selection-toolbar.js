@@ -28,7 +28,7 @@ void (async () => {
   const messages = locale.messages
   document.querySelector('#search').textContent = messages.selectionToolbarSearch
   document.querySelector('#translate').textContent = messages.selectionToolbarTranslate
-  document.querySelector('#explain').textContent = messages.selectionToolbarExplain
+  document.querySelector('#send-to-agent').textContent = messages.selectionToolbarSendToAgent
   document.querySelector('#translate-arrow').setAttribute('aria-label', messages.selectionToolbarLanguage)
   document.querySelector('#language-zh').textContent = messages.selectionLanguageZh
   document.querySelector('#language-en').textContent = messages.selectionLanguageEn
@@ -36,7 +36,7 @@ void (async () => {
   document.addEventListener('pointerdown', () => { void api.selection.interact() })
   document.querySelector('#search').addEventListener('click', () => { void api.selection.search() })
   document.querySelector('#translate').addEventListener('click', () => { void api.selection.translate() })
-  document.querySelector('#explain').addEventListener('click', () => { void api.selection.explain() })
+  document.querySelector('#send-to-agent').addEventListener('click', () => { void api.selection.sendToAgent() })
   document.querySelector('#translate-arrow').addEventListener('click', event => {
     event.stopPropagation()
     const menu = document.querySelector('#language-menu')

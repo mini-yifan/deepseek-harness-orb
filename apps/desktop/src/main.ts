@@ -59,6 +59,8 @@ let focusPrimaryWindow = (): void => {}
 /** Toolbar and overlay prompts must not show the main window through `app` `activate`. */
 const OVERLAY_OWNED_ACTIVATE_MS = 2_000
 let overlayOwnedActivateUntil = 0
+/** Translate restore-front window; Send to Agent leaves the overlay key. */
+let overlayRestoreFrontUntil = 0
 type RecoveryAction = 'restart' | 'plugins' | 'reset'
 let profileRecoveryAvailable = (): boolean => false
 const emergencyPages = new WeakMap<BrowserWindow, { url: string; message: string; busy: boolean }>()
@@ -76,6 +78,14 @@ function noteOverlayOwnedActivation(): void {
 
 function overlayOwnedActivationActive(): boolean {
   return Date.now() < overlayOwnedActivateUntil
+}
+
+function noteOverlayRestoreFront(): void {
+  overlayRestoreFrontUntil = Date.now() + OVERLAY_OWNED_ACTIVATE_MS
+}
+
+function overlayRestoreFrontActive(): boolean {
+  return Date.now() < overlayRestoreFrontUntil
 }
 
 let recoverApplication = (action: RecoveryAction): Promise<void> => {
@@ -261,9 +271,22 @@ async function main(): Promise<void> {
       openExternal: url => shell.openExternal(url),
       promptOverlay(text) {
         noteOverlayOwnedActivation()
+        noteOverlayRestoreFront()
         if (floatingWindow === undefined || floatingWindow.isDestroyed()) return
         floatingWindow.showInactive()
         floatingWindow.webContents.send(DESKTOP_IPC.selectionPrompt, { text })
+        hideSelectionToolbar(selection?.window())
+        if (mainWindow !== undefined && !mainWindow.isDestroyed() && mainWindow.isFocused()) {
+          mainWindow.blur()
+        }
+      },
+      attachOverlay(text) {
+        noteOverlayOwnedActivation()
+        overlayRestoreFrontUntil = 0
+        if (floatingWindow === undefined || floatingWindow.isDestroyed()) return
+        floatingWindow.show()
+        floatingWindow.focus()
+        floatingWindow.webContents.send(DESKTOP_IPC.selectionAttach, { text })
         hideSelectionToolbar(selection?.window())
         if (mainWindow !== undefined && !mainWindow.isDestroyed() && mainWindow.isFocused()) {
           mainWindow.blur()
@@ -626,8 +649,11 @@ async function main(): Promise<void> {
     const state = setFloatingExpanded(window, expanded)
     if (overlayOwnedActivationActive()) {
       noteOverlayOwnedActivation()
-      window.showInactive()
-      selection?.restoreFrontApp()
+      if (overlayRestoreFrontActive()) {
+        noteOverlayRestoreFront()
+        window.showInactive()
+        selection?.restoreFrontApp()
+      }
     }
     return state
   })
@@ -684,9 +710,9 @@ async function main(): Promise<void> {
     noteOverlayOwnedActivation()
     requireSelectionToolbarWindow(event).translate()
   })
-  ipcMain.handle(DESKTOP_IPC.selectionExplain, (event) => {
+  ipcMain.handle(DESKTOP_IPC.selectionAttach, (event) => {
     noteOverlayOwnedActivation()
-    requireSelectionToolbarWindow(event).explain()
+    requireSelectionToolbarWindow(event).sendToAgent()
   })
   ipcMain.handle(DESKTOP_IPC.selectionSetLanguage, (event, language: unknown) => {
     noteOverlayOwnedActivation()

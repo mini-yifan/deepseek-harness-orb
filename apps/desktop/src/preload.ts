@@ -1,7 +1,7 @@
 /** Context-isolated renderer bridge for desktop package and update operations. */
 
 import { contextBridge, ipcRenderer } from 'electron'
-import { DESKTOP_IPC, type DshDesktopApi, type DesktopUpdateState, type SelectionPromptPayload, type SelectionToolbarState } from './ipc.ts'
+import { DESKTOP_IPC, type DshDesktopApi, type DesktopUpdateState, type SelectionAttachPayload, type SelectionPromptPayload, type SelectionToolbarState } from './ipc.ts'
 import type { DesktopBackendState } from './backend-controller.ts'
 import type { OrbAgentModelSelection } from './orb-agent-models.ts'
 import type { OrbPermissionPreset } from './orb-permission.ts'
@@ -66,11 +66,18 @@ const api: DshDesktopApi = {
       ipcRenderer.on(DESKTOP_IPC.selectionPrompt, handle)
       return () => { ipcRenderer.off(DESKTOP_IPC.selectionPrompt, handle) }
     },
+    onSelectionAttach(listener) {
+      const handle = (_event: Electron.IpcRendererEvent, payload: SelectionAttachPayload): void => {
+        listener(payload)
+      }
+      ipcRenderer.on(DESKTOP_IPC.selectionAttach, handle)
+      return () => { ipcRenderer.off(DESKTOP_IPC.selectionAttach, handle) }
+    },
   },
   selection: {
     search: () => ipcRenderer.invoke(DESKTOP_IPC.selectionSearch) as Promise<void>,
     translate: () => ipcRenderer.invoke(DESKTOP_IPC.selectionTranslate) as Promise<void>,
-    explain: () => ipcRenderer.invoke(DESKTOP_IPC.selectionExplain) as Promise<void>,
+    sendToAgent: () => ipcRenderer.invoke(DESKTOP_IPC.selectionAttach) as Promise<void>,
     setLanguage: language => ipcRenderer.invoke(DESKTOP_IPC.selectionSetLanguage, language) as Promise<void>,
     interact: () => ipcRenderer.invoke(DESKTOP_IPC.selectionInteract) as Promise<void>,
     setContentSize: size => ipcRenderer.invoke(DESKTOP_IPC.selectionSetContentSize, size) as Promise<{ menuAbove: boolean }>,

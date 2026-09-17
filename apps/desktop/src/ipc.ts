@@ -39,9 +39,9 @@ export const DESKTOP_IPC = {
   floatingQuit: 'dsh-desktop:floating-quit',
   floatingRunning: 'dsh-desktop:floating-running',
   selectionPrompt: 'dsh-desktop:selection-prompt',
+  selectionAttach: 'dsh-desktop:selection-attach',
   selectionSearch: 'dsh-desktop:selection-search',
   selectionTranslate: 'dsh-desktop:selection-translate',
-  selectionExplain: 'dsh-desktop:selection-explain',
   selectionSetLanguage: 'dsh-desktop:selection-set-language',
   selectionState: 'dsh-desktop:selection-state',
   selectionInteract: 'dsh-desktop:selection-interact',
@@ -50,6 +50,11 @@ export const DESKTOP_IPC = {
 
 /** User-message text the overlay renderer prompts onto the Computer Use session. */
 export interface SelectionPromptPayload {
+  readonly text: string
+}
+
+/** Selected text the overlay renderer attaches to the composer without prompting. */
+export interface SelectionAttachPayload {
   readonly text: string
 }
 
@@ -102,11 +107,12 @@ export interface DshDesktopApi {
     quit(): Promise<void>
     setSessionRunning(running: boolean): Promise<void>
     onSelectionPrompt(listener: (payload: SelectionPromptPayload) => void): () => void
+    onSelectionAttach(listener: (payload: SelectionAttachPayload) => void): () => void
   }
   readonly selection: {
     search(): Promise<void>
     translate(): Promise<void>
-    explain(): Promise<void>
+    sendToAgent(): Promise<void>
     setLanguage(language: SelectionTranslateLanguage): Promise<void>
     interact(): Promise<void>
     setContentSize(size: { width: number; height: number }): Promise<{ menuAbove: boolean }>

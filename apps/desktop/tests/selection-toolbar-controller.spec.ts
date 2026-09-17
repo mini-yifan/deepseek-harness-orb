@@ -41,11 +41,12 @@ function fakeToolbar() {
 }
 
 describe('selection toolbar controller', () => {
-  it('opens Bing, prompts translate/explain, and skips reads while running or during HID', async () => {
+  it('opens Bing, prompts translate, attaches send-to-agent, and skips reads while running or during HID', async () => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-selection-controller-'))
     roots.push(root)
     const openExternal = vi.fn(async () => undefined)
     const promptOverlay = vi.fn()
+    const attachOverlay = vi.fn()
     const requestAccessibility = vi.fn(() => false)
     const exclude: number[][] = []
     const activatePid = vi.fn()
@@ -54,6 +55,7 @@ describe('selection toolbar controller', () => {
       electronPid: 99,
       openExternal,
       promptOverlay,
+      attachOverlay,
       requestAccessibility,
       now: () => now,
       startMonitor: () => ({
@@ -93,10 +95,9 @@ describe('selection toolbar controller', () => {
     expect(activatePid).toHaveBeenCalledWith(7)
     controller.setLanguage('en')
     expect(toolbar.webContents.send).toHaveBeenCalledWith(DESKTOP_IPC.selectionState, { language: 'en' })
-    controller.explain()
-    expect(promptOverlay).toHaveBeenCalledWith(
-      `${DESKTOP_SELECTION_PREAMBLE}\n\nExplain this text:\n\nhello`,
-    )
+    controller.sendToAgent()
+    expect(attachOverlay).toHaveBeenCalledWith('hello')
+    expect(promptOverlay).toHaveBeenCalledTimes(1)
     toolbar.showInactive.mockClear()
     controller.setSessionRunning(true)
     expect(toolbar.hide).toHaveBeenCalled()
@@ -116,7 +117,7 @@ describe('selection toolbar controller', () => {
     expect(controller.enabled()).toBe(false)
   })
 
-  it('does not restore Desktop as the front app after Translate or Explain', () => {
+  it('does not restore Desktop as the front app after Translate of the Electron pid', () => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-selection-self-pid-'))
     roots.push(root)
     const activatePid = vi.fn()
@@ -124,6 +125,7 @@ describe('selection toolbar controller', () => {
       electronPid: 99,
       openExternal: async () => undefined,
       promptOverlay: vi.fn(),
+      attachOverlay: vi.fn(),
       requestAccessibility: () => false,
       startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid }),
     })
@@ -131,7 +133,27 @@ describe('selection toolbar controller', () => {
     controller.start()
     controller.onHelperEvent({ type: 'selection', text: 'self', pid: 99, x: 1, y: 1 })
     controller.translate()
-    controller.explain()
+    expect(activatePid).not.toHaveBeenCalled()
+  })
+
+  it('attaches selection without restoring the front app', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-selection-attach-'))
+    roots.push(root)
+    const activatePid = vi.fn()
+    const attachOverlay = vi.fn()
+    const controller = new SelectionToolbarController(root, {
+      electronPid: 99,
+      openExternal: async () => undefined,
+      promptOverlay: vi.fn(),
+      attachOverlay,
+      requestAccessibility: () => false,
+      startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid }),
+    })
+    controller.setToolbarWindow(fakeToolbar() as never)
+    controller.start()
+    controller.onHelperEvent({ type: 'selection', text: 'hello', pid: 7, x: 1, y: 1 })
+    controller.sendToAgent()
+    expect(attachOverlay).toHaveBeenCalledWith('hello')
     expect(activatePid).not.toHaveBeenCalled()
   })
 
@@ -142,6 +164,7 @@ describe('selection toolbar controller', () => {
       electronPid: 99,
       openExternal: async () => undefined,
       promptOverlay: vi.fn(),
+      attachOverlay: vi.fn(),
       requestAccessibility: () => false,
       startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid: vi.fn() }),
     })
@@ -175,6 +198,7 @@ describe('selection toolbar controller', () => {
       electronPid: 99,
       openExternal: async () => undefined,
       promptOverlay: vi.fn(),
+      attachOverlay: vi.fn(),
       requestAccessibility: () => false,
       startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid: vi.fn() }),
     })
@@ -215,6 +239,7 @@ describe('selection toolbar controller', () => {
       electronPid: 99,
       openExternal: async () => undefined,
       promptOverlay: vi.fn(),
+      attachOverlay: vi.fn(),
       requestAccessibility: () => false,
       startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid: vi.fn() }),
     })

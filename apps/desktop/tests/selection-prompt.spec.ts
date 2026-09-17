@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  composeSelectionExplainPrompt,
+  composeSelectionSendPrompt,
   composeSelectionTranslatePrompt,
   DESKTOP_SELECTION_PREAMBLE,
   selectionSearchUrl,
@@ -17,15 +17,14 @@ describe('selection prompt composition', () => {
     expect(selectionSearchUrl('hello world')).toBe('https://www.bing.com/search?q=hello%20world')
   })
 
-  it('composes translate and explain user messages on the preamble', () => {
+  it('composes translate user messages on the preamble and send-to-agent without it', () => {
     expect(composeSelectionTranslatePrompt('你好', 'en')).toBe(
       `${PREAMBLE}\n\nTranslate the following into English:\n\n你好`,
     )
     expect(composeSelectionTranslatePrompt('hello', 'zh')).toBe(
       `${PREAMBLE}\n\nTranslate the following into Chinese:\n\nhello`,
     )
-    expect(composeSelectionExplainPrompt('hello')).toBe(
-      `${PREAMBLE}\n\nExplain this text:\n\nhello`,
-    )
+    expect(composeSelectionSendPrompt('Explain this', 'hello')).toBe('Explain this\n\nhello')
+    expect(composeSelectionSendPrompt('Explain this', 'hello').startsWith(PREAMBLE)).toBe(false)
   })
 })
