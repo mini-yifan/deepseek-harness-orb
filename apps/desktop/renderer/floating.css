@@ -17,6 +17,8 @@ body {
   height: 100%;
   overflow: hidden;
   background: transparent;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 #panel {
@@ -324,6 +326,8 @@ body.asking #composer {
   color: var(--black);
   background: var(--white);
   resize: none;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 #question-custom:focus {
@@ -409,6 +413,8 @@ body.asking #composer {
   color: var(--black);
   background: transparent;
   outline: none;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 #ball {

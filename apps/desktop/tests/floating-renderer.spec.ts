@@ -258,9 +258,16 @@ it('creates a Computer Use session on dsh_orb and sends from the overlay', async
     await expect.poll(() => calls.some(call => call.method === 'session/cancel')).toBe(true)
     document.querySelector<HTMLButtonElement>('#new-conversation')?.click()
     await expect.poll(() => calls.filter(call => call.method === 'session/create').length).toBeGreaterThan(1)
-    document.querySelector<HTMLButtonElement>('#ball')?.dispatchEvent(new dom.window.Event('pointerup', { bubbles: true }))
+    const ball = document.querySelector<HTMLButtonElement>('#ball')
+    if (ball === null) throw new Error('missing ball')
+    const pin = () => {
+      const event = new dom.window.Event('pointerup', { bubbles: true })
+      Object.assign(event, { button: 0 })
+      ball.dispatchEvent(event)
+    }
+    pin()
     await expect.poll(() => document.body.classList.contains('pinned')).toBe(true)
-    document.querySelector<HTMLButtonElement>('#ball')?.dispatchEvent(new dom.window.Event('pointerup', { bubbles: true }))
+    pin()
     await expect.poll(() => document.body.classList.contains('pinned')).toBe(false)
     expect(document.body.classList.contains('expanded')).toBe(true)
     expect(document.body.classList.contains('expand-left')).toBe(true)
@@ -346,13 +353,13 @@ it('collapses then moves by the ball grab offset instead of the window origin', 
         toJSON() {},
       }),
     })
-    dispatchPointer(ball, 'pointerdown', { pointerId: 1, clientX: 268, clientY: 368, screenX: 1000, screenY: 800 })
-    dispatchPointer(ball, 'pointermove', { pointerId: 1, clientX: 268, clientY: 348, screenX: 1000, screenY: 780 })
+    dispatchPointer(ball, 'pointerdown', { pointerId: 1, button: 0, clientX: 268, clientY: 368, screenX: 1000, screenY: 800 })
+    dispatchPointer(ball, 'pointermove', { pointerId: 1, buttons: 1, clientX: 268, clientY: 348, screenX: 1000, screenY: 780 })
     await expect.poll(() => setExpanded.mock.calls.some(call => call[0] === false)).toBe(true)
     expect(api.floating.move).not.toHaveBeenCalled()
     releaseCollapse?.()
     await expect.poll(() => api.floating.move.mock.calls).toEqual([[980, 760]])
-    dispatchPointer(ball, 'pointerup', { pointerId: 1, clientX: 268, clientY: 328, screenX: 1000, screenY: 760 })
+    dispatchPointer(ball, 'pointerup', { pointerId: 1, button: 0, clientX: 268, clientY: 328, screenX: 1000, screenY: 760 })
     await expect.poll(() => api.floating.clamp.mock.calls.length).toBe(1)
     expect(document.body.classList.contains('pinned')).toBe(false)
   } finally {
@@ -361,9 +368,116 @@ it('collapses then moves by the ball grab offset instead of the window origin', 
   }
 })
 
+async function mountPointerOverlay() {
+  const dom = new JSDOM(readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8'), {
+    runScripts: 'outside-only',
+    url: 'dsh-app://shell/floating.html',
+  })
+  const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+    if (isRemoteStream(_input)) return hangingStreamResponse(init?.signal)
+    const body = JSON.parse(String(init?.body)) as { rpcId: string; method: string }
+    let value: unknown = {}
+    if (body.method === 'workspace/create') value = { workspace: { workspaceId: 'ws-orb' }, created: true }
+    if (body.method === 'session/create') value = { sessionId: 'session-orb', agentPreset: 'computer-use' }
+    if (body.method === 'session/modelCatalog') value = { groups: [] }
+    if (body.method === 'session/page') value = { records: [] }
+    if (body.method === 'session/list') value = { items: [{ sessionId: 'session-orb', running: false, projections: { asOfSeq: 0 } }] }
+    return {
+      ok: true,
+      json: async () => ({
+        type: 'server-response',
+        rpcId: body.rpcId,
+        result: { ok: true, value },
+      }),
+    }
+  })
+  Object.defineProperty(dom.window, 'fetch', { value: fetchMock })
+  Object.defineProperty(dom.window, 'crypto', { value: globalThis.crypto })
+  const setExpanded = vi.fn(async (expanded: boolean) => ({ expanded, horizontal: 'left', vertical: 'up' }))
+  const api = {
+    locale: async () => resolveDesktopLocale('en'),
+    backend: {
+      status: async () => ({ phase: 'ready' }),
+      subscribe: vi.fn(),
+    },
+    floating: {
+      sessionId: async () => undefined,
+      setSessionId: vi.fn(),
+      move: vi.fn(),
+      clamp: vi.fn(),
+      setExpanded,
+      orbWorkspacePath: async () => '/tmp/dsh_orb',
+      setSessionRunning: vi.fn(),
+      onSelectionPrompt: () => () => {},
+    },
+  }
+  Object.defineProperty(dom.window, 'dshDesktop', { value: api })
+  runInContext(readFileSync(new URL('../renderer/floating.js', import.meta.url), 'utf8'), dom.getInternalVMContext())
+  const document = dom.window.document
+  await expect.poll(() => api.floating.setSessionId.mock.calls).toEqual([['session-orb']])
+  const ball = document.querySelector('#ball')
+  if (ball === null) throw new Error('missing ball')
+  Object.defineProperty(ball, 'setPointerCapture', { value: vi.fn() })
+  Object.defineProperty(ball, 'getBoundingClientRect', {
+    value: () => ({
+      x: 248,
+      y: 348,
+      left: 248,
+      top: 348,
+      width: 72,
+      height: 72,
+      right: 320,
+      bottom: 420,
+      toJSON() {},
+    }),
+  })
+  const dispatchPointer = (type: string, init: Record<string, unknown>) => {
+    const event = new dom.window.Event(type, { bubbles: true })
+    Object.assign(event, init)
+    ball.dispatchEvent(event)
+  }
+  return { dom, document, api, dispatchPointer }
+}
+
+it('ignores a secondary-button press so later hover cannot move the ball', async () => {
+  const overlay = await mountPointerOverlay()
+  try {
+    overlay.dispatchPointer('pointerdown', { pointerId: 1, button: 2, clientX: 268, clientY: 368, screenX: 1000, screenY: 800 })
+    overlay.dispatchPointer('pointermove', { pointerId: 1, buttons: 0, clientX: 268, clientY: 300, screenX: 1000, screenY: 700 })
+    overlay.dispatchPointer('pointerup', { pointerId: 1, button: 2, clientX: 268, clientY: 300, screenX: 1000, screenY: 700 })
+    expect(overlay.api.floating.move).not.toHaveBeenCalled()
+    expect(overlay.api.floating.clamp).not.toHaveBeenCalled()
+    expect(overlay.document.body.classList.contains('pinned')).toBe(false)
+  } finally {
+    overlay.dom.window.close()
+  }
+})
+
+it('ends a primary grab when the button is no longer down', async () => {
+  const overlay = await mountPointerOverlay()
+  try {
+    overlay.dispatchPointer('pointerdown', { pointerId: 1, button: 0, clientX: 268, clientY: 368, screenX: 1000, screenY: 800 })
+    overlay.dispatchPointer('pointermove', { pointerId: 1, buttons: 0, clientX: 268, clientY: 300, screenX: 1000, screenY: 700 })
+    expect(overlay.api.floating.move).not.toHaveBeenCalled()
+    overlay.dispatchPointer('pointerdown', { pointerId: 1, button: 0, clientX: 268, clientY: 368, screenX: 1000, screenY: 800 })
+    overlay.dispatchPointer('lostpointercapture', { pointerId: 1, button: 0, clientX: 268, clientY: 368, screenX: 1000, screenY: 800 })
+    overlay.dispatchPointer('pointermove', { pointerId: 1, buttons: 0, clientX: 268, clientY: 300, screenX: 1000, screenY: 700 })
+    expect(overlay.api.floating.move).not.toHaveBeenCalled()
+  } finally {
+    overlay.dom.window.close()
+  }
+})
+
 it('does not snap the ball to the window origin when the panel collapses', () => {
   const css = readFileSync(new URL('../renderer/floating.css', import.meta.url), 'utf8')
   expect(css).not.toContain('body:not(.expanded) #ball')
+})
+
+it('forbids selecting overlay chrome except the composer and question fields', () => {
+  const css = readFileSync(new URL('../renderer/floating.css', import.meta.url), 'utf8')
+  expect(css).toMatch(/html,\s*body \{[^}]*user-select: none/u)
+  expect(css).toMatch(/#prompt \{[^}]*user-select: text/u)
+  expect(css).toMatch(/#question-custom \{[^}]*user-select: text/u)
 })
 
 it('places Stop at the opposite pill end from the ball', () => {
