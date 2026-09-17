@@ -115,6 +115,21 @@ export const FLOATING_BALL_SIZE = 72
 /** Expanded overlay panel size. */
 export const FLOATING_PANEL_SIZE = { width: 320, height: 420 } as const
 
+/**
+ * Transparent padding around the visual ball and panel so CSS drop shadows and
+ * outer pin strokes are not clipped by the overlay window.
+ */
+export const FLOATING_CHROME_INSET = 12
+
+/** Collapsed overlay window size including {@link FLOATING_CHROME_INSET}. */
+export const FLOATING_BALL_WINDOW_SIZE = FLOATING_BALL_SIZE + 2 * FLOATING_CHROME_INSET
+
+/** Expanded overlay window size including {@link FLOATING_CHROME_INSET}. */
+export const FLOATING_PANEL_WINDOW_SIZE = {
+  width: FLOATING_PANEL_SIZE.width + 2 * FLOATING_CHROME_INSET,
+  height: FLOATING_PANEL_SIZE.height + 2 * FLOATING_CHROME_INSET,
+} as const
+
 /** Horizontal growth relative to the ball origin. */
 export type FloatingHorizontalExpand = 'left' | 'right'
 
@@ -142,6 +157,27 @@ const overlayDirection = new WeakMap<BrowserWindow, {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max))
+}
+
+function isCollapsedOverlay(bounds: OverlayRect): boolean {
+  return bounds.width <= FLOATING_BALL_WINDOW_SIZE && bounds.height <= FLOATING_BALL_WINDOW_SIZE
+}
+
+function collapsedWindowBounds(ball: { readonly x: number; readonly y: number }): OverlayRect {
+  return {
+    x: ball.x - FLOATING_CHROME_INSET,
+    y: ball.y - FLOATING_CHROME_INSET,
+    width: FLOATING_BALL_WINDOW_SIZE,
+    height: FLOATING_BALL_WINDOW_SIZE,
+  }
+}
+
+function clampWindowOrigin(value: number, workOrigin: number, workSize: number, windowSize: number): number {
+  return clamp(
+    value,
+    workOrigin - FLOATING_CHROME_INSET,
+    workOrigin + workSize - windowSize + FLOATING_CHROME_INSET,
+  )
 }
 
 function workAreaOf(point: { readonly x: number; readonly y: number }): OverlayRect {
@@ -180,8 +216,12 @@ export function ballOriginFromWindow(
   direction: { readonly horizontal: FloatingHorizontalExpand; readonly vertical: FloatingVerticalExpand },
 ): { x: number; y: number } {
   return {
-    x: direction.horizontal === 'left' ? bounds.x + bounds.width - FLOATING_BALL_SIZE : bounds.x,
-    y: direction.vertical === 'up' ? bounds.y + bounds.height - FLOATING_BALL_SIZE : bounds.y,
+    x: direction.horizontal === 'left'
+      ? bounds.x + bounds.width - FLOATING_CHROME_INSET - FLOATING_BALL_SIZE
+      : bounds.x + FLOATING_CHROME_INSET,
+    y: direction.vertical === 'up'
+      ? bounds.y + bounds.height - FLOATING_CHROME_INSET - FLOATING_BALL_SIZE
+      : bounds.y + FLOATING_CHROME_INSET,
   }
 }
 
@@ -214,8 +254,8 @@ export function expandedOverlayBounds(
   const direction = expandDirection(ball, workArea)
   const unclamped = overlayBoundsFromBall(ball, direction)
   return {
-    x: clamp(unclamped.x, workArea.x, workArea.x + workArea.width - unclamped.width),
-    y: clamp(unclamped.y, workArea.y, workArea.y + workArea.height - unclamped.height),
+    x: clampWindowOrigin(unclamped.x, workArea.x, workArea.width, unclamped.width),
+    y: clampWindowOrigin(unclamped.y, workArea.y, workArea.height, unclamped.height),
     width: unclamped.width,
     height: unclamped.height,
     ...direction,
@@ -226,11 +266,15 @@ function overlayBoundsFromBall(
   ball: { readonly x: number; readonly y: number },
   direction: { readonly horizontal: FloatingHorizontalExpand; readonly vertical: FloatingVerticalExpand },
 ): OverlayRect {
-  const width = FLOATING_PANEL_SIZE.width
-  const height = FLOATING_PANEL_SIZE.height
+  const width = FLOATING_PANEL_WINDOW_SIZE.width
+  const height = FLOATING_PANEL_WINDOW_SIZE.height
   return {
-    x: direction.horizontal === 'left' ? ball.x - (width - FLOATING_BALL_SIZE) : ball.x,
-    y: direction.vertical === 'up' ? ball.y - (height - FLOATING_BALL_SIZE) : ball.y,
+    x: direction.horizontal === 'left'
+      ? ball.x - (FLOATING_PANEL_SIZE.width - FLOATING_BALL_SIZE) - FLOATING_CHROME_INSET
+      : ball.x - FLOATING_CHROME_INSET,
+    y: direction.vertical === 'up'
+      ? ball.y - (FLOATING_PANEL_SIZE.height - FLOATING_BALL_SIZE) - FLOATING_CHROME_INSET
+      : ball.y - FLOATING_CHROME_INSET,
     width,
     height,
   }
@@ -238,7 +282,9 @@ function overlayBoundsFromBall(
 
 function currentBallOrigin(window: BrowserWindow, workArea: OverlayRect): { x: number; y: number } {
   const bounds = window.getBounds()
-  if (bounds.width <= FLOATING_BALL_SIZE) return { x: bounds.x, y: bounds.y }
+  if (isCollapsedOverlay(bounds)) {
+    return { x: bounds.x + FLOATING_CHROME_INSET, y: bounds.y + FLOATING_CHROME_INSET }
+  }
   const stored = overlayDirection.get(window) ?? expandDirection({ x: bounds.x, y: bounds.y }, workArea)
   return ballOriginFromWindow(bounds, stored)
 }
@@ -262,8 +308,8 @@ export function createFloatingWindow(
   agents?: FloatingAgentMenuSource,
 ): BrowserWindow {
   const window = new BrowserWindow({
-    width: FLOATING_BALL_SIZE,
-    height: FLOATING_BALL_SIZE,
+    width: FLOATING_BALL_WINDOW_SIZE,
+    height: FLOATING_BALL_WINDOW_SIZE,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -338,7 +384,7 @@ export function setFloatingExpanded(window: BrowserWindow, expanded: boolean): F
   }
   const direction = overlayDirection.get(window) ?? expandDirection({ x: bounds.x, y: bounds.y }, workArea)
   const origin = clampedBallOrigin(currentBallOrigin(window, workArea), workArea)
-  window.setBounds({ x: origin.x, y: origin.y, width: FLOATING_BALL_SIZE, height: FLOATING_BALL_SIZE })
+  window.setBounds(collapsedWindowBounds(origin))
   return { expanded: false, ...direction }
 }
 
@@ -352,8 +398,8 @@ export function setFloatingExpanded(window: BrowserWindow, expanded: boolean): F
 export function moveFloatingBall(window: BrowserWindow, x: number, y: number): void {
   const origin = { x: Math.round(x), y: Math.round(y) }
   const bounds = window.getBounds()
-  if (bounds.width <= FLOATING_BALL_SIZE && bounds.height <= FLOATING_BALL_SIZE) {
-    window.setPosition(origin.x, origin.y)
+  if (isCollapsedOverlay(bounds)) {
+    window.setBounds(collapsedWindowBounds(origin))
     return
   }
   const stored = overlayDirection.get(window)
@@ -371,9 +417,12 @@ export function clampFloatingWindow(window: BrowserWindow): void {
     x: bounds.x + bounds.width / 2,
     y: bounds.y + bounds.height / 2,
   })
-  if (bounds.width <= FLOATING_BALL_SIZE) {
-    const origin = clampedBallOrigin(bounds, workArea)
-    window.setPosition(origin.x, origin.y)
+  if (isCollapsedOverlay(bounds)) {
+    const origin = clampedBallOrigin({
+      x: bounds.x + FLOATING_CHROME_INSET,
+      y: bounds.y + FLOATING_CHROME_INSET,
+    }, workArea)
+    window.setBounds(collapsedWindowBounds(origin))
     return
   }
   setFloatingExpanded(window, true)

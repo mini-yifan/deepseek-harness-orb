@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { join } from 'node:path'
 import { DESKTOP_IPC } from '../src/ipc.ts'
+import { FLOATING_CHROME_INSET, FLOATING_PANEL_WINDOW_SIZE } from '../src/floating-window.ts'
 
 const harness = await vi.hoisted(async () => {
   const { EventEmitter } = await import('node:events')
@@ -564,12 +565,23 @@ describe('desktop floating overlay', () => {
       horizontal: 'right',
       vertical: 'down',
     })
-    expect(overlay?.bounds).toMatchObject({ width: 320, height: 420, x: 0, y: 0 })
+    expect(overlay?.bounds).toMatchObject({
+      width: FLOATING_PANEL_WINDOW_SIZE.width,
+      height: FLOATING_PANEL_WINDOW_SIZE.height,
+      x: 0,
+      y: 0,
+    })
     invokeFloating(DESKTOP_IPC.floatingSetExpanded, false)
     invokeFloating(DESKTOP_IPC.floatingMove, 20, 30)
-    expect(overlay?.bounds).toMatchObject({ x: 20, y: 30 })
+    expect(overlay?.bounds).toMatchObject({
+      x: 20 - FLOATING_CHROME_INSET,
+      y: 30 - FLOATING_CHROME_INSET,
+    })
     invokeFloating(DESKTOP_IPC.floatingClamp)
-    expect(overlay?.bounds).toMatchObject({ x: 20, y: 30 })
+    expect(overlay?.bounds).toMatchObject({
+      x: 20 - FLOATING_CHROME_INSET,
+      y: 30 - FLOATING_CHROME_INSET,
+    })
     for (const window of harness.windows) {
       expect(window.webContents.executeJavaScript).not.toHaveBeenCalled()
     }

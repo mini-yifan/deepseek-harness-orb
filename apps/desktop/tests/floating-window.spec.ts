@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({
@@ -16,7 +17,10 @@ import {
   expandedOverlayBounds,
   floatingContextMenuTemplate,
   FLOATING_BALL_SIZE,
+  FLOATING_BALL_WINDOW_SIZE,
+  FLOATING_CHROME_INSET,
   FLOATING_PANEL_SIZE,
+  FLOATING_PANEL_WINDOW_SIZE,
   moveFloatingBall,
   overlayWindowExcludeIds,
   resetFloatingOverlayGuard,
@@ -36,13 +40,32 @@ const messages = {
 }
 
 describe('floating window expand geometry', () => {
+  const collapsedAt = (x: number, y: number) => ({
+    x: x - FLOATING_CHROME_INSET,
+    y: y - FLOATING_CHROME_INSET,
+    width: FLOATING_BALL_WINDOW_SIZE,
+    height: FLOATING_BALL_WINDOW_SIZE,
+  })
+  const expandedAt = (ballX: number, ballY: number, horizontal: 'left' | 'right', vertical: 'up' | 'down') => ({
+    x: horizontal === 'left'
+      ? ballX - (FLOATING_PANEL_SIZE.width - FLOATING_BALL_SIZE) - FLOATING_CHROME_INSET
+      : ballX - FLOATING_CHROME_INSET,
+    y: vertical === 'up'
+      ? ballY - (FLOATING_PANEL_SIZE.height - FLOATING_BALL_SIZE) - FLOATING_CHROME_INSET
+      : ballY - FLOATING_CHROME_INSET,
+    width: FLOATING_PANEL_WINDOW_SIZE.width,
+    height: FLOATING_PANEL_WINDOW_SIZE.height,
+  })
+
+  it('keeps CSS --chrome equal to FLOATING_CHROME_INSET', () => {
+    const css = readFileSync(new URL('../renderer/floating.css', import.meta.url), 'utf8')
+    expect(css).toContain(`--chrome: ${String(FLOATING_CHROME_INSET)}px`)
+  })
+
   it('grows left and up when the ball sits on the right and has space above', () => {
     expect(expandDirection({ x: 900, y: 400 }, workArea)).toEqual({ horizontal: 'left', vertical: 'up' })
     expect(expandedOverlayBounds({ x: 900, y: 400 }, workArea)).toEqual({
-      x: 900 - (FLOATING_PANEL_SIZE.width - FLOATING_BALL_SIZE),
-      y: 400 - (FLOATING_PANEL_SIZE.height - FLOATING_BALL_SIZE),
-      width: FLOATING_PANEL_SIZE.width,
-      height: FLOATING_PANEL_SIZE.height,
+      ...expandedAt(900, 400, 'left', 'up'),
       horizontal: 'left',
       vertical: 'up',
     })
@@ -51,8 +74,7 @@ describe('floating window expand geometry', () => {
   it('grows right and down when the ball is near the top-left', () => {
     expect(expandDirection({ x: 120, y: 60 }, workArea)).toEqual({ horizontal: 'right', vertical: 'down' })
     expect(expandedOverlayBounds({ x: 120, y: 60 }, workArea)).toMatchObject({
-      x: 120,
-      y: 60,
+      ...expandedAt(120, 60, 'right', 'down'),
       horizontal: 'right',
       vertical: 'down',
     })
@@ -72,7 +94,7 @@ describe('floating window expand geometry', () => {
     const { screen } = await import('electron')
     vi.mocked(screen.getDisplayNearestPoint).mockReturnValue({ workArea } as never)
     const window = {
-      getBounds: vi.fn(() => ({ x: 900, y: 400, width: FLOATING_BALL_SIZE, height: FLOATING_BALL_SIZE })),
+      getBounds: vi.fn(() => collapsedAt(900, 400)),
       setBounds: vi.fn(),
       setPosition: vi.fn(),
     }
@@ -81,27 +103,18 @@ describe('floating window expand geometry', () => {
       horizontal: 'left',
       vertical: 'up',
     })
-    expect(window.setBounds).toHaveBeenCalledWith({
-      x: 900 - (FLOATING_PANEL_SIZE.width - FLOATING_BALL_SIZE),
-      y: 400 - (FLOATING_PANEL_SIZE.height - FLOATING_BALL_SIZE),
-      width: FLOATING_PANEL_SIZE.width,
-      height: FLOATING_PANEL_SIZE.height,
-    })
-    window.getBounds.mockReturnValue({
-      x: 80,
-      y: 40,
-      width: FLOATING_BALL_SIZE,
-      height: FLOATING_BALL_SIZE,
-    })
+    expect(window.setBounds).toHaveBeenCalledWith(expandedAt(900, 400, 'left', 'up'))
+    window.getBounds.mockReturnValue(collapsedAt(80, 40))
     clampFloatingWindow(window as never)
-    expect(window.setPosition).toHaveBeenCalledWith(100, 50)
+    expect(window.setBounds).toHaveBeenCalledWith(collapsedAt(100, 50))
+    expect(window.setPosition).not.toHaveBeenCalled()
   })
 
   it('moves an expanded overlay by ball origin without clamping the panel', async () => {
     const { screen } = await import('electron')
     vi.mocked(screen.getDisplayNearestPoint).mockReturnValue({ workArea } as never)
     const window = {
-      bounds: { x: 900, y: 400, width: FLOATING_BALL_SIZE, height: FLOATING_BALL_SIZE },
+      bounds: collapsedAt(900, 400),
       getBounds() {
         return this.bounds
       },
@@ -112,24 +125,19 @@ describe('floating window expand geometry', () => {
     }
     setFloatingExpanded(window as never, true)
     moveFloatingBall(window as never, 900, 380)
-    expect(window.bounds).toEqual({
-      x: 900 - (FLOATING_PANEL_SIZE.width - FLOATING_BALL_SIZE),
-      y: 380 - (FLOATING_PANEL_SIZE.height - FLOATING_BALL_SIZE),
-      width: FLOATING_PANEL_SIZE.width,
-      height: FLOATING_PANEL_SIZE.height,
-    })
+    expect(window.bounds).toEqual(expandedAt(900, 380, 'left', 'up'))
     expect(window.setPosition).not.toHaveBeenCalled()
   })
 
-  it('moves a collapsed overlay with setPosition', async () => {
+  it('moves a collapsed overlay with setBounds around the ball origin', async () => {
     const window = {
-      getBounds: () => ({ x: 400, y: 300, width: FLOATING_BALL_SIZE, height: FLOATING_BALL_SIZE }),
+      getBounds: () => collapsedAt(400, 300),
       setBounds: vi.fn(),
       setPosition: vi.fn(),
     }
     moveFloatingBall(window as never, 20, 30)
-    expect(window.setPosition).toHaveBeenCalledWith(20, 30)
-    expect(window.setBounds).not.toHaveBeenCalled()
+    expect(window.setBounds).toHaveBeenCalledWith(collapsedAt(20, 30))
+    expect(window.setPosition).not.toHaveBeenCalled()
   })
 })
 
