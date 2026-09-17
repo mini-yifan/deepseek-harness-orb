@@ -1,7 +1,4 @@
 const api = window.dshDesktop
-const DEFAULT_PROVIDER = 'deepseek-official'
-const DEFAULT_MODEL = 'deepseek-flash'
-const DEFAULT_REASONING = 'max'
 const GIF_SRC = 'deepseek-avatar-square.gif'
 const COLLAPSE_MS = 180
 const ANIMATION_MS = 300
@@ -29,14 +26,6 @@ async function rpc(method, args = {}) {
     throw new Error(envelope.result?.error?.message ?? 'session rpc failed')
   }
   return envelope.result.value
-}
-
-function pickDefault(catalog) {
-  for (const group of catalog.groups ?? []) {
-    const exact = group.models.find(model => model.id === DEFAULT_MODEL)
-    if (exact) return { provider: group.id, model: exact.id }
-  }
-  return { provider: DEFAULT_PROVIDER, model: DEFAULT_MODEL }
 }
 
 const OVERLAY_APP_ORIGIN = 'dsh-app://app'
@@ -316,16 +305,16 @@ async function main() {
     }, COLLAPSE_MS)
   }
 
-  async function selectDefaultModel(id) {
+  async function selectOverlayModel(id, selected) {
     try {
-      const catalog = await rpc('session/modelCatalog')
-      const selected = pickDefault(catalog)
+      const overlay = selected ?? await api.floating.overlayModel()
       await rpc('session/selectModel', {
         request: {
           sessionId: id,
-          provider: selected.provider,
-          model: selected.model,
-          reasoningEffort: DEFAULT_REASONING,
+          provider: overlay.provider,
+          model: overlay.model,
+          ...(overlay.reasoningEffort === undefined ? {} : { reasoningEffort: overlay.reasoningEffort }),
+          saveAsDefault: false,
         },
       })
     } catch {
@@ -373,7 +362,7 @@ async function main() {
     sessionId = id
     orbSessionIds.add(id)
     await api.floating.setSessionId(id)
-    await selectDefaultModel(id)
+    await selectOverlayModel(id)
     postOverlaySession()
     syncQuestion()
     return id
@@ -883,6 +872,10 @@ async function main() {
       },
     })
     await refreshOverlay()
+  })
+  api.floating.onOverlayModel(selection => {
+    if (sessionId === undefined) return
+    void selectOverlayModel(sessionId, selection)
   })
   document.querySelector('#composer').addEventListener('submit', async event => {
     event.preventDefault()

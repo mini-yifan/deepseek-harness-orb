@@ -85,6 +85,8 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 
 测试通过 `applyComputerUse(ctx, backend, config)` 注入假桌面，而不是 Config 上的 `driver` 钩子。
 
+在 Desktop 上，省略 `session_id` 时，若 Host 发布了悬浮球「后台 Agent 设置」中的选择，新建 `code_agent` 会话会使用该选择。传入 `session_id` 续写时不改已有会话的模型。没有该 Host 服务的 Web / headless 组合仍继承部署的 Agent 默认模型。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -101,6 +103,8 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 
 首帧附件使用 `agent/pre-step`：监听器始终 `await next()`，然后在已领取批次包含 `source.kind === 'user'` 消息且路由声明图片输入时，追加 `form: 'notice'` 的插件 `user` 通知，除非该用户文本以 `Desktop selection. Answer in this chat only. Do not call GUI tools or code_agent.` 开头。`agent.inject()` 只会落在下一步。
 
+Desktop 上新建 `code_agent` 会在 `session.create` 之后、`session.prompt` 之前读取可选的 `ctx.get('orbCodeAgentModel')`，并传入 `saveAsDefault: false`。按 `session_id` 续写不会。本包不导入 Desktop Host。
+
 ### 源码地图
 
 | 文件 | 职责 |
@@ -110,7 +114,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 | [`src/plugin.ts`](src/plugin.ts) | 共享的 `applyComputerUse`：策略、十三个 GUI 工具、首帧 pre-step |
 | [`src/selection-turn.ts`](src/selection-turn.ts) | 识别 Desktop 划词用户轮次，从而省略首帧捕获 |
 | [`src/observe.ts`](src/observe.ts) | 最前窗口捕获、跳过 overlay 的前台检查，以及面向模型的信封 |
-| [`src/code-agent.ts`](src/code-agent.ts) | 仅 Computer Use 的 `code_agent`：`session.create` / `session.prompt` |
+| [`src/code-agent.ts`](src/code-agent.ts) | 仅 Computer Use 的 `code_agent`：`session.create`、Desktop 新建时可选 `selectModel`、`session.prompt` |
 | [`src/code-agent-completion.ts`](src/code-agent-completion.ts) | Code 会话与 Computer Use 调用方都空闲后投递的插件通知 |
 | [`src/macos.ts`](src/macos.ts) | Darwin 通过整屏 `screencapture` 加 `sips` 裁切前台应用窗口并集，或在设置了 overlay 窗口 id 时走 ScreenCaptureKit helper `--region=`；click、scroll、hotkey、长按与拖拽走 JXA `CGEvent`；`input_text` 通过 NSPasteboard 粘贴；`list_apps` / `open_app` 走 NSWorkspace；`open_in_browser` / `open_in_finder` 走 `/usr/bin/open`；`inspectForeground` 绑定 `CGWindowListCopyWindowInfo` 再 unwrap（跳过 overlay id）加 Finder AppleScript |
 | [`src/macos-sck-capture.swift`](src/macos-sck-capture.swift) | Darwin helper：窗口捕获或排除 overlay 后的区域裁切，仍省略 overlay CGWindowID；先在主 actor 启动 `NSApplication` |
@@ -144,6 +148,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 - [Computer Use 0–1000 比例坐标](../../../.agents/notes/implemented/bug-fix/2026-09-15-computer-use-fraction-coordinates.zh.md) — 模型侧 0–1000 是可见截图上的比例，不是捕获像素。
 - [图片句柄省略请求预览像素](../../../.agents/notes/implemented/bug-fix/2026-09-15-omit-request-preview-handle-dimensions.zh.md) — 共用图片句柄只写身份，不写请求预览宽高。
 - [桌面悬浮球](../../../.agents/notes/implemented/feature/2026-09-14-desktop-floating-orb.zh.md) — macOS overlay、runtime extra，以及一等 `code_agent` 会话。
+- [悬浮球 Agent 模型菜单](../../../.agents/notes/implemented/feature/2026-09-17-orb-agent-model-menus.zh.md) — overlay 与后台模型持久化、`saveAsDefault: false`、仅新建时应用到 `code_agent`。
 - [桌面 overlay-guard](../../../.agents/notes/implemented/architecture/2026-09-14-desktop-overlay-guard.zh.md) — 悬浮球的截屏排除与 HID 点击穿透。
 - [Headless computer-use snapshot](../../../snapshots/session/computer-use/snapshot.yml) — 在假桌面与视觉模型上人工编写的点击循环。
 

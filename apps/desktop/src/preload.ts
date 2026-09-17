@@ -3,6 +3,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { DESKTOP_IPC, type DshDesktopApi, type DesktopUpdateState, type SelectionPromptPayload, type SelectionToolbarState } from './ipc.ts'
 import type { DesktopBackendState } from './backend-controller.ts'
+import type { OrbAgentModelSelection } from './orb-agent-models.ts'
 
 const api: DshDesktopApi = {
   protocolVersion: 1,
@@ -39,6 +40,14 @@ const api: DshDesktopApi = {
     setExpanded: expanded => ipcRenderer.invoke(DESKTOP_IPC.floatingSetExpanded, expanded) as ReturnType<DshDesktopApi['floating']['setExpanded']>,
     sessionId: () => ipcRenderer.invoke(DESKTOP_IPC.floatingSessionGet) as Promise<string | undefined>,
     setSessionId: sessionId => ipcRenderer.invoke(DESKTOP_IPC.floatingSessionSet, sessionId) as Promise<void>,
+    overlayModel: () => ipcRenderer.invoke(DESKTOP_IPC.floatingOverlayModelGet) as Promise<OrbAgentModelSelection>,
+    onOverlayModel(listener) {
+      const handle = (_event: Electron.IpcRendererEvent, selection: OrbAgentModelSelection): void => {
+        listener(selection)
+      }
+      ipcRenderer.on(DESKTOP_IPC.floatingOverlayModel, handle)
+      return () => { ipcRenderer.off(DESKTOP_IPC.floatingOverlayModel, handle) }
+    },
     orbWorkspacePath: () => ipcRenderer.invoke(DESKTOP_IPC.floatingOrbWorkspace) as Promise<string>,
     focusMain: () => ipcRenderer.invoke(DESKTOP_IPC.floatingFocusMain) as Promise<void>,
     quit: () => ipcRenderer.invoke(DESKTOP_IPC.floatingQuit) as Promise<void>,

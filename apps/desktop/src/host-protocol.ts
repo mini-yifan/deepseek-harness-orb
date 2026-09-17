@@ -52,6 +52,11 @@ export type DesktopHostCommand = {
   readonly type: 'overlay-guard-ack'
   readonly requestId: number
   readonly excludeWindowIds: readonly number[]
+} | {
+  readonly type: 'orb-code-agent-model'
+  readonly provider: string
+  readonly model: string
+  readonly reasoningEffort?: string
 }
 
 /** Lifecycle and overlay-guard events retained on Node IPC. */

@@ -109,6 +109,7 @@ const harness = await vi.hoisted(async () => {
       this.ready.reject(new Error('child stopped'))
       return this.exited.promise
     })
+    readonly setOrbCodeAgentModel = vi.fn()
     constructor(
       readonly node: string,
       readonly runtime: string,
@@ -509,6 +510,16 @@ describe('desktop floating overlay', () => {
     const overlay = harness.windows.find(window => window.options.type === 'panel')
     expect(overlay).toBeDefined()
     expect(overlay?.urls).toEqual(['dsh-app://shell/floating.html'])
+    expect(harness.hosts[0]!.setOrbCodeAgentModel).toHaveBeenCalledWith({
+      provider: 'deepseek-official',
+      model: 'deepseek-flash',
+      reasoningEffort: 'max',
+    })
+    expect(invokeFloating(DESKTOP_IPC.floatingOverlayModelGet)).toEqual({
+      provider: 'deepseek-official',
+      model: 'deepseek-flash',
+      reasoningEffort: 'max',
+    })
     const toolbar = harness.windows.find(window => window.options.focusable === false)
     expect(toolbar?.urls).toEqual(['dsh-app://shell/selection-toolbar.html'])
     expect(overlay?.contentProtection).toBe(false)

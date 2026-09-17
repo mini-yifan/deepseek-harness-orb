@@ -46,7 +46,7 @@ The ball is created only after Host ready. Hover it to expand a white panel; the
 
 After a drag-select in another app, a toolbar offers **Search** (Bing in the default browser), **Translate** (Chinese or English into the ball’s current Computer Use chat), and **Agent Explain** (same chat, no first-frame screenshot). Right-click the ball to turn the toolbar off. The Mac must allow Accessibility; the first failed read opens System Settings.
 
-The input placeholder is “Ask the desktop agent…”. Sends go to the Computer Use session with DeepSeek-V41-Flash at Max thinking. Stop cancels only that Computer Use session, not sidebar standard sessions. The context menu offers **Open Main Window**, enable or disable the selection toolbar, and **Quit DeepSeek Harness**; only an explicit Quit ends the process.
+The input placeholder is “Ask the desktop agent…”. Sends go to the Computer Use session. The ball defaults to DeepSeek-V41-Flash at Max thinking until you change **Floating Agent Settings**; that choice does not change the main window’s New Chat model. Stop cancels only that Computer Use session, not sidebar standard sessions. Right-click the ball for **Open Main Window**, **Floating Agent Settings** and **Background Agent Settings** (independent model and reasoning effort; background apply is for new `code_agent` sessions only), enable or disable the selection toolbar, and **Quit DeepSeek Harness**; only an explicit Quit ends the process.
 
 The ball’s Computer Use bash and filesystem default to Full access, so they can write outside `dsh_orb`. Background `code_agent` sessions keep Workspace Write.
 

@@ -44,6 +44,7 @@ import {
   setOverlayGuardTransport,
   type OverlayGuardIpcEvent,
 } from './computer-use-overlay-guard.ts'
+import { setOrbCodeAgentModelSelection } from './computer-use-orb-code-agent-model.ts'
 
 export { DESKTOP_HOST_PROTOCOL_VERSION } from './wire.ts'
 export { computerUsePresetRoot, COMPUTER_USE_PACKAGE } from './computer-use-preset-root.ts'
@@ -65,6 +66,11 @@ export type DesktopHostCommand = {
   readonly type: 'overlay-guard-ack'
   readonly requestId: number
   readonly excludeWindowIds: readonly number[]
+} | {
+  readonly type: 'orb-code-agent-model'
+  readonly provider: string
+  readonly model: string
+  readonly reasoningEffort?: string
 }
 
 /** Events emitted by the desktop child process. */
@@ -106,6 +112,11 @@ function isDesktopHostCommand(message: unknown): message is DesktopHostCommand {
     case 'overlay-guard-ack':
       return typeof candidate.requestId === 'number' && Number.isInteger(candidate.requestId)
         && candidate.requestId >= 1 && isExcludeWindowIds(candidate.excludeWindowIds)
+    case 'orb-code-agent-model':
+      return typeof candidate.provider === 'string' && candidate.provider !== ''
+        && typeof candidate.model === 'string' && candidate.model !== ''
+        && (candidate.reasoningEffort === undefined
+          || (typeof candidate.reasoningEffort === 'string' && candidate.reasoningEffort !== ''))
     default:
       return false
   }
@@ -616,6 +627,9 @@ async function main(): Promise<void> {
         return
       case 'overlay-guard-ack':
         completeOverlayGuardAck(message.requestId, message.excludeWindowIds)
+        return
+      case 'orb-code-agent-model':
+        setOrbCodeAgentModelSelection(message)
         return
       default:
         message satisfies never

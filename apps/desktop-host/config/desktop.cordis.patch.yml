@@ -42,6 +42,9 @@
     - id: computer-use-orb-permission
       name: '../lib/computer-use-orb-permission.js'
 
+    - id: computer-use-orb-code-agent-model
+      name: '../lib/computer-use-orb-code-agent-model.js'
+
 - id: agent-presets
   inject: [computerUsePresetRoot]
   config:
