@@ -10,7 +10,7 @@ macOS 悬浮球在 overlay 创建、历史接上和新建时总是选 DeepSeek-V
 
 ## 决策
 
-overlay 原生右键菜单在每次右键时用实时 `session/modelCatalog` 重建，在「打开主窗口」之后加入悬浮球 Agent 设置与后台 Agent 设置。每个子菜单按目录 `groups[]` 分组（`group.name` 作为禁用标题，持久化 `group.id`）。带 `reasoning.efforts` 的模型嵌套连续 `radio` 项，文案用 `effort.name`；没有推理的模型是叶子 `checkbox`。绝不挂上 `submenu: []`。有效思考强度是 `current.reasoningEffort ?? defaultEffort`。仅当存在 efforts 且没有 `defaultEffort` 时才加「默认」单选项。overlay 列出目录里的全部模型。两个 Agent 的勾选彼此独立。点击某一强度即选中该 provider + model + reasoningEffort。
+overlay 原生右键菜单在每次右键时用实时 `session/modelCatalog` 重建，在「打开主窗口」之后加入悬浮球 Agent 设置与后台 Agent 设置。每个子菜单按目录 `groups[]` 分组（`group.name` 作为禁用标题，持久化 `group.id`）。带 `reasoning.efforts` 的模型是连续 `radio` 的 submenu，文案用 `effort.name`；当前模型在该行前加 ✓，因为 Electron 的勾选项和 submenu 互斥，checkbox 构造后再赋 `submenu` 会抛错，思考模式父项也画不出原生勾。没有推理的模型是叶子 `checkbox`。绝不挂上 `submenu: []`。有效思考强度是 `current.reasoningEffort ?? defaultEffort`。仅当存在 efforts 且没有 `defaultEffort` 时才加「默认」单选项。overlay 列出目录里的全部模型。两个 Agent 的勾选彼此独立。点击某一强度即选中该 provider + model + reasoningEffort。
 
 选择持久化为 Desktop profile 的 `orb-agent-models.json`（`{ overlay, background }`），不写进 `floating-session.json`。文件缺失或无效时，两边都用 `{ provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'max' }`。
 
@@ -40,4 +40,4 @@ overlay 原生右键菜单在每次右键时用实时 `session/modelCatalog` 重
 
 ## 测试
 
-`floating-window.spec.ts` 钉住相对打开主窗口 / 工具条 / 退出的子菜单位置，以及彼此独立的勾选。`floating-agent-menu.spec.ts` 钉住空目录、radio 对 checkbox、「默认」单选，以及不出现空 submenu。`orb-agent-models.spec.ts` 钉住默认值、无效 JSON，以及两边独立往返。`floating-renderer.spec.ts` 钉住已存 overlay `selectModel` 且 `saveAsDefault: false`，以及现场菜单应用。`session-models.host.spec.ts` 钉住跳过与写入 `agent-default-model`。`code-agent.spec.ts` 钉住有服务时仅新建调用 `selectModel`，省略服务时创建载荷不变。Desktop Host 插件测试与 Electron `setOrbCodeAgentModel` IPC 覆盖推送。overlay YAML id 与 locale 菜单文案已钉住。
+`floating-window.spec.ts` 钉住相对打开主窗口 / 工具条 / 退出的子菜单位置、彼此独立的勾选，以及当前思考模型行上的 ✓ 前缀。`floating-agent-menu.spec.ts` 钉住空目录、radio 对 checkbox、「默认」单选，以及不出现空 submenu。`orb-agent-models.spec.ts` 钉住默认值、无效 JSON，以及两边独立往返。`floating-renderer.spec.ts` 钉住已存 overlay `selectModel` 且 `saveAsDefault: false`，以及现场菜单应用。`session-models.host.spec.ts` 钉住跳过与写入 `agent-default-model`。`code-agent.spec.ts` 钉住有服务时仅新建调用 `selectModel`，省略服务时创建载荷不变。Desktop Host 插件测试与 Electron `setOrbCodeAgentModel` IPC 覆盖推送。overlay YAML id 与 locale 菜单文案已钉住。

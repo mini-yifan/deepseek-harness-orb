@@ -53,7 +53,9 @@ describe('floating agent model menu', () => {
       }],
     }, { provider: 'deepseek-official', model: 'deepseek-flash' }, onSelect, labels)
     const model = items[1]
-    expect(model?.checked).toBe(true)
+    expect(model?.label).toBe('✓ DeepSeek-V41-Flash')
+    expect(model).not.toHaveProperty('type')
+    expect(model).not.toHaveProperty('checked')
     const submenu = Array.isArray(model?.submenu) ? model.submenu : undefined
     expect(submenu).toEqual([
       { label: 'Off', type: 'radio', checked: false, click: expect.any(Function) },

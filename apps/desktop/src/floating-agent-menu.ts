@@ -29,13 +29,17 @@ export interface FloatingAgentModelMenuLabels {
   readonly defaultEffort: string
 }
 
+/** Thinking-mode parents cannot use Electron `checked`; check items have no submenu. */
+const CURRENT_MODEL_MARK = '✓ '
+
 /**
  * Build nested model items for one Agent (provider headers, model rows, effort radios).
  * @param catalog - Host `session/modelCatalog` groups, or undefined when the load failed.
  * @param current - stored selection to check.
  * @param onSelect - persist and apply one chosen route.
  * @param labels - empty-catalog and Default-effort copy.
- * @returns submenu items; never includes an empty `submenu` array.
+ * @returns submenu items; never includes an empty `submenu` array. The current
+ *   thinking-mode model prefixes its label with ✓; leaf models use a checkbox.
  */
 export function floatingAgentModelItems(
   catalog: FloatingModelCatalog | undefined,
@@ -73,8 +77,7 @@ function modelItem(
     }
   }
   return {
-    label: model.name,
-    checked: selected,
+    label: selected ? `${CURRENT_MODEL_MARK}${model.name}` : model.name,
     submenu: efforts,
   }
 }

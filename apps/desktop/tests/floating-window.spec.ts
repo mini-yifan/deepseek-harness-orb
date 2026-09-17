@@ -241,8 +241,7 @@ describe('floating window context menu', () => {
     expect(overlay?.submenu).toEqual([
       { label: 'DeepSeek', enabled: false },
       {
-        label: 'DeepSeek-V41-Flash',
-        checked: true,
+        label: '✓ DeepSeek-V41-Flash',
         submenu: [
           { label: 'High', type: 'radio', checked: false, click: expect.any(Function) },
           { label: 'Max', type: 'radio', checked: true, click: expect.any(Function) },
@@ -250,7 +249,6 @@ describe('floating window context menu', () => {
       },
       {
         label: 'DeepSeek-V41',
-        checked: false,
         submenu: [
           { label: 'High', type: 'radio', checked: false, click: expect.any(Function) },
           { label: 'Max', type: 'radio', checked: false, click: expect.any(Function) },
@@ -262,15 +260,13 @@ describe('floating window context menu', () => {
       { label: 'DeepSeek', enabled: false },
       {
         label: 'DeepSeek-V41-Flash',
-        checked: false,
         submenu: [
           { label: 'High', type: 'radio', checked: false, click: expect.any(Function) },
           { label: 'Max', type: 'radio', checked: false, click: expect.any(Function) },
         ],
       },
       {
-        label: 'DeepSeek-V41',
-        checked: true,
+        label: '✓ DeepSeek-V41',
         submenu: [
           { label: 'High', type: 'radio', checked: true, click: expect.any(Function) },
           { label: 'Max', type: 'radio', checked: false, click: expect.any(Function) },
