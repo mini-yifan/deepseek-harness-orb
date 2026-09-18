@@ -114,6 +114,7 @@ async function buildSkipBuildArtifacts(): Promise<void> {
     join(REPOSITORY_ROOT, 'packages', 'client', 'ui-chat'),
     join(REPOSITORY_ROOT, 'packages', 'client', 'ui-user-questions'),
     join(REPOSITORY_ROOT, 'packages', 'client', 'ui-overlay-chat'),
+    join(REPOSITORY_ROOT, 'packages', 'client', 'ui-settings-orb'),
   ]) {
     await buildPackage(path)
   }

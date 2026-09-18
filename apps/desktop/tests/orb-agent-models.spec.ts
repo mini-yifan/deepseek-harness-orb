@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   DEFAULT_ORB_AGENT_MODEL,
   ORB_AGENT_MODELS_FILE,
+  isOrbAgentModelSelection,
   readOrbAgentModels,
   writeOrbAgentModels,
 } from '../src/orb-agent-models.ts'
@@ -67,5 +68,15 @@ describe('orb agent model persistence', () => {
       overlay: { provider: 'deepseek-official', model: 'deepseek-chat', reasoningEffort: 'high' },
       background: DEFAULT_ORB_AGENT_MODEL,
     })
+  })
+
+  it('narrows IPC payloads to named provider/model routes', () => {
+    expect(isOrbAgentModelSelection({
+      provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'max',
+    })).toBe(true)
+    expect(isOrbAgentModelSelection({ provider: 'deepseek-official', model: 'deepseek-chat' })).toBe(true)
+    expect(isOrbAgentModelSelection({ provider: '', model: 'x' })).toBe(false)
+    expect(isOrbAgentModelSelection({ provider: 'p', model: 1 })).toBe(false)
+    expect(isOrbAgentModelSelection(null)).toBe(false)
   })
 })

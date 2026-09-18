@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-17-orb-agent-model-menus.md
-2026-09-17-orb-agent-model-menus.md: f6eded1708ed3ac448c075d51985797bf5b7cdaf
-2026-09-17-orb-agent-model-menus.zh.md: 56e95aedb80e60f6ebcf8944dbfcda7f63e7a7e8
+2026-09-17-orb-agent-model-menus.md: 62a714d238d1d84ea37bd2d8bba052f7d60d4618
+2026-09-17-orb-agent-model-menus.zh.md: 515e6ea76c1db1b80fe8be6c69dcb733da04b4cb

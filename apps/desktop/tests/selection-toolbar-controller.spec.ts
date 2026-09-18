@@ -117,6 +117,32 @@ describe('selection toolbar controller', () => {
     expect(controller.enabled()).toBe(false)
   })
 
+  it('starts and stops the helper from an explicit enablement write', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-selection-set-enabled-'))
+    roots.push(root)
+    const stop = vi.fn()
+    const starts: number[] = []
+    const controller = new SelectionToolbarController(root, {
+      electronPid: 99,
+      openExternal: async () => undefined,
+      promptOverlay: vi.fn(),
+      attachOverlay: vi.fn(),
+      requestAccessibility: () => false,
+      startMonitor: () => {
+        starts.push(1)
+        return { stop, setExcludePids: vi.fn(), activatePid: vi.fn() }
+      },
+    })
+    controller.setEnabled(true)
+    expect(controller.enabled()).toBe(true)
+    expect(starts).toHaveLength(1)
+    controller.setEnabled(true)
+    expect(starts).toHaveLength(1)
+    controller.setEnabled(false)
+    expect(controller.enabled()).toBe(false)
+    expect(stop).toHaveBeenCalledTimes(1)
+  })
+
   it('does not restore Desktop as the front app after Translate of the Electron pid', () => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-selection-self-pid-'))
     roots.push(root)

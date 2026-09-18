@@ -12,7 +12,7 @@ macOS 悬浮球在 overlay 创建、历史接上和新建时总是选 DeepSeek-V
 
 overlay 原生右键菜单在每次右键时用实时 `session/modelCatalog` 重建，在「打开主窗口」之后加入悬浮球 Agent 设置与后台 Agent 设置。每个子菜单按目录 `groups[]` 分组（`group.name` 作为禁用标题，持久化 `group.id`）。带 `reasoning.efforts` 的模型是连续 `radio` 的 submenu，文案用 `effort.name`；当前模型在该行前加 ✓，因为 Electron 的勾选项和 submenu 互斥，checkbox 构造后再赋 `submenu` 会抛错，思考模式父项也画不出原生勾。没有推理的模型是叶子 `checkbox`。绝不挂上 `submenu: []`。有效思考强度是 `current.reasoningEffort ?? defaultEffort`。仅当存在 efforts 且没有 `defaultEffort` 时才加「默认」单选项。overlay 列出目录里的全部模型。两个 Agent 的勾选彼此独立。点击某一强度即选中该 provider + model + reasoningEffort。
 
-选择持久化为 Desktop profile 的 `orb-agent-models.json`（`{ overlay, background }`），不写进 `floating-session.json`。文件缺失或无效时，两边都用 `{ provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'max' }`。
+选择持久化为 Desktop profile 的 `orb-agent-models.json`（`{ overlay, background }`），不写进 `floating-session.json`。文件缺失或无效时，两边都用 `{ provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'max' }`。主窗口[桌面悬浮球设置](2026-09-18-desktop-orb-settings.zh.md)页立即写入同一 JSON。
 
 `SessionSelectModelRequest.saveAsDefault` 对 composer `/model` 默认为 true。overlay 与 `code_agent` 传 `false`，因此不写 `agent-default-model`。overlay 创建、历史接上和新建应用已存的 overlay 选择。现场菜单点击先持久化，再 `webContents.send`，渲染进程立即对当前 overlay 会话 `selectModel`。
 

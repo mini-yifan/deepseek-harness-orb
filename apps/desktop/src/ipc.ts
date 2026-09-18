@@ -38,6 +38,15 @@ export const DESKTOP_IPC = {
   floatingFocusMain: 'dsh-desktop:floating-focus-main',
   floatingQuit: 'dsh-desktop:floating-quit',
   floatingRunning: 'dsh-desktop:floating-running',
+  floatingAvatarGet: 'dsh-desktop:floating-avatar-get',
+  floatingAvatar: 'dsh-desktop:floating-avatar',
+  orbSupported: 'dsh-desktop:orb-supported',
+  orbSnapshot: 'dsh-desktop:orb-snapshot',
+  orbPickAvatar: 'dsh-desktop:orb-pick-avatar',
+  orbRestoreAvatar: 'dsh-desktop:orb-restore-avatar',
+  orbSetOverlayModel: 'dsh-desktop:orb-set-overlay-model',
+  orbSetBackgroundModel: 'dsh-desktop:orb-set-background-model',
+  orbSetSelectionEnabled: 'dsh-desktop:orb-set-selection-enabled',
   selectionPrompt: 'dsh-desktop:selection-prompt',
   selectionAttach: 'dsh-desktop:selection-attach',
   selectionSearch: 'dsh-desktop:selection-search',
@@ -106,6 +115,8 @@ export interface DshDesktopApi {
     focusMain(): Promise<void>
     quit(): Promise<void>
     setSessionRunning(running: boolean): Promise<void>
+    avatarUrl(): Promise<string>
+    onAvatar(listener: (url: string) => void): () => void
     onSelectionPrompt(listener: (payload: SelectionPromptPayload) => void): () => void
     onSelectionAttach(listener: (payload: SelectionAttachPayload) => void): () => void
   }
@@ -117,6 +128,37 @@ export interface DshDesktopApi {
     interact(): Promise<void>
     setContentSize(size: { width: number; height: number }): Promise<{ menuAbove: boolean }>
     onState(listener: (state: SelectionToolbarState) => void): () => void
+  }
+}
+
+/** Current floating-ball preferences the main-window Settings page reads. */
+export interface OrbSettingsSnapshot {
+  readonly supported: boolean
+  readonly avatarUrl: string
+  readonly overlay: OrbAgentModelSelection
+  readonly background: OrbAgentModelSelection
+  readonly selectionEnabled: boolean
+}
+
+/** Why a custom ball image was not installed. */
+export type OrbAvatarWriteError = 'cancelled' | 'too-large' | 'invalid-type'
+
+/** Result of picking or restoring the ball image. */
+export type OrbAvatarWriteResult =
+  | { readonly ok: true; readonly snapshot: OrbSettingsSnapshot }
+  | { readonly ok: false; readonly error: OrbAvatarWriteError }
+
+/** Main-window bridge for floating-ball Settings; shell documents never receive it. */
+export interface DshDesktopAppApi {
+  readonly protocolVersion: 1
+  readonly orb: {
+    supported(): Promise<boolean>
+    snapshot(): Promise<OrbSettingsSnapshot>
+    pickAvatar(): Promise<OrbAvatarWriteResult>
+    restoreAvatar(): Promise<OrbSettingsSnapshot>
+    setOverlayModel(selection: OrbAgentModelSelection): Promise<void>
+    setBackgroundModel(selection: OrbAgentModelSelection): Promise<void>
+    setSelectionEnabled(enabled: boolean): Promise<void>
   }
 }
 

@@ -116,11 +116,19 @@ export class SelectionToolbarController {
     hideSelectionToolbar(this.toolbar)
   }
 
-  /** Persist the inverse of {@link enabled} and start or stop the helper. */
-  toggle(): void {
-    this.writeConfig({ ...this.config, enabled: !this.config.enabled })
+  /**
+   * Persist enablement and start or stop the helper.
+   * @param enabled - whether the toolbar should read selections.
+   */
+  setEnabled(enabled: boolean): void {
+    this.writeConfig({ ...this.config, enabled })
     if (this.config.enabled) this.start()
     else this.stop()
+  }
+
+  /** Persist the inverse of {@link enabled} and start or stop the helper. */
+  toggle(): void {
+    this.setEnabled(!this.config.enabled)
   }
 
   /**

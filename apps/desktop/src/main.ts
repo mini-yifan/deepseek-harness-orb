@@ -14,6 +14,7 @@ import {
   shell,
   systemPreferences,
   type IpcMainInvokeEvent,
+  type OpenDialogOptions,
 } from 'electron'
 import { resolveDesktopPaths } from './paths.ts'
 import { DesktopProjectManager, type DesktopProjectHooks } from './project-manager.ts'
@@ -21,7 +22,7 @@ import { DesktopHostProcess } from './host-process.ts'
 import { runDesktopPluginArgs } from './plugin-run.ts'
 import { linkDevelopmentPluginStore } from './development-plugin-store.ts'
 import { DesktopBackendController, type DesktopBackendState } from './backend-controller.ts'
-import { DESKTOP_IPC, type DesktopUpdateState } from './ipc.ts'
+import { DESKTOP_IPC, type DesktopUpdateState, type OrbSettingsSnapshot } from './ipc.ts'
 import { formatDesktopMessage, resolveDesktopLocale } from './locale.ts'
 import { claimDesktopSingleInstance } from './single-instance.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
@@ -43,10 +44,22 @@ import {
   writeFloatingSessionId,
 } from './floating-session.ts'
 import {
+  isOrbAgentModelSelection,
   readOrbAgentModels,
   writeOrbAgentModels,
   type OrbAgentModelSelection,
 } from './orb-agent-models.ts'
+import {
+  assertOrbSettingsWritable,
+  DEFAULT_ORB_AVATAR_FILE,
+  installOrbAvatarFromPath,
+  orbAvatarCacheToken,
+  orbAvatarUrl,
+  orbSettingsSupported,
+  ORB_AVATAR_PATH,
+  restoreOrbAvatar,
+  serveOrbAvatar,
+} from './orb-avatar.ts'
 import {
   isOrbPermissionPreset,
   readOrbPermission,
@@ -479,6 +492,32 @@ async function main(): Promise<void> {
     pushBackgroundModel()
   }
 
+  const requireAppSender = (event: IpcMainInvokeEvent): void => {
+    assertDesktopSender(event, ['app'])
+  }
+
+  const orbSnapshotFor = (event: IpcMainInvokeEvent): OrbSettingsSnapshot => {
+    const senderFrame = event.senderFrame
+    if (senderFrame === null) throw new Error('dsh desktop: rejected IPC without a sender frame')
+    const hostname = new URL(senderFrame.url).hostname
+    const models = readOrbAgentModels(activeProject)
+    return {
+      supported: orbSettingsSupported(process.platform),
+      avatarUrl: orbAvatarUrl(hostname, orbAvatarCacheToken(activeProject)),
+      overlay: models.overlay,
+      background: models.background,
+      selectionEnabled: selection?.enabled() ?? true,
+    }
+  }
+
+  const publishAvatar = (): void => {
+    if (floatingWindow === undefined || floatingWindow.isDestroyed()) return
+    floatingWindow.webContents.send(
+      DESKTOP_IPC.floatingAvatar,
+      orbAvatarUrl('shell', orbAvatarCacheToken(activeProject)),
+    )
+  }
+
   const publishUpdate = (state: DesktopUpdateState): DesktopUpdateState => {
     updateState = state
     for (const window of BrowserWindow.getAllWindows()) {
@@ -545,6 +584,13 @@ async function main(): Promise<void> {
 
   protocol.handle(SCHEME, (request) => {
     const url = new URL(request.url)
+    if (url.pathname === ORB_AVATAR_PATH && (url.hostname === 'shell' || url.hostname === 'app')) {
+      return serveOrbAvatar(
+        activeProject,
+        join(app.getAppPath(), 'renderer', DEFAULT_ORB_AVATAR_FILE),
+        request.method,
+      )
+    }
     if (url.hostname === 'shell') return serveShellAsset(request).then((response) => {
       if (response.status >= 400 && ['/startup.html', '/startup.js', '/startup.css'].includes(url.pathname)) {
         void showEmergencyError(new Error(`Desktop recovery resource could not be loaded: ${url.pathname} (HTTP ${response.status})`))
@@ -709,6 +755,66 @@ async function main(): Promise<void> {
     requireFloatingWindow(event)
     if (typeof running !== 'boolean') throw new Error('dsh desktop: floating running requires a boolean')
     selection?.setSessionRunning(running)
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingAvatarGet, (event) => {
+    requireFloatingWindow(event)
+    return orbAvatarUrl('shell', orbAvatarCacheToken(activeProject))
+  })
+  ipcMain.handle(DESKTOP_IPC.orbSupported, (event) => {
+    requireAppSender(event)
+    return orbSettingsSupported(process.platform)
+  })
+  ipcMain.handle(DESKTOP_IPC.orbSnapshot, (event) => {
+    requireAppSender(event)
+    return orbSnapshotFor(event)
+  })
+  ipcMain.handle(DESKTOP_IPC.orbPickAvatar, async (event) => {
+    requireAppSender(event)
+    assertOrbSettingsWritable(process.platform)
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const options: OpenDialogOptions = {
+      properties: ['openFile'],
+      filters: [{ name: 'Images', extensions: ['gif', 'png', 'webp'] }],
+    }
+    const picked = parent === null
+      ? await dialog.showOpenDialog(options)
+      : await dialog.showOpenDialog(parent, options)
+    const filePath = picked.filePaths[0]
+    if (picked.canceled || filePath === undefined) return { ok: false, error: 'cancelled' }
+    const installed = installOrbAvatarFromPath(activeProject, filePath)
+    if (!installed.ok) return installed
+    publishAvatar()
+    return { ok: true, snapshot: orbSnapshotFor(event) }
+  })
+  ipcMain.handle(DESKTOP_IPC.orbRestoreAvatar, (event) => {
+    requireAppSender(event)
+    assertOrbSettingsWritable(process.platform)
+    restoreOrbAvatar(activeProject)
+    publishAvatar()
+    return orbSnapshotFor(event)
+  })
+  ipcMain.handle(DESKTOP_IPC.orbSetOverlayModel, (event, selection: unknown) => {
+    requireAppSender(event)
+    assertOrbSettingsWritable(process.platform)
+    if (!isOrbAgentModelSelection(selection)) {
+      throw new Error('dsh desktop: overlay model selection is invalid')
+    }
+    persistOverlayModel(selection)
+  })
+  ipcMain.handle(DESKTOP_IPC.orbSetBackgroundModel, (event, selection: unknown) => {
+    requireAppSender(event)
+    assertOrbSettingsWritable(process.platform)
+    if (!isOrbAgentModelSelection(selection)) {
+      throw new Error('dsh desktop: background model selection is invalid')
+    }
+    persistBackgroundModel(selection)
+  })
+  ipcMain.handle(DESKTOP_IPC.orbSetSelectionEnabled, (event, enabled: unknown) => {
+    requireAppSender(event)
+    assertOrbSettingsWritable(process.platform)
+    if (typeof enabled !== 'boolean') throw new Error('dsh desktop: selection enablement requires a boolean')
+    if (selection === undefined) throw new Error('dsh desktop: selection toolbar is unavailable')
+    selection.setEnabled(enabled)
   })
   ipcMain.handle(DESKTOP_IPC.selectionSearch, (event) => {
     noteOverlayOwnedActivation()
