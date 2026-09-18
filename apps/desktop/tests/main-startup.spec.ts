@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { join } from 'node:path'
 import { DESKTOP_IPC } from '../src/ipc.ts'
-import { FLOATING_CHROME_INSET, FLOATING_PANEL_WINDOW_SIZE } from '../src/floating-window.ts'
+import {
+  defaultFloatingBallOrigin,
+  expandedOverlayBounds,
+  FLOATING_CHROME_INSET,
+} from '../src/floating-window.ts'
 
 const harness = await vi.hoisted(async () => {
   const { EventEmitter } = await import('node:events')
@@ -55,10 +59,14 @@ const harness = await vi.hoisted(async () => {
       width?: number
       height?: number
       focusable?: boolean
+      x?: number
+      y?: number
     }) {
       super()
       this.mediaSourceId = `window:${String(nextMediaSourceId++)}:0`
       windows.push(this)
+      if (typeof options.x === 'number') this.bounds.x = options.x
+      if (typeof options.y === 'number') this.bounds.y = options.y
       if (typeof options.width === 'number') this.bounds.width = options.width
       if (typeof options.height === 'number') this.bounds.height = options.height
       this.visible = options.show === true
@@ -195,6 +203,7 @@ vi.mock('electron', () => ({
   protocol: { registerSchemesAsPrivileged: vi.fn(), handle: vi.fn() },
   screen: {
     getDisplayNearestPoint: () => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } }),
+    getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } }),
   },
   shell: { openExternal: vi.fn() },
   systemPreferences: { isTrustedAccessibilityClient: vi.fn(() => false) },
@@ -512,6 +521,12 @@ describe('desktop floating overlay', () => {
     const overlay = harness.windows.find(window => window.options.type === 'panel')
     expect(overlay).toBeDefined()
     expect(overlay?.urls).toEqual(['dsh-app://shell/floating.html'])
+    const primaryWorkArea = { x: 0, y: 0, width: 1440, height: 900 }
+    const origin = defaultFloatingBallOrigin(primaryWorkArea)
+    expect(overlay?.bounds).toMatchObject({
+      x: origin.x - FLOATING_CHROME_INSET,
+      y: origin.y - FLOATING_CHROME_INSET,
+    })
     expect(harness.hosts[0]!.setOrbCodeAgentModel).toHaveBeenCalledWith({
       provider: 'deepseek-official',
       model: 'deepseek-flash',
@@ -565,14 +580,15 @@ describe('desktop floating overlay', () => {
     expect(overlay?.ignoreMouseEvents).toBe(false)
     expect(invokeFloating(DESKTOP_IPC.floatingSetExpanded, true)).toMatchObject({
       expanded: true,
-      horizontal: 'right',
-      vertical: 'down',
+      horizontal: 'left',
+      vertical: 'up',
     })
+    const expanded = expandedOverlayBounds(origin, primaryWorkArea)
     expect(overlay?.bounds).toMatchObject({
-      width: FLOATING_PANEL_WINDOW_SIZE.width,
-      height: FLOATING_PANEL_WINDOW_SIZE.height,
-      x: 0,
-      y: 0,
+      x: expanded.x,
+      y: expanded.y,
+      width: expanded.width,
+      height: expanded.height,
     })
     invokeFloating(DESKTOP_IPC.floatingSetExpanded, false)
     invokeFloating(DESKTOP_IPC.floatingMove, 20, 30)

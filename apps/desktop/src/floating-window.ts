@@ -124,6 +124,9 @@ export const FLOATING_CHROME_INSET = 12
 /** Collapsed overlay window size including {@link FLOATING_CHROME_INSET}. */
 export const FLOATING_BALL_WINDOW_SIZE = FLOATING_BALL_SIZE + 2 * FLOATING_CHROME_INSET
 
+/** Downward offset from work-area vertical center, as a fraction of work-area height. */
+export const FLOATING_BALL_DEFAULT_BELOW_CENTER = 0.08
+
 /** Expanded overlay window size including {@link FLOATING_CHROME_INSET}. */
 export const FLOATING_PANEL_WINDOW_SIZE = {
   width: FLOATING_PANEL_SIZE.width + 2 * FLOATING_CHROME_INSET,
@@ -242,6 +245,18 @@ export function clampedBallOrigin(
 }
 
 /**
+ * Collapsed-ball origin on a work-area right edge, slightly below vertical center.
+ * @param workArea - display work area that should contain the ball.
+ * @returns origin that keeps the 72px ball fully visible.
+ */
+export function defaultFloatingBallOrigin(workArea: OverlayRect): { x: number; y: number } {
+  const x = workArea.x + workArea.width - FLOATING_BALL_SIZE
+  const centerY = workArea.y + (workArea.height - FLOATING_BALL_SIZE) / 2
+  const y = centerY + workArea.height * FLOATING_BALL_DEFAULT_BELOW_CENTER
+  return clampedBallOrigin({ x: Math.round(x), y: Math.round(y) }, workArea)
+}
+
+/**
  * Expanded overlay rectangle that keeps the ball origin in its growth corner.
  * @param ball - ball top-left before expand.
  * @param workArea - display work area.
@@ -291,6 +306,7 @@ function currentBallOrigin(window: BrowserWindow, workArea: OverlayRect): { x: n
 
 /**
  * Construct the macOS overlay BrowserWindow. The caller loads `dsh-app://shell/floating.html`.
+ * Places the collapsed overlay on the primary-display work-area right edge, slightly below vertical center.
  * @param preload - context-isolated shell preload.
  * @param messages - locale dictionary for the right-click menu.
  * @param onOpenMain - show the Desktop main window.
@@ -307,9 +323,12 @@ export function createFloatingWindow(
   selection?: { readonly enabled: () => boolean; readonly toggle: () => void },
   agents?: FloatingAgentMenuSource,
 ): BrowserWindow {
+  const bounds = collapsedWindowBounds(defaultFloatingBallOrigin(screen.getPrimaryDisplay().workArea))
   const window = new BrowserWindow({
-    width: FLOATING_BALL_WINDOW_SIZE,
-    height: FLOATING_BALL_WINDOW_SIZE,
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
