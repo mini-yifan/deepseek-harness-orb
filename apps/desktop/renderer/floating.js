@@ -1,5 +1,5 @@
 const api = window.dshDesktop
-const GIF_SRC = 'deepseek-avatar-square.gif'
+let gifSrc = 'deepseek-avatar-square.gif'
 const COLLAPSE_MS = 180
 const ANIMATION_MS = 300
 const REMOTE_STREAM_URL = 'dsh-app://app/.dsh/remote-stream'
@@ -257,6 +257,18 @@ async function main() {
     else gif.addEventListener('load', still, { once: true })
   }
 
+  function applyAvatarUrl(url) {
+    if (typeof url !== 'string' || url === '') return
+    gifSrc = url
+    const gif = document.querySelector('#ball-gif')
+    if (gif === null || pageClosed()) return
+    gif.src = gifSrc
+    if (gif.dataset.mode === 'still') freezeGif(gif)
+  }
+
+  void api.floating.avatarUrl?.().then(applyAvatarUrl)
+  api.floating.onAvatar?.(applyAvatarUrl)
+
   function currentPending() {
     return sessionId === undefined ? undefined : pendingBySession.get(sessionId)
   }
@@ -286,13 +298,13 @@ async function main() {
     if (play) {
       if (gif.dataset.mode !== 'play') {
         gif.dataset.mode = 'play'
-        gif.src = GIF_SRC
+        gif.src = gifSrc
       }
       return
     }
     if (gif.dataset.mode === 'still') return
     gif.dataset.mode = 'still'
-    gif.src = GIF_SRC
+    gif.src = gifSrc
     freezeGif(gif)
   }
 

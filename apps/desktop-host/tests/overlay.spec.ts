@@ -21,6 +21,9 @@ describe('desktop Computer Use overlay', () => {
 
   it('inserts the locator and keeps the deployment default on standard', () => {
     const overlay = readFileSync(OVERLAY, 'utf8')
+    expect(overlay).toContain('id: ui-directory-picker-native')
+    expect(overlay).toContain("name: '@deepseek-ai/dsh-client-ui-settings-orb'")
+    expect(overlay).toContain('id: ui-settings-orb')
     expect(overlay).toContain('id: computer-use-preset-root')
     expect(overlay).toContain("name: '../lib/computer-use-preset-root.js'")
     expect(overlay).toContain('id: computer-use-overlay-guard')
@@ -36,6 +39,8 @@ describe('desktop Computer Use overlay', () => {
     expect(overlay).toContain('default: standard')
     expect(overlay).not.toContain('default: computer-use')
     expect(overlay).not.toContain('modeSelectionEnabled: false')
+    const web = readFileSync(fileURLToPath(new URL('../../../packages/bundle/web-app/cordis.patch.yml', import.meta.url)), 'utf8')
+    expect(web).not.toContain('ui-settings-orb')
   })
 
   it('resolves the extra presets directory only when the runtime package exists', () => {

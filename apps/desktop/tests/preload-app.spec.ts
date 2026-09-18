@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { DESKTOP_IPC, type DshDesktopStartupApi } from '../src/ipc.ts'
+import { DESKTOP_IPC, type DshDesktopAppApi, type DshDesktopStartupApi } from '../src/ipc.ts'
 
 const electron = vi.hoisted(() => ({
   contextBridge: { exposeInMainWorld: vi.fn() },
@@ -9,10 +9,34 @@ vi.mock('electron', () => electron)
 
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); vi.resetModules() })
 
-it.each(['dsh-app://app/index.html', 'https://shell/startup.html'])('exposes only the carrier marker to %s', async (url) => {
+it.each(['https://shell/startup.html'])('exposes only the carrier marker to %s', async (url) => {
   vi.stubGlobal('location', new URL(url))
   await import('../src/preload-app.ts')
   expect(electron.contextBridge.exposeInMainWorld).toHaveBeenCalledWith('dshDesktop', { protocolVersion: 1 })
+})
+
+it('exposes floating-ball Settings controls to application documents', async () => {
+  vi.stubGlobal('location', new URL('dsh-app://app/index.html'))
+  await import('../src/preload-app.ts')
+  const api = electron.contextBridge.exposeInMainWorld.mock.calls[0]?.[1] as DshDesktopAppApi
+  await api.orb.supported()
+  await api.orb.snapshot()
+  await api.orb.pickAvatar()
+  await api.orb.restoreAvatar()
+  await api.orb.setOverlayModel({ provider: 'deepseek-official', model: 'deepseek-flash' })
+  await api.orb.setBackgroundModel({ provider: 'deepseek-official', model: 'deepseek-chat' })
+  await api.orb.setSelectionEnabled(false)
+  expect(electron.ipcRenderer.invoke.mock.calls).toEqual([
+    [DESKTOP_IPC.orbSupported],
+    [DESKTOP_IPC.orbSnapshot],
+    [DESKTOP_IPC.orbPickAvatar],
+    [DESKTOP_IPC.orbRestoreAvatar],
+    [DESKTOP_IPC.orbSetOverlayModel, { provider: 'deepseek-official', model: 'deepseek-flash' }],
+    [DESKTOP_IPC.orbSetBackgroundModel, { provider: 'deepseek-official', model: 'deepseek-chat' }],
+    [DESKTOP_IPC.orbSetSelectionEnabled, false],
+  ])
+  expect(api).not.toHaveProperty('plugins')
+  expect(api).not.toHaveProperty('floating')
 })
 
 it('provides startup controls and a removable state subscription to shell documents', async () => {

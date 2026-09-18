@@ -1648,3 +1648,63 @@ it('sends from the overlay when Access IPC is missing', async () => {
     expect(calls.some(call => call.method === 'commands/execute')).toBe(false)
   } finally { dom.window.close() }
 })
+
+it('applies a pushed custom avatar URL to the ball image', async () => {
+  const html = readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8')
+  const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'dsh-app://shell/floating.html' })
+  const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+    if (isRemoteStream(_input)) return hangingStreamResponse(init?.signal)
+    const body = JSON.parse(String(init?.body)) as { rpcId: string; method: string }
+    let value: unknown = {}
+    if (body.method === 'workspace/create') {
+      value = { workspace: { workspaceId: 'ws-orb' }, created: true }
+    }
+    if (body.method === 'session/create') value = { sessionId: 'session-orb', agentPreset: 'computer-use' }
+    if (body.method === 'session/list') {
+      value = { items: [{ sessionId: 'session-orb', running: false, projections: { asOfSeq: 0 } }] }
+    }
+    return rpcResponse(body.rpcId, value)
+  })
+  Object.defineProperty(dom.window, 'fetch', { value: fetchMock })
+  Object.defineProperty(dom.window, 'crypto', { value: globalThis.crypto })
+  const setSessionId = vi.fn()
+  let onAvatar: ((url: string) => void) | undefined
+  Object.defineProperty(dom.window, 'dshDesktop', {
+    value: {
+      locale: async () => resolveDesktopLocale('en'),
+      backend: { status: async () => ({ phase: 'ready' }), subscribe: vi.fn() },
+      floating: {
+        sessionId: async () => undefined,
+        setSessionId,
+        move: vi.fn(),
+        clamp: vi.fn(),
+        setExpanded: vi.fn(async (expanded: boolean) => ({
+          expanded, horizontal: 'left', vertical: 'up',
+        })),
+        orbWorkspacePath: async () => '/tmp/dsh_orb',
+        setSessionRunning: vi.fn(),
+        overlayModel: async () => ({
+          provider: 'deepseek-official',
+          model: 'deepseek-flash',
+          reasoningEffort: 'max',
+        }),
+        avatarUrl: async () => 'dsh-app://shell/orb-avatar?v=1',
+        onAvatar: (listener: (url: string) => void) => {
+          onAvatar = listener
+          return () => { onAvatar = undefined }
+        },
+        onOverlayModel: () => () => {},
+        onSelectionPrompt: () => () => {},
+        onSelectionAttach: () => () => {},
+      },
+    },
+  })
+  try {
+    runInContext(readFileSync(new URL('../renderer/floating.js', import.meta.url), 'utf8'), dom.getInternalVMContext())
+    await expect.poll(() => setSessionId.mock.calls).toEqual([['session-orb']])
+    const gif = dom.window.document.querySelector<HTMLImageElement>('#ball-gif')
+    await expect.poll(() => gif?.src).toBe('dsh-app://shell/orb-avatar?v=1')
+    onAvatar?.('dsh-app://shell/orb-avatar?v=2')
+    expect(gif?.src).toBe('dsh-app://shell/orb-avatar?v=2')
+  } finally { dom.window.close() }
+})

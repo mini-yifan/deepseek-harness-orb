@@ -59,6 +59,14 @@ const api: DshDesktopApi = {
     focusMain: () => ipcRenderer.invoke(DESKTOP_IPC.floatingFocusMain) as Promise<void>,
     quit: () => ipcRenderer.invoke(DESKTOP_IPC.floatingQuit) as Promise<void>,
     setSessionRunning: running => ipcRenderer.invoke(DESKTOP_IPC.floatingRunning, running) as Promise<void>,
+    avatarUrl: () => ipcRenderer.invoke(DESKTOP_IPC.floatingAvatarGet) as Promise<string>,
+    onAvatar(listener) {
+      const handle = (_event: Electron.IpcRendererEvent, url: string): void => {
+        listener(url)
+      }
+      ipcRenderer.on(DESKTOP_IPC.floatingAvatar, handle)
+      return () => { ipcRenderer.off(DESKTOP_IPC.floatingAvatar, handle) }
+    },
     onSelectionPrompt(listener) {
       const handle = (_event: Electron.IpcRendererEvent, payload: SelectionPromptPayload): void => {
         listener(payload)

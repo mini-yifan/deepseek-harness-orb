@@ -14,7 +14,7 @@ macOS Desktop 在 Electron 壳内拥有该功能。派生的 Darwin helper（`ap
 
 helper 是应用包内已签名的子进程（`asarUnpack: lib/macos-selection`），不是 `dlopen` 的 dylib。辅助功能/剪贴板投递的 TCC 身份以及 Electron 打包，在 helper 作为紧挨未打包主脚本的普通可执行文件时更简单。
 
-第三扇 `type: 'panel'` 窗口加载 `dsh-app://shell/selection-toolbar.html`，且不激活 Desktop。文案由 locale 拥有。偏好与 `floating-session.json` 并列存为 `selection-toolbar.json`（默认 `enabled: true`，`translateTargetLanguage: 'zh'`）。overlay 右键切换启用。
+第三扇 `type: 'panel'` 窗口加载 `dsh-app://shell/selection-toolbar.html`，且不激活 Desktop。文案由 locale 拥有。偏好与 `floating-session.json` 并列存为 `selection-toolbar.json`（默认 `enabled: true`，`translateTargetLanguage: 'zh'`）。overlay 右键与[桌面悬浮球设置](2026-09-18-desktop-orb-settings.zh.md)开关都会切换启用。
 
 搜索在默认浏览器打开 `https://www.bing.com/search?q=` 加上编码后的选区，不提示 agent。翻译隐藏工具条、展开球，并对当前 overlay Computer Use 会话执行 `session/prompt` `mode: 'queue'`。翻译不得显示或聚焦主窗口，也不得让 Desktop 保持前台：工具条 IPC 在 2 秒内忽略 `app` 的 `activate`，overlay 用 `showInactive` 展开，发送后再隐藏工具条，已聚焦的主窗口会 `blur()`，Darwin helper 通过 stdin `activate-pid` 重新激活划词所在进程（跳过 Electron 与 helper 的 pid）。搜索把焦点留给浏览器。该间隔之后的 Dock `activate` 仍会显示主窗口。打开语言菜单时，工具条面板绕紧凑条原点改尺寸（向下，或在工作区会裁切时向上），关闭后恢复紧凑尺寸，避免透明区域吞掉点击。翻译用户消息第一行恰好是 `Desktop selection. Answer in this chat only. Do not call GUI tools or code_agent.` Desktop 与 Computer Use 各自保存该字符串；Desktop 不得导入该实验包。[发给 Agent](2026-09-17-desktop-selection-send-to-agent.zh.md) 拥有第三个工具条按钮。
 

@@ -31,6 +31,15 @@ const DEFAULT_MODELS: OrbAgentModels = {
   background: DEFAULT_ORB_AGENT_MODEL,
 }
 
+/**
+ * Narrow an IPC payload to a stored overlay or background selection.
+ * @param value - untrusted invoke argument.
+ * @returns whether the value names a provider and model.
+ */
+export function isOrbAgentModelSelection(value: unknown): value is OrbAgentModelSelection {
+  return parseSelection(value, { provider: '', model: '' }).provider !== ''
+}
+
 function parseSelection(value: unknown, fallback: OrbAgentModelSelection): OrbAgentModelSelection {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return fallback
   const record = value as { provider?: unknown; model?: unknown; reasoningEffort?: unknown }
