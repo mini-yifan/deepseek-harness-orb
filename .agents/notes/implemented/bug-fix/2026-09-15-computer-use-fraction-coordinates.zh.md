@@ -14,7 +14,7 @@ Computer Use 把 `click` / `input_text` / `scroll` 的 `position` 按每屏逻�
 
 `formatScreenEnvelope` 只发出 `<screen_index>` 和 `<coordinate_space>0-1000</coordinate_space>`。它省略 `<logical_size>`、`<attached_size>`、`<content>` 像素/字节行，以及所有 `multiply coordinates` / `downscaled from` 说明。`originalDimensions` 仍留在已存储的附件引用上；观察里不对模型可见。
 
-POLICY、首帧通知和 `position` 参数描述写明：`[0, 0]` 是可见截图左上角，`[1000, 1000]` 是右下角，x 与 y 独立缩放，并且必须忽略像素宽度和其他图片句柄尺寸。`mapNormalizedToGlobal` 把这些比例乘以当前观察面的逻辑边框。[Computer Use 焦点窗口观察](../feature/2026-09-16-computer-use-focused-window-observation.zh.md) 提供窗口边框，而不是 `NSScreen.frame`。[图片句柄省略请求预览像素](2026-09-15-omit-request-preview-handle-dimensions.zh.md) 拥有共用句柄。
+POLICY、首帧通知和 `position` 参数描述写明：`[0, 0]` 是可见截图左上角，`[1000, 1000]` 是右下角，x 与 y 按该截图比例 × 1000 独立缩放（水平中心是 500，不是像素 x），并且必须忽略像素宽度和其他图片句柄尺寸。`mapNormalizedToGlobal` 把这些比例乘以当前观察面的逻辑边框。[Computer Use 焦点窗口观察](../feature/2026-09-16-computer-use-focused-window-observation.zh.md) 提供窗口边框，而不是 `NSScreen.frame`。[图片句柄省略请求预览像素](2026-09-15-omit-request-preview-handle-dimensions.zh.md) 拥有共用句柄。
 
 ## 考虑过的替代方案
 
@@ -30,4 +30,4 @@ Retina 捕获、2048×2048 附件规范化，以及 1,690,000 像素请求预算
 
 ## 测试
 
-`packages/experimental/tool-computer-use/tests/tools.spec.ts` 把信封钉成屏幕序号加 `0-1000`（即使设置了 `originalDimensions`），省略 `logical_size`、`attached_size`、`downscaled`、`multiply` 和 `px`，并把 POLICY 钉成禁止原始像素和倍率。人工编写的 [`snapshots/session/computer-use/`](../../../../snapshots/session/computer-use/) fixture 会刷新首帧通知、click 结果信封、POLICY 以及 `position` schema 描述。
+`packages/experimental/tool-computer-use/tests/tools.spec.ts` 把信封钉成屏幕序号加 `0-1000`（即使设置了 `originalDimensions`），省略 `logical_size`、`attached_size`、`downscaled`、`multiply` 和 `px`，并把 POLICY 钉成禁止原始像素、倍率，以及 × 1000 编码（水平中心是 500）。`tests/pre-step.spec.ts` 把同一条水平中心条款钉在首帧通知上。人工编写的 [`snapshots/session/computer-use/`](../../../../snapshots/session/computer-use/) fixture 会刷新首帧通知、click 结果信封、POLICY 以及 `position` schema 描述。

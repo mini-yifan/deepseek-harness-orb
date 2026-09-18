@@ -923,7 +923,7 @@ export function applyComputerUse(
       content: [
         {
           type: 'text',
-          text: 'Current frontmost window. Coordinates use a 0–1000 space of that screenshot ([0, 0] top-left, [1000, 1000] bottom-right of that image; not pixels).',
+          text: 'Current frontmost window. Coordinates are 0–1000 fractions of this screenshot ([0, 0] top-left, [1000, 1000] bottom-right). Center x is 500, not a pixel x.',
         },
         ...observation.blocks,
       ],
