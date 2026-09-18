@@ -47,7 +47,10 @@ async function bench() {
   const locale = new LocaleRuntime(ctx)
   locale.setLocale('zh')
   ctx.provide('locale', locale)
-  const models = vi.fn(() => Promise.resolve(CATALOG))
+  const models = vi.fn((): Promise<
+    | typeof CATALOG
+    | { ok: false; error: { code: string; message: string } }
+  > => Promise.resolve(CATALOG))
   new TestRemote(ctx, { session: { modelCatalog: models } })
   await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
   return { ctx, slots: ctx.get('slots') as SlotRegistry, models }
@@ -187,7 +190,10 @@ describe('ui-settings-orb apply', () => {
     }
     vi.stubGlobal('dshDesktop', api)
     const { ctx, slots, models } = await bench()
-    models.mockResolvedValueOnce({ ok: false, error: { code: 'gateway/internal', message: 'no catalog' } })
+    models.mockResolvedValueOnce({
+      ok: false as const,
+      error: { code: 'gateway/internal', message: 'no catalog' },
+    })
     declareRoot(slots)
     await ctx.plugin({ inject: [...inject], apply }).await()
     const section = (slots.entries('settings.section')[0]!.inject as unknown as () => OrbSettingsSectionInjected)()
