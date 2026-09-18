@@ -612,7 +612,7 @@ describe('computer-use tools', () => {
     expect(POLICY).toContain('except where they overlap this app\'s windows')
     expect(POLICY).toContain('Do not click the Dock')
     expect(POLICY).toContain('call list_apps or open_app')
-    expect(POLICY).toContain('Map the target as a fraction of the screenshot you see')
+    expect(POLICY).toContain('Encode x and y as fractions of this screenshot × 1000 (center x is 500, not a pixel x)')
     expect(POLICY).toContain('Do not send raw pixel coordinates')
     expect(POLICY).toContain('Ignore pixel widths and any other image-handle dimensions')
     expect(POLICY).not.toContain('downscale')
