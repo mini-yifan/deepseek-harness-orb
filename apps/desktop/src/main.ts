@@ -18,6 +18,8 @@ import {
 import { resolveDesktopPaths } from './paths.ts'
 import { DesktopProjectManager, type DesktopProjectHooks } from './project-manager.ts'
 import { DesktopHostProcess } from './host-process.ts'
+import { runDesktopPluginArgs } from './plugin-run.ts'
+import { linkDevelopmentPluginStore } from './development-plugin-store.ts'
 import { DesktopBackendController, type DesktopBackendState } from './backend-controller.ts'
 import { DESKTOP_IPC, type DesktopUpdateState } from './ipc.ts'
 import { formatDesktopMessage, resolveDesktopLocale } from './locale.ts'
@@ -362,6 +364,12 @@ async function main(): Promise<void> {
           return overlayGuardInputApplyDelay().then(() => ids)
         }
         return ids
+      },
+      development === undefined ? undefined : paths.profile,
+      async (args, signal, output) => {
+        const result = await runDesktopPluginArgs(manager, args, output, signal)
+        if (development !== undefined) linkDevelopmentPluginStore(development, paths.profile)
+        return result
       },
     )
     return {

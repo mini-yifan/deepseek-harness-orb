@@ -46,6 +46,16 @@ import {
 } from './computer-use-overlay-guard.ts'
 import { setOrbCodeAgentModelSelection } from './computer-use-orb-code-agent-model.ts'
 import { isOrbPermissionPreset, setOrbPermissionPreset } from './computer-use-orb-permission.ts'
+import {
+  clearDesktopPluginTransport,
+  completePluginRunData,
+  completePluginRunDone,
+  provideDesktopPluginServices,
+  setDesktopPluginTransport,
+  type PluginRunCancelIpcEvent,
+  type PluginRunIpcEvent,
+} from './desktop-plugin-services.ts'
+import { DESKTOP_STREAM_PATH, desktopCarrierHeaders, routeDesktopFetch } from './desktop-fetch.ts'
 
 export { DESKTOP_HOST_PROTOCOL_VERSION } from './wire.ts'
 export { computerUsePresetRoot, COMPUTER_USE_PACKAGE } from './computer-use-preset-root.ts'
@@ -76,6 +86,16 @@ export type DesktopHostCommand = {
   readonly type: 'orb-permission'
   readonly preset: 'read-only' | 'workspace-write' | 'danger-full-access'
   readonly sessionId?: string
+} | {
+  readonly type: 'plugin-run-data'
+  readonly requestId: number
+  readonly stream: 'stdout' | 'stderr'
+  readonly chunk: string
+} | {
+  readonly type: 'plugin-run-done'
+  readonly requestId: number
+  readonly exitCode: number | null
+  readonly signal: string | null
 }
 
 /** Events emitted by the desktop child process. */
@@ -86,7 +106,7 @@ export type DesktopHostEvent = {
 } | {
   readonly type: 'fatal'
   readonly message: string
-} | OverlayGuardIpcEvent
+} | OverlayGuardIpcEvent | PluginRunIpcEvent | PluginRunCancelIpcEvent
 
 /** Controller returned to tests and the self-executing process entry. */
 export interface DesktopHostController {
@@ -108,6 +128,18 @@ function isExcludeWindowIds(value: unknown): value is readonly number[] {
   return Array.isArray(value) && value.every(id => typeof id === 'number' && Number.isInteger(id) && id >= 1)
 }
 
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1
+}
+
+function isPluginRunStream(value: unknown): value is 'stdout' | 'stderr' {
+  return value === 'stdout' || value === 'stderr'
+}
+
+function isExitCode(value: unknown): value is number | null {
+  return value === null || (typeof value === 'number' && Number.isInteger(value))
+}
+
 function isDesktopHostCommand(message: unknown): message is DesktopHostCommand {
   if (typeof message !== 'object' || message === null || !('type' in message)) return false
   const candidate = message as Record<string, unknown>
@@ -126,6 +158,12 @@ function isDesktopHostCommand(message: unknown): message is DesktopHostCommand {
       return isOrbPermissionPreset(candidate.preset)
         && (candidate.sessionId === undefined
           || (typeof candidate.sessionId === 'string' && candidate.sessionId !== ''))
+    case 'plugin-run-data':
+      return isPositiveInteger(candidate.requestId) && isPluginRunStream(candidate.stream)
+        && typeof candidate.chunk === 'string'
+    case 'plugin-run-done':
+      return isPositiveInteger(candidate.requestId) && isExitCode(candidate.exitCode)
+        && (candidate.signal === null || typeof candidate.signal === 'string')
     default:
       return false
   }
@@ -139,7 +177,6 @@ interface PackageManifest {
 const DESKTOP_PATCH = fileURLToPath(new URL('../config/desktop.cordis.patch.yml', import.meta.url))
 const ROOT_CONFIG = '# Electron desktop composition root; package transactions own this file.\n[]\n'
 const ROOT_CONFIG_FILENAME = 'desktop.cordis.yml'
-const DESKTOP_STREAM_PATH = '/.dsh/remote-stream'
 
 const DESKTOP_TRANSPORT_SCRIPT = `globalThis.__DSH_TRANSPORT__={
   ownsHost:true,
@@ -327,20 +364,22 @@ interface NodeRequestInit extends RequestInit {
  * @param runtimeDir - immutable dsh packages supplied by the Electron application.
  * @param projectDir - active or staged Electron-owned desktop profile.
  * @param writeResponse - serialized response-pipe writer that applies byte backpressure.
- * @param options - development-only allowance for workspace-linked bundle packages.
+ * @param options - development-only allowance for workspace-linked bundle
+ *   packages, plus the persistent plugin profile when it is not `projectDir`.
  * @returns controller after every Host and client-manifest row is active.
  */
 export async function runDesktopHost(
   runtimeDir: string,
   projectDir: string,
   writeResponse: (frame: Buffer) => Promise<void>,
-  options: { allowLinkedPackages?: boolean } = {},
+  options: { allowLinkedPackages?: boolean; pluginProfileDir?: string } = {},
 ): Promise<DesktopHostController> {
   const absoluteProject = resolve(projectDir)
   mkdirSync(absoluteProject, { recursive: true })
   const rootConfig = join(absoluteProject, ROOT_CONFIG_FILENAME)
   writeFileSync(rootConfig, ROOT_CONFIG)
   const environment = loadLayeredEnv('dsh desktop')
+  const pluginProfileDir = resolve(options.pluginProfileDir ?? absoluteProject)
   let current: Context | undefined
   const ctx = await boot('dsh desktop', rootConfig, structuredClone(desktopPatches(
     resolve(runtimeDir),
@@ -350,6 +389,7 @@ export async function runDesktopHost(
     current = hostCtx
     hostCtx.provide(DSH_LAUNCH_ENVIRONMENT_KEY, environment)
     provideCmdline(hostCtx, { args: [], exit: () => {} })
+    provideDesktopPluginServices(hostCtx, pluginProfileDir)
   })
   current = ctx
   const connection = ctx.get('connection')
@@ -362,6 +402,7 @@ export async function runDesktopHost(
   const api = connection.createSharedFetchHandler('/api')
   const assets = assetHandler(ctx, resolve(runtimeDir))
   const streams = remoteStreamHandler(ctx)
+  const webServer = ctx.get('webServer')
   const requests = new Map<number, AbortController>()
   let disposing: Promise<void> | undefined
 
@@ -386,18 +427,24 @@ export async function runDesktopHost(
       requests.set(command.streamId, controller)
       try {
         const url = new URL(command.request.url)
+        const headers = desktopCarrierHeaders(
+          url,
+          new Headers(command.request.headers.map(([name, value]) => [name, value] as [string, string])),
+        )
         const init: NodeRequestInit = {
           method: command.request.method,
-          headers: new Headers(command.request.headers.map(([name, value]) => [name, value] as [string, string])),
+          headers,
           ...(body === null ? {} : { body, duplex: 'half' }),
           signal: controller.signal,
         }
         const request = new Request(url, init)
-        const response = url.pathname === DESKTOP_STREAM_PATH
-          ? await streams.fetch(request)
-          : url.pathname.startsWith('/api/')
-            ? await api.fetch(request)
-            : await assets.fetch(request)
+        const response = await routeDesktopFetch(request, {
+          streams,
+          api,
+          clientModules,
+          webServer,
+          assets,
+        })
         await writeResponse(encodeDesktopResponseStart(command.streamId, {
           status: response.status,
           headers: [...response.headers.entries()],
@@ -437,8 +484,20 @@ async function main(): Promise<void> {
     throw new Error('dsh desktop: expected runtime and profile directories, byte pipes, and a Node IPC channel')
   }
   const option = process.argv[4]
-  if (option !== undefined && option !== '--allow-linked-profile') {
-    throw new Error(`dsh desktop: unsupported internal option ${JSON.stringify(option)}`)
+  const extra = process.argv[5]
+  const flags = [option, extra].filter((value): value is string => value !== undefined)
+  let allowLinkedPackages = false
+  let pluginProfileDir: string | undefined
+  for (const flag of flags) {
+    if (flag === '--allow-linked-profile') {
+      allowLinkedPackages = true
+      continue
+    }
+    if (flag.startsWith('--plugin-profile=')) {
+      pluginProfileDir = flag.slice('--plugin-profile='.length)
+      continue
+    }
+    throw new Error(`dsh desktop: unsupported internal option ${JSON.stringify(flag)}`)
   }
   const requestPipe = createReadStream('', { fd: DESKTOP_REQUEST_PIPE_FD, autoClose: false })
   const responsePipe = createWriteStream('', { fd: DESKTOP_RESPONSE_PIPE_FD, autoClose: false })
@@ -462,7 +521,11 @@ async function main(): Promise<void> {
     }
   }
   setOverlayGuardTransport(send)
-  const controller = await runDesktopHost(runtimeDir, projectDir, writeResponse, { allowLinkedPackages: option !== undefined })
+  setDesktopPluginTransport(send)
+  const controller = await runDesktopHost(runtimeDir, projectDir, writeResponse, {
+    allowLinkedPackages,
+    ...(pluginProfileDir === undefined ? {} : { pluginProfileDir }),
+  })
   send({
     type: 'ready',
     protocolVersion: DESKTOP_HOST_PROTOCOL_VERSION,
@@ -485,6 +548,7 @@ async function main(): Promise<void> {
     requestedExitCode = Math.max(requestedExitCode, exitCode)
     stopping ??= (async () => {
       clearOverlayGuardTransport(new Error('dsh desktop: Host is stopping'))
+      clearDesktopPluginTransport(new Error('dsh desktop: Host is stopping'))
       requestPipe.pause()
       requestPipe.removeAllListeners('data')
       const stopped = new Error('dsh desktop: Host is stopping')
@@ -642,6 +706,12 @@ async function main(): Promise<void> {
         return
       case 'orb-permission':
         setOrbPermissionPreset(message.preset, message.sessionId)
+        return
+      case 'plugin-run-data':
+        completePluginRunData(message.requestId, message.stream, message.chunk)
+        return
+      case 'plugin-run-done':
+        completePluginRunDone(message.requestId, message.exitCode, message.signal)
         return
       default:
         message satisfies never

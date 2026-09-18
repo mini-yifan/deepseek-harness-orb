@@ -194,11 +194,12 @@ Signed packaging emits generic-provider channel metadata for the deployment sele
 
 ## Low-level development overrides
 
-An unpackaged Electron process uses `.desktop-build/development/project` under its application directory as its development project. That project's `node_modules` mirrors the workspace virtual hoist (`node_modules/.pnpm/node_modules`), then links any remaining names from the nested `node_modules` of `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-web-app` so profile plugins the hoist omitted still resolve. `DSH_DESKTOP_NODE_BINARY`, `DSH_DESKTOP_PNPM_ENTRY`, and `DSH_DESKTOP_DSH_DIR` select explicit runtime resources. Packaged applications ignore these variables, resolve signed resources from `process.resourcesPath`, and use the managed Desktop profile.
+An unpackaged Electron process uses `.desktop-build/development/project` under its application directory as its development project. That project's `node_modules` mirrors the workspace virtual hoist (`node_modules/.pnpm/node_modules`), then links any remaining names from the nested `node_modules` of `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-web-app` so profile plugins the hoist omitted still resolve. External plugins persist in `$DSH_HOME/profiles/desktop` and are linked into the hoist project after each rebuild; each plugin's host peer packages are then linked from the hoist into that store so Node ESM resolution after realpath can load them; `start:desktop` pins `dshmarket@1.47.0` there so Settings → Plugins can show Plugin Market. `DSH_DESKTOP_NODE_BINARY`, `DSH_DESKTOP_PNPM_ENTRY`, and `DSH_DESKTOP_DSH_DIR` select explicit runtime resources. Packaged applications ignore these variables, resolve signed resources from `process.resourcesPath`, and use the managed Desktop profile.
 
 ## Known limitations
 
-- The Web "Open In..." action is disabled in Desktop because its host plugin requires HTTP routes; Desktop does not provide a `webServer`.
+- Desktop provides an in-process `webServer` (`listen: false`) for named plugin HTTP routes such as Plugin Market; it does not bind a TCP port. Plugin Market is the external MIT package `dshmarket` (copyright fkysly and contributors), not a signed core bundle.
+- The Web "Open In..." action remains disabled because its host plugin is not composed in Desktop.
 - Release signing, notarization, update hosting, and previous-version installed-artifact qualification require the production release environment.
 - Desktop plugins with dependency lifecycle scripts are rejected unless their package appears in the desktop project's reviewed `allowBuilds` policy.
 - The desktop shell shares sessions, settings, credentials, workspaces, and storage under `$DSH_HOME` with CLI dsh, while executable packages, plugin activation, lockfiles, and package-manager state remain separate.

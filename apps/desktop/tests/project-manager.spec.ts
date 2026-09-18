@@ -157,9 +157,29 @@ describe('desktop external plugin profile', () => {
   it('accepts registry names and tags but rejects alternate sources and flags', () => {
     expect(packageNameFromSpec('@scope/plugin@1.2.3')).toBe('@scope/plugin')
     expect(packageNameFromSpec('plugin@next')).toBe('plugin')
-    for (const spec of ['file:../plugin', '--registry=evil', 'https://example.test/plugin.tgz']) {
+    for (const spec of ['file:../plugin', '--registry=evil', 'https://example.test/plugin.tgz', 'github:owner/plugin']) {
       expect(() => packageNameFromSpec(spec)).toThrow(/unsupported npm package spec/u)
     }
+  })
+
+  it('mutates plugins while the Host remains running', async () => {
+    const { manager } = setup()
+    await manager.applyRelease()
+    let stopped = false
+    await manager.mutateWhileRunning({ type: 'plugin-add', spec: 'plugin@1.0.0' })
+    expect(manager.listPlugins()).toEqual([{ name: 'plugin', version: '1.0.0', enabled: true }])
+    await manager.mutate({ type: 'plugin-remove', name: 'plugin' }, hooks({
+      beforeChange: async () => { stopped = true },
+    }))
+    expect(stopped).toBe(true)
+    expect(manager.listPlugins()).toEqual([])
+  })
+
+  it('installs a registry plugin without packaged runtime metadata', async () => {
+    const { manager } = setup()
+    await manager.mutateWhileRunning({ type: 'plugin-add', spec: 'plugin@1.0.0' })
+    expect(manager.listPlugins()).toEqual([{ name: 'plugin', version: '1.0.0', enabled: true }])
+    expect(existsSync(join(manager.paths.profile, 'desktop-packages-pending'))).toBe(false)
   })
 
   it('retries installation after an interrupted runtime rebuild removed plugin files', async () => {

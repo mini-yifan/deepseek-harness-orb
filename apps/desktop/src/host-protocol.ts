@@ -1,7 +1,7 @@
 /** Versioned control messages and framed byte transport for the Desktop Host child. */
 
 /** Protocol version implemented by the Electron shell and installed dsh Host. */
-export const DESKTOP_HOST_PROTOCOL_VERSION = 5 as const
+export const DESKTOP_HOST_PROTOCOL_VERSION = 6 as const
 
 /** Child descriptor Electron writes request frames to. */
 export const DESKTOP_REQUEST_PIPE_FD = 3
@@ -61,9 +61,19 @@ export type DesktopHostCommand = {
   readonly type: 'orb-permission'
   readonly preset: 'read-only' | 'workspace-write' | 'danger-full-access'
   readonly sessionId?: string
+} | {
+  readonly type: 'plugin-run-data'
+  readonly requestId: number
+  readonly stream: 'stdout' | 'stderr'
+  readonly chunk: string
+} | {
+  readonly type: 'plugin-run-done'
+  readonly requestId: number
+  readonly exitCode: number | null
+  readonly signal: string | null
 }
 
-/** Lifecycle and overlay-guard events retained on Node IPC. */
+/** Lifecycle, overlay-guard, and plugin-run events retained on Node IPC. */
 export type DesktopHostEvent = {
   readonly type: 'ready'
   readonly protocolVersion: typeof DESKTOP_HOST_PROTOCOL_VERSION
@@ -76,6 +86,13 @@ export type DesktopHostEvent = {
   readonly requestId: number
   readonly action: DesktopOverlayGuardAction
   readonly mode: DesktopOverlayGuardMode
+} | {
+  readonly type: 'plugin-run'
+  readonly requestId: number
+  readonly args: readonly string[]
+} | {
+  readonly type: 'plugin-run-cancel'
+  readonly requestId: number
 }
 
 /** One decoded response-pipe frame. */

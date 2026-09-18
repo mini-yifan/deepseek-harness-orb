@@ -10,7 +10,7 @@ Staging preserves an old plugin installation but adds profile copying, directory
 
 ## Decision
 
-Desktop stops the Host and modifies the current profile directly. Shared host links are detached for package changes and restored when the operation settles. Package locking, dependency validation, and approved native builds remain. Compatible upgrades refresh links without copying plugin files.
+Desktop stops the Host and modifies the current profile directly when the plugin-management window applies a change. Plugin Market mutates the same profile while the Host stays alive; a user restart loads the new Loader entries. Shared host links are detached for package changes and restored when the operation settles. Package locking, dependency validation, and approved native builds remain. Compatible upgrades refresh links without copying plugin files.
 
 Package or Host failures retain partial changes for repair and retry. There is no staging profile, activation journal, directory-swap recovery, or automatic rollback. Existing scratch directories are not interpreted or deleted.
 

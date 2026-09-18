@@ -67,6 +67,12 @@ export interface DesktopProjectHooks {
   afterChange(): Promise<void>
 }
 
+/** Streaming sinks for Host-alive Plugin Market package operations. */
+export interface DesktopPluginRunOutput {
+  stdout(chunk: string): void
+  stderr(chunk: string): void
+}
+
 /** Supported dependency mutation. */
 export type DesktopProjectMutation =
   | { readonly type: 'plugin-add'; readonly spec: string }
@@ -127,7 +133,8 @@ function assertVersion(version: string): void {
  * @returns Requested package name.
  */
 export function packageNameFromSpec(spec: string): string {
-  if (spec === '' || spec.startsWith('-') || /[\s\\]/u.test(spec) || spec.includes('://') || spec.startsWith('file:')) {
+  if (spec === '' || spec.startsWith('-') || /[\s\\]/u.test(spec) || spec.includes('://')
+    || spec.startsWith('file:') || /^(?:github:|gist:|git\+|git:)/u.test(spec)) {
     throw new Error(`desktop project: unsupported npm package spec ${JSON.stringify(spec)}`)
   }
   if (spec.startsWith('@')) {
@@ -177,6 +184,39 @@ function profilePluginNames(projectDir: string): readonly string[] {
   return plugins
 }
 
+const IGNORED_PLUGIN_ARGS = new Set(['-w', '--save-exact', '--reporter=ndjson', '--ignore-scripts'])
+
+/**
+ * Parse Plugin Market `dsh plugin` arguments into a Desktop profile mutation.
+ * GitHub, gist, git, file, and URL specs are rejected.
+ * @param args - positional plugin command plus flags such as `-w` and `--reporter=ndjson`.
+ * @returns the matching add or remove mutation.
+ */
+export function parseDesktopPluginArgs(args: readonly string[]): Extract<DesktopProjectMutation, { type: 'plugin-add' | 'plugin-remove' }> {
+  const positional: string[] = []
+  for (const arg of args) {
+    if (IGNORED_PLUGIN_ARGS.has(arg)) continue
+    if (arg.startsWith('-')) throw new Error(`desktop project: unsupported plugin argument ${JSON.stringify(arg)}`)
+    positional.push(arg)
+  }
+  const [command, target] = positional
+  if (command === 'add') {
+    if (target === undefined) throw new Error('desktop project: plugin add requires an npm package spec')
+    const name = packageNameFromSpec(target)
+    const version = target.slice(name.length + 1)
+    if (valid(version) !== version) {
+      throw new Error(`desktop project: plugin add requires an exact npm version ${JSON.stringify(target)}`)
+    }
+    return { type: 'plugin-add', spec: target }
+  }
+  if (command === 'remove') {
+    if (target === undefined) throw new Error('desktop project: plugin remove requires a package name')
+    assertPackageName(target)
+    return { type: 'plugin-remove', name: target }
+  }
+  throw new Error(`desktop project: unsupported plugin command ${JSON.stringify(command)}`)
+}
+
 function pluginRecords(projectDir: string): readonly DesktopPluginRecord[] {
   return Object.keys(projectManifest(projectDir).dependencies).sort().map(name => inspectPlugin(projectDir, name))
 }
@@ -222,6 +262,8 @@ function inspectPlugin(projectDir: string, requestedName: string): DesktopPlugin
 export class DesktopProjectManager {
   private lockDescriptor: number | undefined
   private descriptor: DesktopRuntimeDescriptor | undefined
+  private pnpmOutput: DesktopPluginRunOutput | undefined
+  private pnpmChild: ReturnType<typeof spawn> | undefined
 
   /**
    * @param paths - Electron-owned package state and reserved desktop profile paths.
@@ -351,6 +393,69 @@ export class DesktopProjectManager {
     })
   }
 
+  /**
+   * Apply an add/remove/update while the Host remains running.
+   * Development profiles without runtime metadata skip host-package linking.
+   * @param mutation - plugin add, remove, update, or toggle.
+   * @param output - optional pnpm stdout/stderr forwarded to Plugin Market.
+   * @param signal - cancels the in-flight pnpm child.
+   */
+  async mutateWhileRunning(
+    mutation: DesktopProjectMutation,
+    output?: DesktopPluginRunOutput,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await this.withLock(async () => {
+      this.pnpmOutput = output
+      if (!existsSync(join(this.paths.profile, 'package.json'))) {
+        if (this.descriptor !== undefined) throw new Error('desktop project: active profile is not installed')
+        createPluginProfile(this.paths.profile)
+      }
+      const abort = (): void => {
+        this.pnpmChild?.kill('SIGTERM')
+      }
+      if (signal?.aborted) throw errorOf(signal.reason, 'desktop project: plugin package operation aborted')
+      signal?.addEventListener('abort', abort, { once: true })
+      try {
+        if (this.descriptor === undefined) {
+          if (mutation.type === 'plugins-disable-all') {
+            const manifest = projectManifest(this.paths.profile)
+            writeJson(join(this.paths.profile, 'package.json'), {
+              ...manifest,
+              dsh: { ...manifest.dsh, profile: { ...manifest.dsh.profile, bundles: [...DESKTOP_PROFILE_BUNDLES] } },
+            })
+            return
+          }
+          await this.applyMutation(this.paths.profile, mutation)
+          if (existsSync(this.pendingPackages)) unlinkSync(this.pendingPackages)
+          return
+        }
+        if (mutation.type === 'plugins-disable-all') {
+          const manifest = projectManifest(this.paths.profile)
+          writeJson(join(this.paths.profile, 'package.json'), {
+            ...manifest,
+            dsh: { ...manifest.dsh, profile: { ...manifest.dsh.profile, bundles: [...DESKTOP_PROFILE_BUNDLES] } },
+          })
+          this.prepareProfile(this.paths.profile)
+          return
+        }
+        const previous = readDesktopProfileState(this.paths.profile)
+        const packagesChanged = mutation.type !== 'plugin-toggle'
+        if (packagesChanged) unlinkDesktopHostPackages(this.paths.profile)
+        try {
+          await this.applyMutation(this.paths.profile, mutation)
+        } finally {
+          if (packagesChanged) linkDesktopHostPackages(this.paths.profile, this.runtime.dsh, this.currentRuntime())
+        }
+        await this.reconcileProfile(this.paths.profile, previous, packagesChanged)
+      } finally {
+        signal?.removeEventListener('abort', abort)
+        this.pnpmOutput = undefined
+        this.pnpmChild = undefined
+      }
+    })
+  }
+
   private async reconcileProfile(projectDir: string, previous: DesktopProfileState | undefined, packagesChanged = false): Promise<void> {
     const target = this.currentRuntime()
     const rebuild = (!packagesChanged && existsSync(this.pendingPackages))
@@ -377,7 +482,7 @@ export class DesktopProjectManager {
     switch (mutation.type) {
       case 'plugin-add': {
         const requestedName = packageNameFromSpec(mutation.spec)
-        if (this.currentRuntime().sharedPackages.some(entry => entry.name === requestedName)) {
+        if (this.descriptor !== undefined && this.descriptor.sharedPackages.some(entry => entry.name === requestedName)) {
           throw new Error(`desktop project: cannot install host-owned package ${requestedName}`)
         }
         await this.runPnpm(projectDir, ['add', mutation.spec, '--save-exact', '--ignore-scripts'])
@@ -473,9 +578,16 @@ export class DesktopProjectManager {
         diagnostics = (diagnostics + chunk).slice(-MAX_PNPM_DIAGNOSTIC_BYTES)
       }
       child.stdout.setEncoding('utf8')
-      child.stdout.on('data', appendDiagnostics)
+      child.stdout.on('data', (chunk: string) => {
+        appendDiagnostics(chunk)
+        this.pnpmOutput?.stdout(chunk)
+      })
       child.stderr.setEncoding('utf8')
-      child.stderr.on('data', appendDiagnostics)
+      child.stderr.on('data', (chunk: string) => {
+        appendDiagnostics(chunk)
+        this.pnpmOutput?.stderr(chunk)
+      })
+      this.pnpmChild = child
       const complete = (settleChild: () => void): void => {
         if (completed) return
         completed = true

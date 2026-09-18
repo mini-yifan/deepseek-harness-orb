@@ -45,6 +45,11 @@ function isDesktopHostEvent(message: unknown): message is DesktopHostEvent {
       return isPositiveInteger(candidate.requestId)
         && (candidate.action === 'begin' || candidate.action === 'end')
         && (candidate.mode === 'capture' || candidate.mode === 'input')
+    case 'plugin-run':
+      return isPositiveInteger(candidate.requestId) && Array.isArray(candidate.args)
+        && candidate.args.every(arg => typeof arg === 'string')
+    case 'plugin-run-cancel':
+      return isPositiveInteger(candidate.requestId)
     default:
       return false
   }
@@ -102,6 +107,7 @@ export class DesktopHostProcess {
   private exitPromise: Promise<void> | undefined
   private stderr = ''
   private failureReported = false
+  private readonly pendingPluginRuns = new Map<number, AbortController>()
 
   /**
    * @param node - absolute bundled upstream Node.js executable.
@@ -112,6 +118,8 @@ export class DesktopHostProcess {
    * @param onFailure - Receives the first fatal child or transport failure, including after readiness.
    * @param onOverlayGuard - Apply overlay chrome and return overlay CGWindowIDs to exclude from capture.
    * May be async so input begin can settle click-through before the ack; omitted when no overlay exists.
+   * @param pluginProfileDir - persistent plugin profile when it differs from `projectDir`.
+   * @param onPluginRun - Host-alive pnpm mutation invoked from Plugin Market IPC.
    */
   constructor(
     private readonly node: string,
@@ -123,6 +131,12 @@ export class DesktopHostProcess {
     private readonly onOverlayGuard?: (
       event: Extract<DesktopHostEvent, { type: 'overlay-guard' }>,
     ) => readonly number[] | void | Promise<readonly number[] | void>,
+    private readonly pluginProfileDir?: string,
+    private readonly onPluginRun?: (
+      args: readonly string[],
+      signal: AbortSignal,
+      output: { stdout(chunk: string): void; stderr(chunk: string): void },
+    ) => Promise<{ exitCode: number | null; signal: NodeJS.Signals | null }>,
   ) {}
 
   /** Start the child once and resolve only after its complete composition is active. */
@@ -134,6 +148,9 @@ export class DesktopHostProcess {
       entry,
       this.runtimeDir,
       this.projectDir,
+      ...(this.pluginProfileDir === undefined || this.pluginProfileDir === this.projectDir
+        ? []
+        : [`--plugin-profile=${this.pluginProfileDir}`]),
       ...(this.inspectPort === undefined ? [] : ['--allow-linked-profile']),
     ], {
       cwd: this.projectDir,
@@ -464,6 +481,12 @@ export class DesktopHostProcess {
       case 'overlay-guard':
         void this.dispatchOverlayGuard(message)
         return
+      case 'plugin-run':
+        void this.dispatchPluginRun(message)
+        return
+      case 'plugin-run-cancel':
+        this.pendingPluginRuns.get(message.requestId)?.abort()
+        return
       default:
         message satisfies never
     }
@@ -494,6 +517,49 @@ export class DesktopHostProcess {
     })
   }
 
+  private async dispatchPluginRun(
+    message: Extract<DesktopHostEvent, { type: 'plugin-run' }>,
+  ): Promise<void> {
+    const abort = new AbortController()
+    this.pendingPluginRuns.set(message.requestId, abort)
+    const sendChunk = (stream: 'stdout' | 'stderr', chunk: string): void => {
+      const child = this.child
+      if (child === undefined || !child.connected) return
+      for (let offset = 0; offset < chunk.length; offset += DESKTOP_PIPE_CHUNK_BYTES) {
+        this.send({
+          type: 'plugin-run-data',
+          requestId: message.requestId,
+          stream,
+          chunk: chunk.slice(offset, offset + DESKTOP_PIPE_CHUNK_BYTES),
+        })
+      }
+    }
+    let exitCode: number | null = 1
+    let signal: string | null = null
+    try {
+      const result = await this.onPluginRun?.(message.args, abort.signal, {
+        stdout: (chunk) => { sendChunk('stdout', chunk) },
+        stderr: (chunk) => { sendChunk('stderr', chunk) },
+      })
+      exitCode = result?.exitCode ?? 127
+      signal = result?.signal ?? null
+      if (result === undefined) sendChunk('stderr', 'dsh desktop: plugin package operations are unavailable')
+    } catch (error) {
+      sendChunk('stderr', errorOf(error, 'dsh desktop: plugin package operation failed').message)
+    } finally {
+      this.pendingPluginRuns.delete(message.requestId)
+      const child = this.child
+      if (child !== undefined && child.connected) {
+        this.send({
+          type: 'plugin-run-done',
+          requestId: message.requestId,
+          exitCode,
+          signal,
+        })
+      }
+    }
+  }
+
   private fail(error: Error): void {
     this.readyReject(error)
     if (!this.failureReported) {
@@ -510,6 +576,8 @@ export class DesktopHostProcess {
     }
     this.pending.clear()
     this.blockedResponses.clear()
+    for (const abort of this.pendingPluginRuns.values()) abort.abort()
+    this.pendingPluginRuns.clear()
     this.responsePipe?.resume()
   }
 }
