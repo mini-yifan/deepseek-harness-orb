@@ -357,7 +357,7 @@ function onRequestFrame(frame) {
 process.send({ type: 'ready', protocolVersion: 4, dshVersion: 'old' })
 function onRequestFrame() {}
 `), projectWithHost(''))
-    await expect(host.start()).rejects.toThrow(/protocol 4 does not match Electron protocol 5/u)
+    await expect(host.start()).rejects.toThrow(/protocol 4 does not match Electron protocol 6/u)
     await host.stop().catch(() => undefined)
   })
 
@@ -452,6 +452,51 @@ function onRequestFrame(frame) {
         provider: 'deepseek-official',
         model: 'deepseek-chat',
         reasoningEffort: 'high',
+      })
+    } finally {
+      await host.stop()
+    }
+  })
+
+  it('forwards plugin-run IPC to Electron and acknowledges plugin-run-done', async () => {
+    const runtime = projectWithHost(`
+let last = null
+process.on('message', message => {
+  if (message.type === 'plugin-run-done') last = message
+})
+process.send({ type: 'ready', protocolVersion: ${String(DESKTOP_HOST_PROTOCOL_VERSION)}, dshVersion: 'plugin-run' })
+process.send({ type: 'plugin-run', requestId: 3, args: ['add', 'plugin@1.0.0'] })
+function onRequestFrame(frame) {
+  if (frame.type !== 1) return
+  responseStart(frame.streamId, { headers: [['content-type', 'application/json']] })
+  responseData(frame.streamId, JSON.stringify(last))
+  responseEnd(frame.streamId)
+}
+`)
+    const host = new DesktopHostProcess(
+      process.execPath,
+      runtime,
+      runtime,
+      undefined,
+      process.env,
+      undefined,
+      undefined,
+      undefined,
+      async (args, _signal, output) => {
+        output.stdout(`args:${args.join(' ')}\n`)
+        return { exitCode: 0, signal: null }
+      },
+    )
+    try {
+      await host.start()
+      await expect.poll(async () => {
+        const response = await host.fetch(new Request('dsh-app://app/plugin-run'))
+        return await response.json() as unknown
+      }).toEqual({
+        type: 'plugin-run-done',
+        requestId: 3,
+        exitCode: 0,
+        signal: null,
       })
     } finally {
       await host.stop()

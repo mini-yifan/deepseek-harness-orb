@@ -40,7 +40,7 @@ Native canonical paths identify shared package directories. Windows launchers ca
 
 Dependency mutations install with scripts disabled, validate the plugin graph and host links, run the reviewed pending lifecycle builds, and validate again. This permits approved native dependencies to resolve host peers while preventing accidental duplicate host packages from reaching startup. The `allowBuilds` policy remains explicit; unsupported build-requiring dependencies fail the transaction.
 
-Desktop stops the Host before package mutations and waits for pnpm exit before restarting it. The [in-place decision](2026-09-09-desktop-in-place-profile.md) owns partial failures and persistent retry state. Recorded host links identify owned directories independently of package-operation completion.
+The plugin-management window stops the Host before package mutations and waits for pnpm exit before restarting it. Plugin Market mutates the profile while the Host stays alive ([in-process webServer decision](2026-09-18-desktop-in-process-webserver-and-plugin-market.md)). The [in-place decision](2026-09-09-desktop-in-place-profile.md) owns partial failures and persistent retry state. Recorded host links identify owned directories independently of package-operation completion.
 
 The [immediate-window decision](2026-09-09-desktop-immediate-window-and-direct-start.md) owns direct Host startup and recovery in the main window. Users can update, remove, disable, or re-enable plugins and retry startup. Incompatible plugins are not silently deleted or automatically downgraded. Each backend launch requires the current runtime identity.
 

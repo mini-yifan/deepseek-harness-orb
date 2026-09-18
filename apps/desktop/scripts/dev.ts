@@ -7,6 +7,13 @@ import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { DESKTOP_HOST_PROTOCOL_VERSION } from '../src/host-protocol.ts'
 import type { DesktopRelease } from '../src/release.ts'
+import { resolveDesktopPaths } from '../src/paths.ts'
+import { DesktopProjectManager } from '../src/project-manager.ts'
+import {
+  DESKTOP_DEVELOPMENT_MARKET_SPEC,
+  developmentStoreHasSpec,
+  ensureDevelopmentPluginProfile,
+} from '../src/development-plugin-store.ts'
 import { prepareDevelopmentProject } from './development-project.ts'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
@@ -62,11 +69,13 @@ async function launchElectron(): Promise<void> {
   const hostPort = debugPort('DSH_DESKTOP_HOST_INSPECT_PORT', 9230)
   const home = resolve(process.env.DSH_HOME ?? join(DEVELOPMENT_ROOT, 'home'))
   const userData = join(DEVELOPMENT_ROOT, 'electron-user-data')
+  const pnpm = join(APP_ROOT, 'node_modules', 'pnpm', 'bin', 'pnpm.mjs')
   const environment: NodeJS.ProcessEnv = {
     ...process.env,
     DSH_HOME: home,
     DSH_DESKTOP_HOST_INSPECT_PORT: String(hostPort),
     DSH_DESKTOP_NODE_BINARY: process.execPath,
+    DSH_DESKTOP_PNPM_ENTRY: pnpm,
     DSH_DESKTOP_OPEN_DEVTOOLS: process.env.DSH_DESKTOP_OPEN_DEVTOOLS ?? '1',
     ELECTRON_ENABLE_LOGGING: process.env.ELECTRON_ENABLE_LOGGING ?? '1',
   }
@@ -94,6 +103,8 @@ async function buildComputerUseRuntimeExtra(): Promise<void> {
 }
 
 async function buildSkipBuildArtifacts(): Promise<void> {
+  await buildPackage(join(REPOSITORY_ROOT, 'packages', 'host', 'webserver'))
+  await buildPackage(join(REPOSITORY_ROOT, 'packages', 'client', 'modules'))
   await buildPackage(join(REPOSITORY_ROOT, 'apps', 'desktop-host'))
   await runPackageScript('build', APP_ROOT)
   await buildComputerUseRuntimeExtra()
@@ -131,12 +142,26 @@ async function main(): Promise<void> {
     nodeVersion: process.versions.node,
     pnpmVersion,
   }
+  const home = resolve(process.env.DSH_HOME ?? join(DEVELOPMENT_ROOT, 'home'))
+  const paths = resolveDesktopPaths(home)
+  ensureDevelopmentPluginProfile(paths.profile)
+  const pnpm = join(APP_ROOT, 'node_modules', 'pnpm', 'bin', 'pnpm.mjs')
+  if (!existsSync(pnpm)) throw new Error('desktop development: apps/desktop/node_modules/pnpm is missing; run pnpm install')
+  if (!developmentStoreHasSpec(paths.profile, DESKTOP_DEVELOPMENT_MARKET_SPEC)) {
+    const manager = new DesktopProjectManager(paths, {
+      node: process.execPath,
+      pnpm,
+      dsh: join(REPOSITORY_ROOT, 'apps', 'cli'),
+    })
+    await manager.mutateWhileRunning({ type: 'plugin-add', spec: DESKTOP_DEVELOPMENT_MARKET_SPEC })
+  }
   prepareDevelopmentProject({
     projectDir: join(DEVELOPMENT_ROOT, 'project'),
     cliDir: join(REPOSITORY_ROOT, 'apps', 'cli'),
     hostDir: join(REPOSITORY_ROOT, 'apps', 'desktop-host'),
     dependencyDir: join(REPOSITORY_ROOT, 'node_modules', '.pnpm', 'node_modules'),
     release,
+    pluginStoreDir: paths.profile,
   })
   await launchElectron()
 }

@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Browsers reach the web GUI over HTTP through `dsh-host-webserver`: a `node:http` server where other plugins register named routes, upgrade routes, index startup inputs, and one fallback handler. It knows no harness concepts and serves no files — the `/api` bridge, plugin bundles, the HMR event stream, and the SPA dist belong to the plugins that register them. Route matching is fixed: exact over the whole table, then longest prefix, then the fallback handler. It serves browsers only; Electron loads dist over `file://` and carries fetch over an IPC bridge.
+Browsers reach the web GUI over HTTP through `dsh-host-webserver`: a `node:http` server where other plugins register named routes, upgrade routes, index startup inputs, and one fallback handler. It knows no harness concepts and serves no files — the `/api` bridge, plugin bundles, the HMR event stream, and the SPA dist belong to the plugins that register them. Route matching is fixed: exact over the whole table, then longest prefix, then the fallback handler. Browser hosts listen on a TCP socket; Desktop enables the same named-route table in-process with `listen: false` and `dispatch(request)`.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ Browsers reach the web GUI over HTTP through `dsh-host-webserver`: a `node:http`
 <a id="use-this-package"></a>
 ## Use this package
 
-Compose the webserver as the HTTP transport of a browser-facing host, then let the feature plugins claim their routes. Activation listens immediately; registration order carries no request-facing semantics because named routes compose to be disjoint.
+Compose the webserver as the HTTP transport of a browser-facing host, then let the feature plugins claim their routes. Activation binds a TCP socket unless `listen` is false; registration order carries no request-facing semantics because named routes compose to be disjoint.
 
 ### Minimal configuration
 
@@ -36,7 +36,7 @@ Compose the webserver as the HTTP transport of a browser-facing host, then let t
     port: 3000
 ```
 
-`host` accepts exactly two values: `127.0.0.1` (default posture, loopback only) and `0.0.0.0` (deliberate network exposure — the server carries no TLS, authentication, or origin policy of its own). `port` 0 requests an OS-assigned port; `ctx.webServer.port` reads the listening port afterwards.
+`host` accepts exactly two values: `127.0.0.1` (default posture, loopback only) and `0.0.0.0` (deliberate network exposure — the server carries no TLS, authentication, or origin policy of its own). `port` 0 requests an OS-assigned port; `ctx.webServer.port` reads the listening port afterwards. `listen` defaults to `true`. Set `listen: false` to skip the TCP socket: `[Service.init]` is then immediately ready, `port` reads as 0, and callers use `dispatch(request)` for named exact and prefix routes. `dispatch` never runs gzip or the fallback seat; unmatched pathnames return `undefined` so the carrier can keep its own SPA handler. Synthetic `IncomingMessage` headers must include `Host` and `Origin`; `dsh-app://app` uses `Host: app` and `Origin: dsh-app://app`.
 
 Set `compression: 'gzip'` to wrap eligible socket-backed responses without changing route APIs. The client must accept gzip and the media type must be compressible; known response lengths below `compressionThresholdBytes` remain uncompressed, while unknown-length streams are eligible immediately. Existing encodings, `Cache-Control: no-transform`, range responses, SSE, ZIP, and the packaged `.gz` Worker image remain unchanged. The shipped Web bundle uses compression level 1 with a 1024-byte threshold; other compositions default to no compression.
 
@@ -68,13 +68,14 @@ The package is a plain route registry with no harness vocabulary: `WebServer` ex
 
 ### Matching and lifecycle
 
-`match(pathname)` consults the exact table first, then walks the prefix table for the longest match, then the fallback. Activation (`[Service.init]`) listens immediately; disposal starts `close()` and `closeAllConnections()`, destroys every tracked upgraded socket, and returns only after the server and those sockets have closed. Node does not include upgraded sockets in `closeAllConnections()`, so the service tracks them explicitly.
+`match(pathname)` consults the exact table first, then walks the prefix table for the longest match, then the fallback. Activation (`[Service.init]`) listens immediately unless `listen` is false; disposal starts `close()` and `closeAllConnections()`, destroys every tracked upgraded socket, and returns only after the server and those sockets have closed. Node does not include upgraded sockets in `closeAllConnections()`, so the service tracks them explicitly. `dispatch(request)` uses the same named-route match and synthesizes `IncomingMessage`/`ServerResponse` from Fetch.
 
 ### Source map
 
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | `WebServer` service: route tables, fallback seat, index rendering, matching, lifecycle |
+| [`src/dispatch.ts`](src/dispatch.ts) | Fetch-to-node:http synthesis for in-process `dispatch` |
 | — | No runtime invariant companion is published; route registration and disposal mutate one route table through the same service, so a register/dispose probe only re-executes the implementation. Real routing and HMR tests own the behavior. |
 | [`src/injections.ts`](src/injections.ts) | Structured `IndexInjection` rows and `renderIndexInjections` row rendering |
 

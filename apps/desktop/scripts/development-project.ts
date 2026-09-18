@@ -13,6 +13,7 @@ import {
 } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { createDevelopmentProjectMetadata } from '../src/project-manager.ts'
+import { linkDevelopmentPluginStore } from '../src/development-plugin-store.ts'
 import type { DesktopRelease } from '../src/release.ts'
 import { copyComputerUseRuntimeExtra } from './computer-use-runtime-extra.ts'
 
@@ -33,6 +34,8 @@ export interface DevelopmentProjectOptions {
   readonly dependencyDir: string
   /** Release identity written into the disposable project metadata. */
   readonly release: DesktopRelease
+  /** Persistent plugin profile whose packages are linked after the hoist. */
+  readonly pluginStoreDir?: string
 }
 
 function readManifest(path: string): PackageManifest {
@@ -180,6 +183,9 @@ export function prepareDevelopmentProject(options: DevelopmentProjectOptions): s
   const computerUseSource = join(options.hostDir, '..', '..', 'packages', 'experimental', 'tool-computer-use')
   if (existsSync(join(computerUseSource, 'package.json'))) {
     copyComputerUseRuntimeExtra(computerUseSource, options.projectDir)
+  }
+  if (options.pluginStoreDir !== undefined) {
+    linkDevelopmentPluginStore(options.projectDir, options.pluginStoreDir)
   }
   return options.projectDir
 }

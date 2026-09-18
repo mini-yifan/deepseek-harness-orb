@@ -194,11 +194,12 @@ pnpm run prepare:desktop
 
 ## 底层开发覆盖项
 
-未打包的 Electron 进程使用应用目录下的 `.desktop-build/development/project` 作为开发项目。该项目的 `node_modules` 镜像工作区虚拟提升目录（`node_modules/.pnpm/node_modules`），再从 `@deepseek-ai/dsh-base` 和 `@deepseek-ai/dsh-web-app` 的嵌套 `node_modules` 补上提升目录漏掉的名称，使 profile 插件在提升省略时仍可解析。`DSH_DESKTOP_NODE_BINARY`、`DSH_DESKTOP_PNPM_ENTRY` 和 `DSH_DESKTOP_DSH_DIR` 用于选择明确的运行时资源。打包应用会忽略这些变量，从 `process.resourcesPath` 解析签名资源，并使用受管 Desktop profile。
+未打包的 Electron 进程使用应用目录下的 `.desktop-build/development/project` 作为开发项目。该项目的 `node_modules` 镜像工作区虚拟提升目录（`node_modules/.pnpm/node_modules`），再从 `@deepseek-ai/dsh-base` 和 `@deepseek-ai/dsh-web-app` 的嵌套 `node_modules` 补上提升目录漏掉的名称，使 profile 插件在提升省略时仍可解析。外部插件持久化在 `$DSH_HOME/profiles/desktop`，并在每次重建后链入提升项目；随后把各插件的宿主 peer 包从提升项目链回该 store，以便 Node ESM 在 realpath 之后仍能解析它们；`start:desktop` 在该处钉入 `dshmarket@1.47.0`，以便设置 → 插件显示插件市场。`DSH_DESKTOP_NODE_BINARY`、`DSH_DESKTOP_PNPM_ENTRY` 和 `DSH_DESKTOP_DSH_DIR` 用于选择明确的运行时资源。打包应用会忽略这些变量，从 `process.resourcesPath` 解析签名资源，并使用受管 Desktop profile。
 
 ## 已知限制
 
-- Desktop 禁用 Web 的「在本地应用中打开…」操作，因为其 Host 插件依赖 HTTP 路由，而 Desktop 不提供 `webServer`。
+- Desktop 提供进程内 `webServer`（`listen: false`），供插件市场等具名插件 HTTP 路由使用；它不绑定 TCP 端口。插件市场是外部 MIT 包 `dshmarket`（版权归 fkysly 及贡献者），不是签名核心 bundle。
+- Desktop 仍禁用 Web 的「在本地应用中打开…」操作，因为其 Host 插件未编入 Desktop 组合。
 - 发布签名、公证、更新托管和跨上一版本的已安装产物验证需要生产发布环境。
 - 依赖包含 lifecycle script 的桌面插件，只有其包名进入桌面项目经过评审的 `allowBuilds` 策略后才能安装。
 - 桌面壳与 CLI dsh 共享 `$DSH_HOME` 下的会话、设置、凭据、工作区和存储，但可执行包、插件激活、锁文件与包管理器状态彼此隔离。

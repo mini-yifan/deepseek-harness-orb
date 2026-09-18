@@ -4,7 +4,11 @@
   disabled: true
 
 - id: webserver
-  disabled: true
+  inject: []
+  config:
+    host: 127.0.0.1
+    port: 0
+    listen: false
 
 - id: web-runtime
   disabled: true
