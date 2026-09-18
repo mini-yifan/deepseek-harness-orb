@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/proposed/feature/2026-09-19-computer-use-session-coordinate-modes.md
+2026-09-19-computer-use-session-coordinate-modes.md: c4d107ff8f49f96cdf3886aebc58874e87803540
+2026-09-19-computer-use-session-coordinate-modes.zh.md: 7fab13e3f990c495e5adeb51fcf1a2c428c481c8
