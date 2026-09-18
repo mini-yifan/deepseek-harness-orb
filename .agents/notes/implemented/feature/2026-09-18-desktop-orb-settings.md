@@ -6,7 +6,7 @@ English | [中文](2026-09-18-desktop-orb-settings.zh.md)
 
 ## Problem
 
-Overlay avatar, overlay Agent, background Agent, and selection-toolbar enablement lived only on the macOS ball's native context menu and in Desktop profile JSON. The main-window Settings panel had no page for those preferences, and `dsh web` must not grow a sixth nav row that cannot act.
+Overlay avatar, Floating-ball Agent, background Agent, and selection-toolbar enablement lived only on the macOS ball's native context menu and in Desktop profile JSON. The main-window Settings panel had no page for those preferences, and `dsh web` must not grow a sixth nav row that cannot act.
 
 ## Decision
 
