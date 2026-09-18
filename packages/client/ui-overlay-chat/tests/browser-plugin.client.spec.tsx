@@ -147,6 +147,9 @@ describe('OverlayChatRoot', () => {
     expect(css).toContain('--dsh-composer-side-clearance: 0px')
     expect(css).toContain('[data-chat-turn-rail]')
     expect(css).toContain('.inputOverlay')
+    expect(css).toContain('background: var(--dsw-alias-bg-base)')
+    expect(css).toContain('background: transparent')
+    expect(css).not.toContain('#ffffff')
     const view = vi.fn((
       _name: string,
       _owner: {

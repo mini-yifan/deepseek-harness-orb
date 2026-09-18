@@ -39,7 +39,7 @@ The iframe shares the `dsh-app://app` origin with the main window. ClientSession
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The plugin returns immediately unless `overlayClientSurface()` is true. One effect registers `OverlayChatRoot` on `'root'` and declares `conversation.view` plus `conversation.input.overlay`; `ui-layout` skips AppFrame on this document, so there is no dual `'root'` occupant. `ui-conversation` waits to inject into `main.conversation` and never declares `conversation.view` here. The shell posts `{ type: 'dsh.overlay.session', sessionId }` from `dsh-app://shell`; the iframe replies `{ type: 'dsh.overlay.ready' }` and retries `sessions.open` until the Host list includes that id. Overlay CSS sets `--dsh-chat-content-width: 100%`, `--dsh-composer-side-clearance: 0px`, hides `[data-chat-turn-rail]`, and paints a white document. `ui-chat` forces Compact. `ui-user-questions` always `next()`s so vanilla `floating.js` remains the overlay waterfall claimer. The iframe sets `allow="clipboard-write"`; [overlay message actions](../../../.agents/notes/implemented/bug-fix/2026-09-17-overlay-message-actions-narrow.md) owns that permission, the IconActions clock ellipsis, and the zero-size input-overlay host. The [overlay Compact ChatView Agent Note](../../../.agents/notes/implemented/feature/2026-09-16-overlay-compact-chat.md) owns the Compact root decision.
+The plugin returns immediately unless `overlayClientSurface()` is true. One effect registers `OverlayChatRoot` on `'root'` and declares `conversation.view` plus `conversation.input.overlay`; `ui-layout` skips AppFrame on this document, so there is no dual `'root'` occupant. `ui-conversation` waits to inject into `main.conversation` and never declares `conversation.view` here. The shell posts `{ type: 'dsh.overlay.session', sessionId }` from `dsh-app://shell`; the iframe replies `{ type: 'dsh.overlay.ready' }` and retries `sessions.open` until the Host list includes that id. Overlay CSS sets `--dsh-chat-content-width: 100%`, `--dsh-composer-side-clearance: 0px`, hides `[data-chat-turn-rail]`, and paints `--dsw-alias-bg-base`. `ui-chat` forces Compact. `ui-user-questions` always `next()`s so vanilla `floating.js` remains the overlay waterfall claimer. The iframe sets `allow="clipboard-write"`; [overlay message actions](../../../.agents/notes/implemented/bug-fix/2026-09-17-overlay-message-actions-narrow.md) owns that permission, the IconActions clock ellipsis, and the zero-size input-overlay host. The [overlay Compact ChatView Agent Note](../../../.agents/notes/implemented/feature/2026-09-16-overlay-compact-chat.md) owns the Compact root decision. [Overlay Appearance](../../../.agents/notes/implemented/feature/2026-09-18-overlay-appearance-follows-host.md) owns following Host without writing settings.
 
 </details>
 
@@ -50,7 +50,7 @@ The plugin returns immediately unless `overlayClientSurface()` is true. One effe
 
 - [Desktop floating orb](../../../.agents/notes/implemented/feature/2026-09-14-desktop-floating-orb.md) — overlay construction and Computer Use session.
 - [ui-chat](../ui-chat/README.md) — Compact ChatView this root renders.
-- [ui-layout](../ui-layout/README.md) — AppFrame skip and overlay light ThemePresenter.
+- [ui-layout](../ui-layout/README.md) — AppFrame skip and overlay ThemePresenter.
 - [Desktop user guide](../../../docs/user/guide/desktop.md) — product-facing overlay chrome.
 
 -----

@@ -10,7 +10,7 @@ The macOS floating ball expanded a 320×420 shell page whose transcript was a se
 
 ## Decision
 
-The overlay document stays [`apps/desktop/renderer/floating.html`](../../../../apps/desktop/renderer/floating.html). `#transcript` hosts an iframe of `dsh-app://app/index.html?surface=overlay` created on first expand and kept after collapse. [`ui-overlay-chat`](../../../../packages/client/ui-overlay-chat/README.md) occupies `'root'` only on that query, declares session-scoped `conversation.view`, and renders ChatView. [`ui-layout`](../../../../packages/client/ui-layout/README.md) skips AppFrame `'root'` and still provides `ctx.layout` plus a ThemePresenter that paints the light palette without writing Host settings. [`ui-chat`](../../../../packages/client/ui-chat/README.md) forces Compact. [`ui-user-questions`](../../../../packages/client/ui-user-questions/README.md) always `next()`s so vanilla [`floating.js`](../../../../apps/desktop/renderer/floating.js) remains the overlay `'user-questions/request'` claimer.
+The overlay document stays [`apps/desktop/renderer/floating.html`](../../../../apps/desktop/renderer/floating.html). `#transcript` hosts an iframe of `dsh-app://app/index.html?surface=overlay` created on first expand and kept after collapse. [`ui-overlay-chat`](../../../../packages/client/ui-overlay-chat/README.md) occupies `'root'` only on that query, declares session-scoped `conversation.view`, and renders ChatView. [`ui-layout`](../../../../packages/client/ui-layout/README.md) skips AppFrame `'root'` and still provides `ctx.layout` plus a ThemePresenter that applies the Host-resolved palette and posts `dsh.overlay.theme` to the shell; [overlay Appearance](2026-09-18-overlay-appearance-follows-host.md) owns following Host without writing settings. [`ui-chat`](../../../../packages/client/ui-chat/README.md) forces Compact. [`ui-user-questions`](../../../../packages/client/ui-user-questions/README.md) always `next()`s so vanilla [`floating.js`](../../../../apps/desktop/renderer/floating.js) remains the overlay `'user-questions/request'` claimer.
 
 ClientSessions selection on the overlay document persists under `dsh.overlay.sessions.current`. The iframe shares the `dsh-app://app` origin with the main window; a shared `dsh.sessions.current` cell would steal the main-window selection. The shell posts `{ type: 'dsh.overlay.session', sessionId }` from `dsh-app://shell`; the iframe replies `{ type: 'dsh.overlay.ready' }` and calls `sessions.open` without reloading.
 
@@ -24,7 +24,7 @@ See [Desktop floating orb](2026-09-14-desktop-floating-orb.md) for overlay const
 
 **A vanilla Compact port in `floating.js`.** That would reimplement ChatView, live chunks, markdown, and follow. The iframe reuses the shipped pipeline.
 
-**Calling `theme.setTheme('light')`.** That writes Host settings and would flip the main window. ThemePresenter force-light is document-local.
+**Calling `theme.setTheme('light')`.** That writes Host settings and would flip the main window. Overlay theme presentation stays document-local; [overlay Appearance](2026-09-18-overlay-appearance-follows-host.md) owns following Host without that write.
 
 **Letting the iframe claim `'user-questions/request'`.** That would add a third waterfall client beside the main window and `floating.js`. The iframe `next()`s; the shell card stays the overlay answerer.
 

@@ -61,24 +61,6 @@ describe('ThemePresenter', () => {
     expect(document.head.querySelectorAll('meta[name="theme-color"]')).toHaveLength(1)
   })
 
-  it('forceLight keeps the light palette when the snapshot is dark', () => {
-    const presenter = new ThemePresenter(true)
-    presenter.apply(snapshot('dark', { '--dsw-alias-bg': '#111' }))
-    expect(document.documentElement.style.colorScheme).toBe('light')
-    expect(document.body.hasAttribute(DARK_ATTRIBUTE)).toBe(false)
-    expect(document.body.style.getPropertyValue('--dsw-alias-bg')).toBe('')
-  })
-
-  it('forceLight prefers a light theme from the snapshot when one exists', () => {
-    const presenter = new ThemePresenter(true)
-    const light = { id: 'light-test', colorScheme: 'light' as const, tokens: { '--dsw-alias-bg': '#fff' } }
-    const dark = { id: 'dark-test', colorScheme: 'dark' as const, tokens: { '--dsw-alias-bg': '#111' } }
-    presenter.apply({ preference: 'dark', fontSize: 14, active: dark, themes: [dark, light], revision: 1 })
-    expect(document.documentElement.style.colorScheme).toBe('light')
-    expect(document.body.hasAttribute(DARK_ATTRIBUTE)).toBe(false)
-    expect(document.body.style.getPropertyValue('--dsw-alias-bg')).toBe('#fff')
-  })
-
   it('applies tokens as inline variables and clears the previous set on theme change', () => {
     const presenter = new ThemePresenter()
     presenter.apply(snapshot('dark', { '--dsw-alias-bg': '#111', '--dsw-alias-fg': '#eee' }))

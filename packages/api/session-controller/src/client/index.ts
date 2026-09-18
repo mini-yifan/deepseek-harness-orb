@@ -33,13 +33,15 @@ export {
   OVERLAY_SESSION_MESSAGE_TYPE,
   OVERLAY_SESSIONS_CURRENT_PERSIST,
   OVERLAY_SHELL_ORIGIN,
+  OVERLAY_THEME_MESSAGE_TYPE,
   SESSIONS_CURRENT_PERSIST,
   overlayClientSurface,
   overlaySessionId,
   overlaySessionMessage,
+  overlayThemeMessage,
   sessionsSelectionPersistName,
 } from './overlay-surface.ts'
-export type { OverlaySessionMessage } from './overlay-surface.ts'
+export type { OverlaySessionMessage, OverlayThemeMessage } from './overlay-surface.ts'
 export { SessionCreateError, SessionForkError } from './sessions/service.ts'
 export type { SessionBinding, SessionListState, SessionSummary } from './sessions/service.ts'
 export type {

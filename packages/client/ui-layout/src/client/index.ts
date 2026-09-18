@@ -8,11 +8,15 @@
  * presenter, which projects ctx.theme snapshots onto document.body.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
-import { overlayClientSurface } from '@deepseek-ai/dsh-api-session-controller/client'
+import {
+  overlayClientSurface,
+  OVERLAY_SHELL_ORIGIN,
+  OVERLAY_THEME_MESSAGE_TYPE,
+} from '@deepseek-ai/dsh-api-session-controller/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
-import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
+import type { ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
 import type { HostObservable, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PanelInfo } from './service.ts'
 import { AppFrame } from './AppFrame.tsx'
@@ -176,11 +180,20 @@ export function apply(ctx: ClientContext): void {
 
   // Theme presentation: pure DOM writes from resolved snapshots — initial
   // state through the getter once, then event-driven only; no React path.
-  // Overlay Compact Chat keeps the light palette in the iframe without writing Host settings.
+  // Overlay Compact Chat posts the resolved scheme to the floating-ball shell.
   ctx.effect(() => {
-    const presenter = new ThemePresenter(overlay)
-    presenter.apply(ctx.theme.getTheme())
-    const off = ctx.on('theme/change', (snapshot) => { presenter.apply(snapshot) })
+    const presenter = new ThemePresenter()
+    const applySnapshot = (snapshot: ThemeSnapshot): void => {
+      presenter.apply(snapshot)
+      if (overlay) {
+        window.parent.postMessage(
+          { type: OVERLAY_THEME_MESSAGE_TYPE, colorScheme: snapshot.active.colorScheme },
+          OVERLAY_SHELL_ORIGIN,
+        )
+      }
+    }
+    applySnapshot(ctx.theme.getTheme())
+    const off = ctx.on('theme/change', applySnapshot)
     return () => {
       off()
       presenter.dispose()

@@ -15,6 +15,9 @@ export const OVERLAY_SESSION_MESSAGE_TYPE = 'dsh.overlay.session'
 /** postMessage type the overlay iframe posts when it can accept a Session id. */
 export const OVERLAY_READY_MESSAGE_TYPE = 'dsh.overlay.ready'
 
+/** postMessage type the overlay iframe posts with the Host-resolved color scheme. */
+export const OVERLAY_THEME_MESSAGE_TYPE = 'dsh.overlay.theme'
+
 /** Origin of the packaged Web client, including the overlay iframe document. */
 export const OVERLAY_APP_ORIGIN = 'dsh-app://app'
 
@@ -28,6 +31,12 @@ export const OVERLAY_INDEX_HREF = `${OVERLAY_APP_ORIGIN}/index.html?surface=${OV
 export interface OverlaySessionMessage {
   type: typeof OVERLAY_SESSION_MESSAGE_TYPE
   sessionId: string
+}
+
+/** One Host-resolved color-scheme post from the overlay iframe into the floating-ball shell. */
+export interface OverlayThemeMessage {
+  type: typeof OVERLAY_THEME_MESSAGE_TYPE
+  colorScheme: 'light' | 'dark'
 }
 
 /**
@@ -49,6 +58,19 @@ export function overlaySessionMessage(data: unknown): OverlaySessionMessage | un
   const record = data as { type?: unknown; sessionId?: unknown }
   if (record.type !== OVERLAY_SESSION_MESSAGE_TYPE || typeof record.sessionId !== 'string') return undefined
   return { type: OVERLAY_SESSION_MESSAGE_TYPE, sessionId: record.sessionId }
+}
+
+/**
+ * Read an overlay color-scheme post.
+ * @param data - `MessageEvent.data` from the overlay iframe.
+ * @returns the typed message when the type and colorScheme are present.
+ */
+export function overlayThemeMessage(data: unknown): OverlayThemeMessage | undefined {
+  if (typeof data !== 'object' || data === null) return undefined
+  const record = data as { type?: unknown; colorScheme?: unknown }
+  if (record.type !== OVERLAY_THEME_MESSAGE_TYPE) return undefined
+  if (record.colorScheme !== 'light' && record.colorScheme !== 'dark') return undefined
+  return { type: OVERLAY_THEME_MESSAGE_TYPE, colorScheme: record.colorScheme }
 }
 
 /**

@@ -6,10 +6,12 @@ import {
   OVERLAY_SESSION_MESSAGE_TYPE,
   OVERLAY_SESSIONS_CURRENT_PERSIST,
   OVERLAY_SHELL_ORIGIN,
+  OVERLAY_THEME_MESSAGE_TYPE,
   SESSIONS_CURRENT_PERSIST,
   overlayClientSurface,
   overlaySessionId,
   overlaySessionMessage,
+  overlayThemeMessage,
   sessionsSelectionPersistName,
 } from '../src/client/overlay-surface.ts'
 
@@ -32,6 +34,13 @@ describe('overlay client surface', () => {
       .toEqual({ type: OVERLAY_SESSION_MESSAGE_TYPE, sessionId: 's1' })
     expect(overlaySessionMessage({ type: OVERLAY_SESSION_MESSAGE_TYPE })).toBeUndefined()
     expect(overlaySessionMessage(null)).toBeUndefined()
+    expect(overlayThemeMessage({ type: OVERLAY_THEME_MESSAGE_TYPE, colorScheme: 'dark' }))
+      .toEqual({ type: OVERLAY_THEME_MESSAGE_TYPE, colorScheme: 'dark' })
+    expect(overlayThemeMessage({ type: OVERLAY_THEME_MESSAGE_TYPE, colorScheme: 'light' }))
+      .toEqual({ type: OVERLAY_THEME_MESSAGE_TYPE, colorScheme: 'light' })
+    expect(overlayThemeMessage({ type: OVERLAY_THEME_MESSAGE_TYPE, colorScheme: 'system' })).toBeUndefined()
+    expect(overlayThemeMessage({ type: OVERLAY_THEME_MESSAGE_TYPE })).toBeUndefined()
+    expect(overlayThemeMessage(null)).toBeUndefined()
     expect(OVERLAY_SHELL_ORIGIN).toBe('dsh-app://shell')
   })
 

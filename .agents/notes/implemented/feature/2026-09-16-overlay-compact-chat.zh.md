@@ -10,7 +10,7 @@ macOS 悬浮球展开的 320×420 shell 页把对话记录做成了第二套气�
 
 ## 决策
 
-overlay 文档仍是 [`apps/desktop/renderer/floating.html`](../../../../apps/desktop/renderer/floating.html)。`#transcript` 在首次展开时承载 `dsh-app://app/index.html?surface=overlay` 的 iframe，折叠后保留。[`ui-overlay-chat`](../../../../packages/client/ui-overlay-chat/README.zh.md) 只在该查询上占用 `'root'`，声明会话作用域的 `conversation.view`，并渲染 ChatView。[`ui-layout`](../../../../packages/client/ui-layout/README.zh.md) 跳过 AppFrame `'root'`，仍提供 `ctx.layout`，以及不写入 Host 设置、只绘制浅色调色板的 ThemePresenter。[`ui-chat`](../../../../packages/client/ui-chat/README.zh.md) 强制 Compact。[`ui-user-questions`](../../../../packages/client/ui-user-questions/README.zh.md) 始终 `next()`，因此原生 [`floating.js`](../../../../apps/desktop/renderer/floating.js) 仍是 overlay `'user-questions/request'` 认领方。
+overlay 文档仍是 [`apps/desktop/renderer/floating.html`](../../../../apps/desktop/renderer/floating.html)。`#transcript` 在首次展开时承载 `dsh-app://app/index.html?surface=overlay` 的 iframe，折叠后保留。[`ui-overlay-chat`](../../../../packages/client/ui-overlay-chat/README.zh.md) 只在该查询上占用 `'root'`，声明会话作用域的 `conversation.view`，并渲染 ChatView。[`ui-layout`](../../../../packages/client/ui-layout/README.zh.md) 跳过 AppFrame `'root'`，仍提供 `ctx.layout`，以及应用 Host 已解析调色板并向 shell 发送 `dsh.overlay.theme` 的 ThemePresenter；[overlay 外观](2026-09-18-overlay-appearance-follows-host.zh.md) 拥有在不写入设置的前提下跟随 Host。[`ui-chat`](../../../../packages/client/ui-chat/README.zh.md) 强制 Compact。[`ui-user-questions`](../../../../packages/client/ui-user-questions/README.zh.md) 始终 `next()`，因此原生 [`floating.js`](../../../../apps/desktop/renderer/floating.js) 仍是 overlay `'user-questions/request'` 认领方。
 
 overlay 文档上的 ClientSessions 选中项持久化在 `dsh.overlay.sessions.current`。iframe 与主窗口共享 `dsh-app://app` 源；共用 `dsh.sessions.current` 会抢走主窗口选中项。shell 从 `dsh-app://shell` 发送 `{ type: 'dsh.overlay.session', sessionId }`；iframe 回复 `{ type: 'dsh.overlay.ready' }` 并调用 `sessions.open`，不整页重载。
 
@@ -24,7 +24,7 @@ overlay 构造见 [桌面悬浮球](2026-09-14-desktop-floating-orb.zh.md)，she
 
 **在 `floating.js` 里移植一套原生 Compact。** 那会重写 ChatView、实时块、markdown 和跟随。iframe 复用已发布管线。
 
-**调用 `theme.setTheme('light')`。** 那会写入 Host 设置并翻转主窗口。ThemePresenter 强制浅色只作用于本文档。
+**调用 `theme.setTheme('light')`。** 那会写入 Host 设置并翻转主窗口。overlay 主题呈现仍只作用于本文档；[overlay 外观](2026-09-18-overlay-appearance-follows-host.zh.md) 拥有在不那样写入的前提下跟随 Host。
 
 **让 iframe 认领 `'user-questions/request'`。** 那会在主窗口和 `floating.js` 之外再增加第三个 waterfall 客户端。iframe 调用 `next()`；shell 卡片仍是 overlay 答题方。
 
