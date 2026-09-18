@@ -404,11 +404,22 @@ it('collapses then moves by the ball grab offset instead of the window origin', 
   }
 })
 
-async function mountPointerOverlay() {
+async function mountPointerOverlay(options?: { dark?: boolean }) {
   const dom = new JSDOM(readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8'), {
     runScripts: 'outside-only',
     url: 'dsh-app://shell/floating.html',
   })
+  if (options?.dark === true) {
+    Object.defineProperty(dom.window, 'matchMedia', {
+      configurable: true,
+      value: (query: string) => ({
+        matches: query.includes('prefers-color-scheme: dark'),
+        media: query,
+        addEventListener() {},
+        removeEventListener() {},
+      }),
+    })
+  }
   const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
     if (isRemoteStream(_input)) return hangingStreamResponse(init?.signal)
     const body = JSON.parse(String(init?.body)) as { rpcId: string; method: string }
@@ -516,6 +527,48 @@ it('ends a primary grab when the button is no longer down', async () => {
 it('does not snap the ball to the window origin when the panel collapses', () => {
   const css = readFileSync(new URL('../renderer/floating.css', import.meta.url), 'utf8')
   expect(css).not.toContain('body:not(.expanded) #ball')
+})
+
+it('overrides chrome tokens under html[data-ds-dark-theme] and paints the iframe with --white', () => {
+  const css = readFileSync(new URL('../renderer/floating.css', import.meta.url), 'utf8')
+  expect(css).toMatch(/html\[data-ds-dark-theme\] \{[^}]*--white: rgb\(21, 21, 23\)/u)
+  expect(css).toMatch(/html\[data-ds-dark-theme\] \{[^}]*--input-bg: rgb\(35, 35, 36\)/u)
+  expect(css).toMatch(/#transcript iframe \{[^}]*background: var\(--white\)/u)
+  expect(css).toMatch(/#question-error \{[^}]*color: var\(--error\)/u)
+  expect(css).not.toMatch(/#transcript iframe \{[^}]*background: #ffffff/u)
+})
+
+it('guesses dark chrome from prefers-color-scheme then follows the overlay Host scheme', async () => {
+  const overlay = await mountPointerOverlay({ dark: true })
+  try {
+    const root = overlay.document.documentElement
+    expect(root.getAttribute('data-ds-dark-theme')).toBe('')
+    expect(root.style.colorScheme).toBe('dark')
+    overlay.dom.window.dispatchEvent(new overlay.dom.window.MessageEvent('message', {
+      origin: 'https://example.test',
+      data: { type: 'dsh.overlay.theme', colorScheme: 'light' },
+    }))
+    expect(root.getAttribute('data-ds-dark-theme')).toBe('')
+    overlay.dom.window.dispatchEvent(new overlay.dom.window.MessageEvent('message', {
+      origin: 'dsh-app://app',
+      data: { type: 'dsh.overlay.theme', colorScheme: 'bogus' },
+    }))
+    expect(root.getAttribute('data-ds-dark-theme')).toBe('')
+    overlay.dom.window.dispatchEvent(new overlay.dom.window.MessageEvent('message', {
+      origin: 'dsh-app://app',
+      data: { type: 'dsh.overlay.theme', colorScheme: 'light' },
+    }))
+    expect(root.hasAttribute('data-ds-dark-theme')).toBe(false)
+    expect(root.style.colorScheme).toBe('light')
+    overlay.dom.window.dispatchEvent(new overlay.dom.window.MessageEvent('message', {
+      origin: 'dsh-app://app',
+      data: { type: 'dsh.overlay.theme', colorScheme: 'dark' },
+    }))
+    expect(root.getAttribute('data-ds-dark-theme')).toBe('')
+    expect(root.style.colorScheme).toBe('dark')
+  } finally {
+    overlay.dom.window.close()
+  }
 })
 
 it('paints collapsed ball shadow, expanded hairline, and outer pin stroke', () => {

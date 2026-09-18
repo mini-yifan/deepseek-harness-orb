@@ -3,7 +3,14 @@
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: #ffffff;
+}
+
+:global(html) {
+  background: transparent;
+}
+
+:global(body) {
+  background: var(--dsw-alias-bg-base);
 }
 
 :global(#root) {

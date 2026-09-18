@@ -32,7 +32,28 @@ const OVERLAY_APP_ORIGIN = 'dsh-app://app'
 const OVERLAY_INDEX_HREF = 'dsh-app://app/index.html?surface=overlay'
 const OVERLAY_SESSION_MESSAGE_TYPE = 'dsh.overlay.session'
 const OVERLAY_READY_MESSAGE_TYPE = 'dsh.overlay.ready'
+const OVERLAY_THEME_MESSAGE_TYPE = 'dsh.overlay.theme'
+const DARK_ATTRIBUTE = 'data-ds-dark-theme'
 const PERMISSION_PRESETS = ['read-only', 'workspace-write', 'danger-full-access']
+
+function applyColorScheme(scheme) {
+  const dark = scheme === 'dark'
+  document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+  document.documentElement.toggleAttribute(DARK_ATTRIBUTE, dark)
+}
+
+applyColorScheme(
+  typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches === true
+    ? 'dark'
+    : 'light',
+)
+
+function overlayThemeMessage(data) {
+  if (typeof data !== 'object' || data === null) return undefined
+  if (data.type !== OVERLAY_THEME_MESSAGE_TYPE) return undefined
+  if (data.colorScheme !== 'light' && data.colorScheme !== 'dark') return undefined
+  return data
+}
 
 function composeSelectionSendPrompt(instruction, selection) {
   return `${instruction}\n\n${selection}`
@@ -1020,8 +1041,12 @@ async function main() {
   })
   window.addEventListener('message', (event) => {
     if (event.origin !== OVERLAY_APP_ORIGIN) return
-    if (event.data?.type !== OVERLAY_READY_MESSAGE_TYPE) return
-    postOverlaySession()
+    if (event.data?.type === OVERLAY_READY_MESSAGE_TYPE) {
+      postOverlaySession()
+      return
+    }
+    const theme = overlayThemeMessage(event.data)
+    if (theme !== undefined) applyColorScheme(theme.colorScheme)
   })
   selectionChipDismiss.addEventListener('click', () => {
     setAttachedSelection('')
