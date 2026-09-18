@@ -429,7 +429,7 @@ describe('real Loader composition', () => {
       kind: 'exact',
       path: '/headers-list',
       handler: (_req, res) => {
-        res.writeHead(200, [['X-A', '1'], ['x-b', 2], ['skip'], null])
+        res.writeHead(200, [['X-A', '1'], ['x-b', 2], ['skip'], null] as never)
         res.end()
       },
     })
