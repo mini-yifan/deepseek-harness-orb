@@ -10,7 +10,7 @@ Computer Use 是 Web `--patch` 可以挂上的实验 overlay，但 Desktop 把 W
 
 ## 决策
 
-macOS Desktop 在 Host 就绪后创建第二扇 Electron overlay：72px 置顶 GIF 球放在透明 panel 窗口里，通过现有 shell preload 加载 `dsh-app://shell/floating.html`。该页 fetch 与主窗口相同的 Host `/api`。overlay 文档不是 `dsh-app://app/index.html`。`#transcript` 承载 `dsh-app://app/index.html?surface=overlay` 的 iframe 以挂载 Compact ChatView；[overlay Compact ChatView](2026-09-16-overlay-compact-chat.zh.md) 拥有该嵌套界面。Windows 保持今天的单主窗口。
+macOS Desktop 在 Host 就绪后创建第二扇 Electron overlay：72px 置顶 GIF 球放在透明 panel 窗口里，通过现有 shell preload 加载 `dsh-app://shell/floating.html`。该页 fetch 与主窗口相同的 Host `/api`。overlay 文档不是 `dsh-app://app/index.html`。`#transcript` 承载 `dsh-app://app/index.html?surface=overlay` 的 iframe 以挂载 Compact ChatView；[overlay Compact ChatView](2026-09-16-overlay-compact-chat.zh.md) 拥有该嵌套界面。Windows 保持今天的单主窗口。冷启动把收起的 72px 球放在主显示器工作区右沿，并再向下偏移该高度的 8%；`defaultFloatingBallOrigin` 计算该原点。拖动不会记住它。
 
 overlay 会话在 `$DSH_HOME/dsh_orb` 上 `workspace.create` 后调用 `session.create({ agentPreset: 'computer-use', workspaceId })`（侧栏标题 `dsh_orb`），并应用 `orb-agent-models.json` 里存储的 overlay 模型（出厂默认 `deepseek-flash`、思考强度 `max`），且 `saveAsDefault: false`；[悬浮球 Agent 模型菜单](2026-09-17-orb-agent-model-menus.zh.md) 拥有这些菜单以及后台 `code_agent` 新建路径。Desktop Host 会把 cwd 为 `dsh_orb` 的 Computer Use 和 standard 会话钉成实时 overlay Access 预设（出厂默认 `danger-full-access`）；[overlay Access 选择器](2026-09-17-overlay-access-picker.zh.md) 拥有顶栏芯片、`orb-permission.json` 以及 overlay 发送时的 `/permission` 再应用。当前 overlay id 以 `floating-session.json` 存在 Desktop profile。主窗口保持当前会话；overlay 会话以及 cwd 匹配该工作区的 `code_agent` 行出现在 `dsh_orb` 下。SessionHeader origin 不变。
 
@@ -36,6 +36,8 @@ Desktop Host overlay YAML 从 `../lib/computer-use-preset-root.js` 插入 `compu
 
 **本轮做 Windows overlay。** 球依赖 macOS `type: 'panel'` 与带 `skipTransformProcessType` 的 `setVisibleOnAllWorkspaces`。Windows 仍是一扇窗口。
 
+**沿用 Electron 隐式居中窗口。** 那会把球放在用户工作区正中间。冷启动改用主显示器工作区右沿，并再向下偏移该高度的 8%。
+
 **把停止放在球上。** 那会盖住 GIF，并和拖动/固定共用一角。停止放在胶囊相对的 72px 端、内缩 14px，作为 body 兄弟叠在胶囊之上。
 
 ## 影响
@@ -44,4 +46,4 @@ Desktop Host overlay YAML 从 `../lib/computer-use-preset-root.js` 插入 `compu
 
 ## 测试
 
-Desktop 拷贝 runtime extra，并把 overlay YAML 保持在 `default: standard`。Desktop Host 测试把球上 Computer Use 以及 `dsh_orb` 上的 standard 钉成实时 overlay Access 预设，并把其他工作区上的 Computer Use 留在 Host 默认。Computer Use 包测试覆盖 `code_agent` 创建时没有 subagent origin、省略 cwd 时的子目录新建、只对本调用方按 `session_id` 续写、拒绝 CU/subagent/cwd 冲突以及外来 id，续写会话上的两条 `user/message` 对比省略 id 时的新会话，等到两边都空闲才投递的完成通知，以及 `code_agent_status` / `code_agent_stop`。computer-use snapshot overlay 会桩掉 `sessionController`，以便 header pin 含有 `code_agent*` schema。客户端 tree 测试仍会省略作为 `hiddenSessionIds` 传入的 id，并保留委派出的 standard 行。Electron 测试在 darwin 创建 `type: 'panel'` overlay，在非 darwin 不创建，默认让两扇窗口都可被截到，传入 `skipTransformProcessType: true`，并在创建 overlay 后调用 `app.setActivationPolicy('regular')` 和 `app.dock.show()`。它们还钉住应用 Edit 菜单、overlay 可编辑区粘贴项、保持球原点的展开几何、展开态 `moveFloatingBall` 不夹面板，以及不吸边的工作区夹取。overlay 渲染页会创建 `dsh_orb` 工作区，通过 Host RPC 创建 Computer Use 会话并选择已存储的 overlay 模型（出厂默认 DeepSeek-V41-Flash、思考模式 Max）且 `saveAsDefault: false`，回车发送，把停止放在输入胶囊里与球相对的一端，在发送后显示停止并在点击时调用 `session/cancel`，在收起后用球抓取偏移拖动，忽略次键按下以及主键抬起后的悬停，并在指针仍在球上时取消固定保持面板展开，还会从历史列出仅 `dsh_orb` 上的 Computer Use 对话（省略委派 standard 行），接上选中的 id 以便继续发送，在 `?surface=overlay` iframe 里挂载 Compact ChatView，并认领这些会话上仍在进行的 `'user-questions/request'` waterfall，以便紧凑卡片作答或 `next()`。
+Desktop 拷贝 runtime extra，并把 overlay YAML 保持在 `default: standard`。Desktop Host 测试把球上 Computer Use 以及 `dsh_orb` 上的 standard 钉成实时 overlay Access 预设，并把其他工作区上的 Computer Use 留在 Host 默认。Computer Use 包测试覆盖 `code_agent` 创建时没有 subagent origin、省略 cwd 时的子目录新建、只对本调用方按 `session_id` 续写、拒绝 CU/subagent/cwd 冲突以及外来 id，续写会话上的两条 `user/message` 对比省略 id 时的新会话，等到两边都空闲才投递的完成通知，以及 `code_agent_status` / `code_agent_stop`。computer-use snapshot overlay 会桩掉 `sessionController`，以便 header pin 含有 `code_agent*` schema。客户端 tree 测试仍会省略作为 `hiddenSessionIds` 传入的 id，并保留委派出的 standard 行。Electron 测试在 darwin 创建 `type: 'panel'` overlay，在非 darwin 不创建，默认让两扇窗口都可被截到，传入 `skipTransformProcessType: true`，并在创建 overlay 后调用 `app.setActivationPolicy('regular')` 和 `app.dock.show()`。它们还钉住应用 Edit 菜单、overlay 可编辑区粘贴项、工作区右沿且略低于垂直中心的 `defaultFloatingBallOrigin`、按该原点构造 overlay、保持球原点的展开几何、展开态 `moveFloatingBall` 不夹面板，以及不吸边的工作区夹取。overlay 渲染页会创建 `dsh_orb` 工作区，通过 Host RPC 创建 Computer Use 会话并选择已存储的 overlay 模型（出厂默认 DeepSeek-V41-Flash、思考模式 Max）且 `saveAsDefault: false`，回车发送，把停止放在输入胶囊里与球相对的一端，在发送后显示停止并在点击时调用 `session/cancel`，在收起后用球抓取偏移拖动，忽略次键按下以及主键抬起后的悬停，并在指针仍在球上时取消固定保持面板展开，还会从历史列出仅 `dsh_orb` 上的 Computer Use 对话（省略委派 standard 行），接上选中的 id 以便继续发送，在 `?surface=overlay` iframe 里挂载 Compact ChatView，并认领这些会话上仍在进行的 `'user-questions/request'` waterfall，以便紧凑卡片作答或 `next()`。

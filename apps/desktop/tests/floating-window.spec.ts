@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('electron', () => ({
   BrowserWindow: class FakeBrowserWindow { readonly kind = 'window' },
   Menu: { buildFromTemplate: vi.fn() },
-  screen: { getDisplayNearestPoint: vi.fn() },
+  screen: { getDisplayNearestPoint: vi.fn(), getPrimaryDisplay: vi.fn() },
 }))
 
 import {
@@ -13,9 +13,11 @@ import {
   cgWindowIdFromMediaSourceId,
   clampFloatingWindow,
   clampedBallOrigin,
+  defaultFloatingBallOrigin,
   expandDirection,
   expandedOverlayBounds,
   floatingContextMenuTemplate,
+  FLOATING_BALL_DEFAULT_BELOW_CENTER,
   FLOATING_BALL_SIZE,
   FLOATING_BALL_WINDOW_SIZE,
   FLOATING_CHROME_INSET,
@@ -88,6 +90,21 @@ describe('floating window expand geometry', () => {
   it('clamps a ball inside the work area without snapping to an edge', () => {
     expect(clampedBallOrigin({ x: 80, y: 40 }, workArea)).toEqual({ x: 100, y: 50 })
     expect(clampedBallOrigin({ x: 400, y: 300 }, workArea)).toEqual({ x: 400, y: 300 })
+  })
+
+  it('places the default origin on the work-area right edge, slightly below center', () => {
+    expect(defaultFloatingBallOrigin(workArea)).toEqual({
+      x: 100 + 1000 - FLOATING_BALL_SIZE,
+      y: Math.round(50 + (800 - FLOATING_BALL_SIZE) / 2 + 800 * FLOATING_BALL_DEFAULT_BELOW_CENTER),
+    })
+  })
+
+  it('clamps a default origin that would leave the work area', () => {
+    const short = { x: 0, y: 0, width: 200, height: 80 }
+    expect(defaultFloatingBallOrigin(short)).toEqual({
+      x: 200 - FLOATING_BALL_SIZE,
+      y: 80 - FLOATING_BALL_SIZE,
+    })
   })
 
   it('resizes the overlay while keeping the ball origin and clamps without edge snap', async () => {
