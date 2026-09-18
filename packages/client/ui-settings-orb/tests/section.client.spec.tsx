@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import { OrbModelPicker } from '../src/client/OrbModelPicker.tsx'
 import { OrbSettingsSection } from '../src/client/OrbSettingsSection.tsx'
 import type { OrbSettingsSectionProps } from '../src/client/OrbSettingsSection.tsx'
 import type { OrbSettingsState } from '../src/client/section-store.ts'
@@ -64,9 +65,20 @@ describe('OrbSettingsSection', () => {
     expect(actions.load).toHaveBeenCalledTimes(1)
     fireEvent.click(screen.getByRole('button', { name: 'Choose image' }))
     fireEvent.click(screen.getByRole('button', { name: 'Restore default' }))
-    fireEvent.click(screen.getAllByLabelText('DeepSeek-V3.2')[0]!)
-    fireEvent.click(screen.getAllByLabelText('High')[0]!)
-    fireEvent.click(screen.getAllByLabelText('High')[1]!)
+    const overlay = screen.getByRole('button', { name: 'Floating-ball Agent' })
+    expect(overlay.textContent).toContain('DeepSeek-V41-Flash')
+    expect(overlay.textContent).toContain('Max')
+    expect(screen.queryByRole('menu')).toBeNull()
+    fireEvent.click(overlay)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'DeepSeek-V3.2' }))
+    fireEvent.click(overlay)
+    const flash = screen.getByRole('menuitem', { name: 'DeepSeek-V41-Flash' })
+    fireEvent.mouseEnter(flash.parentElement as HTMLElement)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'High' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Background Agent' }))
+    const backgroundFlash = screen.getByRole('menuitem', { name: 'DeepSeek-V41-Flash' })
+    fireEvent.mouseEnter(backgroundFlash.parentElement as HTMLElement)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'High' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Enable the selection toolbar' }))
     expect(actions.pickAvatar).toHaveBeenCalledTimes(1)
     expect(actions.restoreAvatar).toHaveBeenCalledTimes(1)
@@ -86,10 +98,12 @@ describe('OrbSettingsSection', () => {
     mount({ supported: false })
     expect(screen.getByRole('status').textContent).toBe('The floating ball is available only on macOS.')
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Choose image' }).disabled).toBe(true)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Floating-ball Agent' }).disabled).toBe(true)
     expect(screen.getByRole<HTMLButtonElement>('switch', { name: 'Enable the selection toolbar' }).disabled).toBe(true)
     cleanup()
     mount({ busy: true })
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Choose image' }).disabled).toBe(true)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Floating-ball Agent' }).disabled).toBe(true)
   })
 
   it('surfaces a rejected avatar and an unavailable Desktop bridge', () => {
@@ -136,9 +150,119 @@ describe('OrbSettingsSection', () => {
         }],
       },
     })
-    fireEvent.click(screen.getAllByLabelText('Default')[0]!)
+    const overlay = screen.getByRole('button', { name: 'Floating-ball Agent' })
+    expect(overlay.textContent).toContain('Thinker')
+    expect(overlay.textContent).toContain('High')
+    fireEvent.click(overlay)
+    const thinker = screen.getByRole('menuitem', { name: 'Thinker' })
+    fireEvent.mouseEnter(thinker.parentElement as HTMLElement)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Default' }))
     expect(actions.setOverlayModel).toHaveBeenCalledWith({
       provider: 'deepseek-official', model: 'thinker',
     })
+  })
+})
+
+describe('OrbModelPicker', () => {
+  const catalog = READY.catalog!
+
+  it('falls back to the stored model id and a raw effort token', () => {
+    render(
+      <OrbModelPicker
+        label="Agent"
+        catalog={{
+          groups: [{
+            id: 'deepseek-official',
+            name: 'DeepSeek',
+            models: [{
+              id: 'deepseek-flash',
+              name: 'DeepSeek-V41-Flash',
+              reasoning: { efforts: [{ id: 'max', name: 'Max' }], defaultEffort: 'max' },
+            }],
+          }],
+        }}
+        current={{ provider: 'other', model: 'vanished', reasoningEffort: 'mystery' }}
+        disabled={false}
+        emptyLabel="empty"
+        defaultEffortLabel="Default"
+        onSelect={() => undefined}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Agent' }).textContent).toContain('vanished')
+    cleanup()
+    render(
+      <OrbModelPicker
+        label="Agent"
+        catalog={catalog}
+        current={{ provider: 'deepseek-official', model: 'missing' }}
+        disabled={false}
+        emptyLabel="empty"
+        defaultEffortLabel="Default"
+        onSelect={() => undefined}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Agent' }).textContent).toContain('missing')
+    cleanup()
+    render(
+      <OrbModelPicker
+        label="Agent"
+        catalog={catalog}
+        current={{ provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'mystery' }}
+        disabled={false}
+        emptyLabel="empty"
+        defaultEffortLabel="Default"
+        onSelect={() => undefined}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Agent' }).textContent).toContain('mystery')
+  })
+
+  it('closes an open menu when the control becomes disabled and keeps Default selected', () => {
+    const onSelect = vi.fn()
+    const view = render(
+      <OrbModelPicker
+        label="Agent"
+        catalog={{
+          groups: [{
+            id: 'deepseek-official',
+            name: 'DeepSeek',
+            models: [{
+              id: 'thinker',
+              name: 'Thinker',
+              reasoning: { efforts: [{ id: 'high', name: 'High' }] },
+            }],
+          }],
+        }}
+        current={{ provider: 'deepseek-official', model: 'thinker' }}
+        disabled={false}
+        emptyLabel="empty"
+        defaultEffortLabel="Default"
+        onSelect={onSelect}
+      />,
+    )
+    const trigger = screen.getByRole('button', { name: 'Agent' })
+    expect(trigger.textContent).toContain('Default')
+    fireEvent.click(trigger)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('menu')).toBeNull()
+    fireEvent.click(trigger)
+    fireEvent.mouseEnter(screen.getByRole('menuitem', { name: 'Thinker' }).parentElement as HTMLElement)
+    expect(screen.getByRole('menuitem', { name: 'Default' })).toBeDefined()
+    view.rerender(
+      <OrbModelPicker
+        label="Agent"
+        catalog={catalog}
+        current={{ provider: 'deepseek-official', model: 'deepseek-flash' }}
+        disabled
+        emptyLabel="empty"
+        defaultEffortLabel="Default"
+        onSelect={onSelect}
+      />,
+    )
+    expect(screen.queryByRole('menu')).toBeNull()
+    const disabled = screen.getByRole<HTMLButtonElement>('button', { name: 'Agent' })
+    expect(disabled.disabled).toBe(true)
+    fireEvent.click(disabled)
+    expect(screen.queryByRole('menu')).toBeNull()
   })
 })

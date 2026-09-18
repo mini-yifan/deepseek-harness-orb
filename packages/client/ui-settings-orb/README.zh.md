@@ -1,5 +1,5 @@
 ---
-description: "桌面端设置里的 macOS 悬浮球分页：自定义头像、叠加与后台 Agent 模型，以及划词工具栏。"
+description: "桌面端设置里的 macOS 悬浮球分页：自定义头像、悬浮球与后台 Agent 模型，以及划词工具栏。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-本包在桌面端设置中增加「悬浮球」分页。用户可改球头像（GIF、PNG 或 WebP，建议不超过 2 MB，可恢复默认）、叠加 Computer Use 模型、后台 `code_agent` 模型，以及是否启用划词工具栏。每个控件立即写入 Desktop 配置。`dsh web` 从不显示该页。Windows 仍列出它，但全部控件禁用。
+本包在桌面端设置中增加「悬浮球」分页。用户可改球头像（GIF、PNG 或 WebP，建议不超过 2 MB，可恢复默认）、悬浮球 Agent 模型、后台 `code_agent` 模型，以及是否启用划词工具栏。每个控件立即写入 Desktop 配置。`dsh web` 从不显示该页。Windows 仍列出它，但全部控件禁用。
 
 ## 目录
 
@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-Desktop Host overlay 插入本插件。在主窗口打开设置并选择「悬浮球」。选择图片会拷进 Desktop 配置并更新正在显示的球。叠加与后台 Agent 选择器使用与球右键菜单相同的 Host `session/modelCatalog` 分组。划词开关会启动或停止 macOS helper。Access、打开主窗口和退出仍留在原生右键菜单。
+Desktop Host overlay 插入本插件。在主窗口打开设置并选择「悬浮球」。选择图片会拷进 Desktop 配置并更新正在显示的球。悬浮球 Agent 与后台 Agent 选择器使用与球右键菜单相同的 Host `session/modelCatalog` 分组。划词开关会启动或停止 macOS helper。Access、打开主窗口和退出仍留在原生右键菜单。
 
 -----
 

@@ -6,7 +6,7 @@ Status: implemented
 
 ## 问题
 
-头像、叠加 Agent、后台 Agent 与划词开关只活在 macOS 球的原生右键菜单和 Desktop 配置 JSON 里。主窗口设置没有对应分页，且 `dsh web` 不能多出一列无法操作的导航。
+头像、悬浮球 Agent、后台 Agent 与划词开关只活在 macOS 球的原生右键菜单和 Desktop 配置 JSON 里。主窗口设置没有对应分页，且 `dsh web` 不能多出一列无法操作的导航。
 
 ## 决策
 

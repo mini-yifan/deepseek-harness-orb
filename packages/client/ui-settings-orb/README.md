@@ -1,5 +1,5 @@
 ---
-description: "Desktop Settings page for the macOS floating ball: custom avatar, overlay and background Agent models, and the selection toolbar."
+description: "Desktop Settings page for the macOS floating ball: custom avatar, Floating-ball Agent and background Agent models, and the selection toolbar."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package adds a **Floating ball** page to Desktop Settings. Users change the ball image (GIF, PNG, or WebP, suggested 2 MB cap, with restore-to-default), the overlay Computer Use model, the background `code_agent` model, and whether the selection toolbar is enabled. Each control writes the Desktop profile immediately. `dsh web` never shows the page. Windows still lists it, with every control disabled.
+This package adds a **Floating ball** page to Desktop Settings. Users change the ball image (GIF, PNG, or WebP, suggested 2 MB cap, with restore-to-default), the Floating-ball Agent model, the background `code_agent` model, and whether the selection toolbar is enabled. Each control writes the Desktop profile immediately. `dsh web` never shows the page. Windows still lists it, with every control disabled.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ This package adds a **Floating ball** page to Desktop Settings. Users change the
 <a id="use-this-package"></a>
 ## Use this package
 
-The Desktop Host overlay inserts this plugin. Open Settings in the main window and select **Floating ball**. Choosing an image copies it into the Desktop profile and updates the live ball. Overlay and background Agent pickers use the same Host `session/modelCatalog` groups as the ball's right-click menus. The selection switch starts or stops the macOS helper. Access, Open Main Window, and Quit stay on the native context menu.
+The Desktop Host overlay inserts this plugin. Open Settings in the main window and select **Floating ball**. Choosing an image copies it into the Desktop profile and updates the live ball. Floating-ball Agent and Background Agent pickers use the same Host `session/modelCatalog` groups as the ball's right-click menus. The selection switch starts or stops the macOS helper. Access, Open Main Window, and Quit stay on the native context menu.
 
 -----
 

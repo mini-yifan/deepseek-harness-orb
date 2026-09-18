@@ -90,30 +90,38 @@ export function OrbSettingsSection(props: OrbSettingsSectionProps): ReactNode {
           {avatarMessage === null ? null : <p className={css.error} role="alert">{avatarMessage}</p>}
         </section>
         <section className={css.card}>
-          <h3 className={css.cardTitle}>{t('overlayTitle')}</h3>
-          <p className={css.cardDescription}>{t('overlayDescription')}</p>
-          <OrbModelPicker
-            prefix="overlay"
-            catalog={state.catalog}
-            current={state.overlay}
-            disabled={disabled}
-            emptyLabel={t('emptyCatalog')}
-            defaultEffortLabel={t('defaultEffort')}
-            onSelect={(selection) => { void props.setOverlayModel(selection) }}
-          />
+          <div className={css.toggleRow}>
+            <div className={css.toggleCopy}>
+              <h3 className={css.cardTitle}>{t('overlayTitle')}</h3>
+              <p className={css.cardDescription}>{t('overlayDescription')}</p>
+            </div>
+            <OrbModelPicker
+              label={t('overlayTitle')}
+              catalog={state.catalog}
+              current={state.overlay}
+              disabled={disabled}
+              emptyLabel={t('emptyCatalog')}
+              defaultEffortLabel={t('defaultEffort')}
+              onSelect={(selection) => { void props.setOverlayModel(selection) }}
+            />
+          </div>
         </section>
         <section className={css.card}>
-          <h3 className={css.cardTitle}>{t('backgroundTitle')}</h3>
-          <p className={css.cardDescription}>{t('backgroundDescription')}</p>
-          <OrbModelPicker
-            prefix="background"
-            catalog={state.catalog}
-            current={state.background}
-            disabled={disabled}
-            emptyLabel={t('emptyCatalog')}
-            defaultEffortLabel={t('defaultEffort')}
-            onSelect={(selection) => { void props.setBackgroundModel(selection) }}
-          />
+          <div className={css.toggleRow}>
+            <div className={css.toggleCopy}>
+              <h3 className={css.cardTitle}>{t('backgroundTitle')}</h3>
+              <p className={css.cardDescription}>{t('backgroundDescription')}</p>
+            </div>
+            <OrbModelPicker
+              label={t('backgroundTitle')}
+              catalog={state.catalog}
+              current={state.background}
+              disabled={disabled}
+              emptyLabel={t('emptyCatalog')}
+              defaultEffortLabel={t('defaultEffort')}
+              onSelect={(selection) => { void props.setBackgroundModel(selection) }}
+            />
+          </div>
         </section>
         <section className={css.card}>
           <div className={css.toggleRow}>
