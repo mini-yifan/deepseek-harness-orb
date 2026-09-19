@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
+import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import { createToolResultMessage, createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { ToolSchema } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
@@ -105,7 +106,7 @@ describe('computer-use observation raster cache', () => {
           content: [{
             type: 'image',
             attachment: {
-              attachmentId: 'sha256:cu',
+              attachmentId: AttachmentId('sha256:cu'),
               mediaType: 'image/png',
               bytes: 4,
               width: 640,
@@ -132,7 +133,7 @@ describe('computer-use observation raster cache', () => {
       content: [{
         type: 'image',
         attachment: {
-          attachmentId: 'sha256:other',
+          attachmentId: AttachmentId('sha256:other'),
           mediaType: 'image/png',
           bytes: 4,
           width: 99,
@@ -148,7 +149,7 @@ describe('computer-use observation raster cache', () => {
       content: [{
         type: 'image',
         attachment: {
-          attachmentId: 'sha256:other-plugin',
+          attachmentId: AttachmentId('sha256:other-plugin'),
           mediaType: 'image/png',
           bytes: 4,
           width: 50,
@@ -163,7 +164,7 @@ describe('computer-use observation raster cache', () => {
     emptyNotice.append('user/message', createUserMessage({
       content: [
         { type: 'text', text: 'empty notice' },
-        { type: 'image', attachment: { attachmentId: 'sha256:zero', mediaType: 'image/png', bytes: 1, width: 0, height: 0 } },
+        { type: 'image', attachment: { attachmentId: AttachmentId('sha256:zero'), mediaType: 'image/png', bytes: 1, width: 0, height: 0 } },
       ],
       source: { kind: 'plugin', plugin: 'tool-computer-use', form: 'notice', summary: 'empty' },
     }), { surfaceOp: 'append' })
@@ -190,7 +191,7 @@ describe('computer-use observation raster cache', () => {
         content: [{
           type: 'image',
           attachment: {
-            attachmentId: 'sha256:gui',
+            attachmentId: AttachmentId('sha256:gui'),
             mediaType: 'image/png',
             bytes: 8,
             width: 320,
