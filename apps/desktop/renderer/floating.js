@@ -147,12 +147,27 @@ function isComposing(event) {
   return event.isComposing === true || event.keyCode === 229
 }
 
+const COMPOSER_MIN_PX = 72
+const COMPOSER_LINE_PX = 20
+const COMPOSER_EXTRA_LINES = 3
+const COMPOSER_MAX_PX = COMPOSER_MIN_PX + COMPOSER_LINE_PX * COMPOSER_EXTRA_LINES
+
+function promptText(prompt) {
+  const raw = prompt.innerText ?? prompt.textContent ?? ''
+  return raw.replaceAll('\u00a0', ' ')
+}
+
+function insertPlainText(prompt, text) {
+  if (text === '') return
+  if (typeof document.execCommand === 'function' && document.execCommand('insertText', false, text)) return
+  prompt.append(text)
+}
+
 async function main() {
   const locale = await api.locale()
   const messages = locale.messages
   document.documentElement.lang = locale.id
   document.querySelector('#page-title').textContent = messages.floatingTitle
-  document.querySelector('#prompt').placeholder = messages.floatingPlaceholder
   document.querySelector('#stop').setAttribute('aria-label', messages.floatingStop)
   document.querySelector('#stop').title = messages.floatingStop
   const newConversation = document.querySelector('#new-conversation')
@@ -186,7 +201,39 @@ async function main() {
   const historyList = document.querySelector('#history-list')
   const status = document.querySelector('#status')
   const prompt = document.querySelector('#prompt')
+  const composer = document.querySelector('#composer')
   const stop = document.querySelector('#stop')
+  prompt.dataset.placeholder = messages.floatingPlaceholder
+  prompt.classList.add('prompt-empty')
+
+  function draftOverflows() {
+    return prompt.scrollHeight > prompt.clientHeight + 1
+  }
+
+  function syncComposerHeight() {
+    const empty = promptText(prompt).trim() === ''
+    prompt.classList.toggle('prompt-empty', empty)
+    if (empty) {
+      document.body.classList.remove('composer-capped')
+      document.body.style.setProperty('--composer-height', 'var(--ball)')
+      return
+    }
+    document.body.classList.remove('composer-capped')
+    let height = COMPOSER_MIN_PX
+    for (;;) {
+      document.body.style.setProperty('--composer-height', `${height}px`)
+      if (!draftOverflows() || height >= COMPOSER_MAX_PX) break
+      height = Math.min(COMPOSER_MAX_PX, height + COMPOSER_LINE_PX)
+    }
+    document.body.classList.toggle('composer-capped', draftOverflows())
+  }
+
+  function clearPrompt() {
+    prompt.textContent = ''
+    prompt.classList.add('prompt-empty')
+    document.body.classList.remove('composer-capped')
+    document.body.style.setProperty('--composer-height', 'var(--ball)')
+  }
   const selectionChip = document.querySelector('#selection-chip')
   const selectionChipText = document.querySelector('#selection-chip-text')
   const selectionChipDismiss = document.querySelector('#selection-chip-dismiss')
@@ -995,7 +1042,7 @@ async function main() {
     prompt.focus()
   })
   api.floating.onCreateSession(async () => {
-    prompt.value = ''
+    clearPrompt()
     setHistoryOpen(false)
     setPermissionOpen(false)
     setRunning(false)
@@ -1006,17 +1053,34 @@ async function main() {
     if (sessionId === undefined) return
     void selectOverlayModel(sessionId, selection)
   })
-  document.querySelector('#composer').addEventListener('submit', async event => {
+  composer.addEventListener('submit', async event => {
     event.preventDefault()
-    const instruction = prompt.value.trim()
+    const instruction = promptText(prompt).trim()
     if (instruction === '') return
-    prompt.value = ''
+    clearPrompt()
     const selection = attachedSelection
     if (selection !== '') setAttachedSelection('')
     const text = selection === '' ? instruction : composeSelectionSendPrompt(instruction, selection)
     setHistoryOpen(false)
     setPermissionOpen(false)
     await promptOverlay(text)
+  })
+  prompt.addEventListener('input', () => {
+    syncComposerHeight()
+  })
+  prompt.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || event.shiftKey || isComposing(event)) return
+    event.preventDefault()
+    if (typeof composer.requestSubmit === 'function') composer.requestSubmit()
+    else composer.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  })
+  prompt.addEventListener('paste', event => {
+    event.preventDefault()
+    insertPlainText(prompt, event.clipboardData?.getData('text/plain') ?? '')
+    syncComposerHeight()
+  })
+  composer.addEventListener('click', event => {
+    if (event.target === composer) prompt.focus()
   })
   stop.addEventListener('click', async () => {
     if (sessionId === undefined) return
@@ -1072,7 +1136,7 @@ async function main() {
     setAttachedSelection('')
   })
   document.querySelector('#new-conversation').addEventListener('click', async () => {
-    prompt.value = ''
+    clearPrompt()
     setHistoryOpen(false)
     setPermissionOpen(false)
     setRunning(false)

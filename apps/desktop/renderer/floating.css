@@ -2,6 +2,10 @@
   color-scheme: light;
   font-family: ui-sans-serif, system-ui, sans-serif;
   --ball: 72px;
+  --composer-height: var(--ball);
+  --prompt-line: 20px;
+  --prompt-pad: 12px;
+  --composer-max: calc(var(--ball) + var(--prompt-line) * 3);
   --chrome: 12px;
   --panel-radius: 36px;
   --selection-chip: 28px;
@@ -44,7 +48,7 @@ body {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  padding: 20px 20px calc(var(--ball) + 10px);
+  padding: 20px 20px calc(var(--composer-height) + 10px);
   color: var(--black);
   background: var(--white);
   border-radius: var(--panel-radius);
@@ -80,16 +84,16 @@ body.expanded #panel {
 }
 
 body.expand-down #panel {
-  padding-top: calc(var(--ball) + 10px);
+  padding-top: calc(var(--composer-height) + 10px);
   padding-bottom: 20px;
 }
 
 body.has-selection-chip.expand-up #panel {
-  padding-bottom: calc(var(--ball) + var(--selection-chip) + 10px);
+  padding-bottom: calc(var(--composer-height) + var(--selection-chip) + 10px);
 }
 
 body.has-selection-chip.expand-down #panel {
-  padding-top: calc(var(--ball) + var(--selection-chip) + 10px);
+  padding-top: calc(var(--composer-height) + var(--selection-chip) + 10px);
 }
 
 #panel::after {
@@ -97,8 +101,8 @@ body.has-selection-chip.expand-down #panel {
   position: absolute;
   left: 0;
   right: 0;
-  height: var(--ball);
-  border-radius: 999px;
+  height: var(--composer-height);
+  border-radius: calc(var(--ball) / 2);
   background: var(--input-bg);
 }
 
@@ -307,20 +311,11 @@ body.expand-down #question {
 #composer {
   position: absolute;
   z-index: 2;
-  display: flex;
-  align-items: center;
   box-sizing: border-box;
-  height: var(--ball);
-  width: calc(100% - var(--ball) - 28px);
-  padding: 0 12px;
-}
-
-body.expand-left #composer {
   left: 16px;
-}
-
-body.expand-right #composer {
   right: 16px;
+  height: var(--composer-height);
+  padding: 0 12px;
 }
 
 body.expand-up #composer {
@@ -366,11 +361,11 @@ body.expand-right #selection-chip {
 }
 
 body.expand-up #selection-chip {
-  bottom: var(--ball);
+  bottom: var(--composer-height);
 }
 
 body.expand-down #selection-chip {
-  top: var(--ball);
+  top: var(--composer-height);
 }
 
 #selection-chip-text {
@@ -589,16 +584,68 @@ body.expand-down #selection-chip {
 }
 
 #prompt {
+  box-sizing: border-box;
   width: 100%;
   height: 100%;
-  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
   border: 0;
-  padding: 0;
+  padding: var(--prompt-pad) 8px;
   color: var(--black);
   background: transparent;
   outline: none;
+  font: inherit;
+  font-size: 13px;
+  line-height: var(--prompt-line);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   user-select: text;
   -webkit-user-select: text;
+}
+
+#prompt::before {
+  content: "";
+  width: var(--ball);
+  height: var(--composer-height);
+  margin-top: calc(0px - var(--prompt-pad));
+  shape-margin: 8px;
+}
+
+body.expand-left #prompt::before {
+  float: right;
+}
+
+body.expand-right #prompt::before {
+  float: left;
+}
+
+body.expand-up #prompt::before {
+  shape-outside: circle(36px at 50% calc(100% - 36px));
+}
+
+body.expand-down #prompt::before {
+  shape-outside: circle(36px at 50% 36px);
+}
+
+body.composer-capped.expand-left #prompt {
+  padding-right: var(--ball);
+}
+
+body.composer-capped.expand-right #prompt {
+  padding-left: var(--ball);
+}
+
+body.composer-capped #prompt::before {
+  content: none;
+  width: 0;
+  height: 0;
+  float: none;
+}
+
+#prompt.prompt-empty::after {
+  content: attr(data-placeholder);
+  color: var(--pin);
+  line-height: calc(var(--ball) - 2 * var(--prompt-pad));
 }
 
 #ball {
