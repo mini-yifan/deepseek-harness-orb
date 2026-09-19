@@ -17,6 +17,7 @@ import {
   type DesktopHostCommand,
   type DesktopHostEvent,
   type DesktopHostResponseFrame,
+  type DesktopObservationFrameBounds,
 } from './host-protocol.ts'
 
 interface PendingResponse {
@@ -33,6 +34,19 @@ function isPositiveInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 1
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function isObservationFrameBounds(value: unknown): value is DesktopObservationFrameBounds | null {
+  if (value === null) return true
+  if (typeof value !== 'object') return false
+  const row = value as Record<string, unknown>
+  return isFiniteNumber(row.x) && isFiniteNumber(row.y)
+    && isFiniteNumber(row.width) && row.width > 0
+    && isFiniteNumber(row.height) && row.height > 0
+}
+
 function isDesktopHostEvent(message: unknown): message is DesktopHostEvent {
   if (typeof message !== 'object' || message === null || !('type' in message)) return false
   const candidate = message as Record<string, unknown>
@@ -45,6 +59,8 @@ function isDesktopHostEvent(message: unknown): message is DesktopHostEvent {
       return isPositiveInteger(candidate.requestId)
         && (candidate.action === 'begin' || candidate.action === 'end')
         && (candidate.mode === 'capture' || candidate.mode === 'input')
+    case 'observation-frame':
+      return isPositiveInteger(candidate.requestId) && isObservationFrameBounds(candidate.bounds)
     case 'plugin-run':
       return isPositiveInteger(candidate.requestId) && Array.isArray(candidate.args)
         && candidate.args.every(arg => typeof arg === 'string')
@@ -120,6 +136,7 @@ export class DesktopHostProcess {
    * May be async so input begin can settle click-through before the ack; omitted when no overlay exists.
    * @param pluginProfileDir - persistent plugin profile when it differs from `projectDir`.
    * @param onPluginRun - Host-alive pnpm mutation invoked from Plugin Market IPC.
+   * @param onObservationFrame - Show or hide the Computer Use observation ribbon, then ack.
    */
   constructor(
     private readonly node: string,
@@ -137,6 +154,9 @@ export class DesktopHostProcess {
       signal: AbortSignal,
       output: { stdout(chunk: string): void; stderr(chunk: string): void },
     ) => Promise<{ exitCode: number | null; signal: NodeJS.Signals | null }>,
+    private readonly onObservationFrame?: (
+      event: Extract<DesktopHostEvent, { type: 'observation-frame' }>,
+    ) => void | Promise<void>,
   ) {}
 
   /** Start the child once and resolve only after its complete composition is active. */
@@ -491,6 +511,9 @@ export class DesktopHostProcess {
       case 'overlay-guard':
         void this.dispatchOverlayGuard(message)
         return
+      case 'observation-frame':
+        void this.dispatchObservationFrame(message)
+        return
       case 'plugin-run':
         void this.dispatchPluginRun(message)
         return
@@ -522,6 +545,29 @@ export class DesktopHostProcess {
       type: 'overlay-guard-ack',
       requestId,
       excludeWindowIds,
+    } satisfies DesktopHostCommand, (error) => {
+      if (error !== null) this.fail(error)
+    })
+  }
+
+  private async dispatchObservationFrame(
+    message: Extract<DesktopHostEvent, { type: 'observation-frame' }>,
+  ): Promise<void> {
+    try {
+      await this.onObservationFrame?.(message)
+    } catch (error) {
+      this.fail(errorOf(error, 'dsh desktop observation-frame failed'))
+      return
+    }
+    this.ackObservationFrame(message.requestId)
+  }
+
+  private ackObservationFrame(requestId: number): void {
+    const child = this.child
+    if (child === undefined || !child.connected) return
+    child.send({
+      type: 'observation-frame-ack',
+      requestId,
     } satisfies DesktopHostCommand, (error) => {
       if (error !== null) this.fail(error)
     })

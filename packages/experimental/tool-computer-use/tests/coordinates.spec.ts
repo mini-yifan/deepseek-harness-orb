@@ -7,6 +7,7 @@ import {
   mapNormalizedToGlobal,
   mapPixelToGlobal,
   modelPositionToHid,
+  requireClickModifiers,
   requireNormalizedPosition,
   requirePixelPosition,
 } from '../src/coordinates.ts'
@@ -89,5 +90,22 @@ describe('screenshot hotkeys', () => {
     expect(isForbiddenScreenshotHotkey(['shift', '3'])).toBe(false)
     expect(isForbiddenScreenshotHotkey(['cmd', '3'])).toBe(false)
     assertAllowedHotkey(['ctrl', 'c'])
+  })
+})
+
+describe('click modifiers', () => {
+  it('accepts shift, cmd, option, and control aliases and omits empty lists', () => {
+    expect(requireClickModifiers(undefined)).toBeUndefined()
+    expect(requireClickModifiers([])).toBeUndefined()
+    expect(requireClickModifiers(['shift'])).toEqual(['shift'])
+    expect(requireClickModifiers(['Command', 'alt'])).toEqual(['command', 'alt'])
+    expect(requireClickModifiers(['win', 'ctrl'])).toEqual(['win', 'ctrl'])
+    expect(requireClickModifiers(['cmd', 'command', 'meta'])).toEqual(['cmd'])
+  })
+
+  it('rejects letters, fn, and empty tokens', () => {
+    expect(() => requireClickModifiers(['a'])).toThrow(/click modifiers must be shift, cmd, option, or control/u)
+    expect(() => requireClickModifiers(['fn'])).toThrow(/got "fn"/u)
+    expect(() => requireClickModifiers([''])).toThrow(/got ""/u)
   })
 })

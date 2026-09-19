@@ -67,6 +67,12 @@ import {
   type OrbPermissionPreset,
 } from './orb-permission.ts'
 import { createSelectionToolbarWindow, hideSelectionToolbar } from './selection-toolbar-window.ts'
+import {
+  createObservationFrameWindow,
+  hideObservationFrame,
+  raiseOverlayAboveObservationFrame,
+  showObservationFrame,
+} from './observation-frame-window.ts'
 import { SelectionToolbarController } from './selection-toolbar-controller.ts'
 import { applyMillifractionCoordinates } from './millifraction-coordinates-apply.ts'
 import {
@@ -242,6 +248,7 @@ async function main(): Promise<void> {
   let mainWindow: BrowserWindow | undefined
   let pluginWindow: BrowserWindow | undefined
   let floatingWindow: BrowserWindow | undefined
+  let observationFrameWindow: BrowserWindow | undefined
   let selection: SelectionToolbarController | undefined
   let shellInstallerOwnsQuit = false
   let updateState: DesktopUpdateState = { phase: 'idle' }
@@ -284,9 +291,18 @@ async function main(): Promise<void> {
       window.webContents.send(DESKTOP_IPC.backendState, state)
     }
   }
+  const ensureObservationFrameWindow = (): void => {
+    if (observationFrameWindow !== undefined && !observationFrameWindow.isDestroyed()) return
+    observationFrameWindow = createObservationFrameWindow()
+    observationFrameWindow.once('closed', () => { observationFrameWindow = undefined })
+    void observationFrameWindow.loadURL(`${SCHEME}://shell/observation-frame.html`)
+  }
   const ensureFloating = (): void => {
     if (process.platform !== 'darwin' || quitting) return
-    if (floatingWindow !== undefined && !floatingWindow.isDestroyed()) return
+    if (floatingWindow !== undefined && !floatingWindow.isDestroyed()) {
+      ensureObservationFrameWindow()
+      return
+    }
     selection ??= new SelectionToolbarController(activeProject, {
       electronPid: process.pid,
       openExternal: url => shell.openExternal(url),
@@ -343,6 +359,7 @@ async function main(): Promise<void> {
       toolbar.webContents.once('did-finish-load', () => { selection?.publishState() })
       void toolbar.loadURL(`${SCHEME}://shell/selection-toolbar.html`)
     }
+    ensureObservationFrameWindow()
     selection.start()
   }
 
@@ -432,6 +449,7 @@ async function main(): Promise<void> {
     return selection
   }
   const restoreOverlayGuard = (): void => {
+    hideObservationFrame(observationFrameWindow)
     if (floatingWindow === undefined || floatingWindow.isDestroyed()) return
     resetFloatingOverlayGuard(floatingWindow)
     selection?.setHidInput(false)
@@ -453,7 +471,7 @@ async function main(): Promise<void> {
         if (floatingWindow === undefined || floatingWindow.isDestroyed()) return []
         applyFloatingOverlayGuard(floatingWindow, event.mode, event.action)
         if (event.mode === 'input') selection?.setHidInput(event.action === 'begin')
-        const ids = overlayWindowExcludeIds(floatingWindow, selection?.window())
+        const ids = overlayWindowExcludeIds(floatingWindow, selection?.window(), observationFrameWindow)
         if (event.mode === 'input' && event.action === 'begin') {
           return overlayGuardInputApplyDelay().then(() => ids)
         }
@@ -464,6 +482,16 @@ async function main(): Promise<void> {
         const result = await runDesktopPluginArgs(manager, args, output, signal)
         if (development !== undefined) linkDevelopmentPluginStore(development, paths.profile)
         return result
+      },
+      (event) => {
+        if (event.bounds === null) {
+          hideObservationFrame(observationFrameWindow)
+          return
+        }
+        ensureFloating()
+        if (observationFrameWindow === undefined || observationFrameWindow.isDestroyed()) return
+        showObservationFrame(observationFrameWindow, event.bounds)
+        raiseOverlayAboveObservationFrame(floatingWindow, selection?.window())
       },
     )
     return {

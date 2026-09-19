@@ -214,6 +214,55 @@ describe('computer-use tools', () => {
     })).toMatchObject({ card: 'generic', kind: 'execute', title: 'Click' })
   })
 
+  it('holds click modifiers only for that click', async () => {
+    const { ctx, backend } = await setup()
+    const result = await execute(ctx, 'click', {
+      screen_index: 0, position: [100, 200], modifiers: ['cmd', 'shift'],
+    })
+    expect(result.isError).toBe(false)
+    expect(text(result)).toContain('modifiers cmd, shift')
+    expect(backend.actions[0]).toMatchObject({
+      type: 'click',
+      input: {
+        position: [100, 200],
+        button: 'left',
+        count: 1,
+        modifiers: ['cmd', 'shift'],
+      },
+    })
+    const empty = await execute(ctx, 'click', {
+      screen_index: 0, position: [1, 1], modifiers: [],
+    })
+    expect(empty.isError).toBe(false)
+    expect(text(empty)).not.toContain('modifiers')
+    const emptyClick = backend.actions[1]
+    expect(emptyClick?.type).toBe('click')
+    if (emptyClick?.type === 'click') {
+      expect(emptyClick.input.modifiers).toBeUndefined()
+    }
+    expect(ctx.tools.get('click')?.presentCall?.({
+      screen_index: 0, position: [0, 0], modifiers: ['shift'],
+    })).toMatchObject({
+      card: 'generic',
+      title: 'Click',
+      rawInput: { screen_index: 0, position: [0, 0], modifiers: ['shift'] },
+    })
+  })
+
+  it('rejects non-modifier click keys before HID', async () => {
+    const { ctx, backend } = await setup()
+    const letter = await execute(ctx, 'click', {
+      screen_index: 0, position: [0, 0], modifiers: ['a'],
+    })
+    expect(letter.isError).toBe(true)
+    expect(text(letter)).toContain('click modifiers must be shift, cmd, option, or control')
+    const fnKey = await execute(ctx, 'click', {
+      screen_index: 0, position: [0, 0], modifiers: ['fn'],
+    })
+    expect(fnKey.isError).toBe(true)
+    expect(backend.actions).toHaveLength(0)
+  })
+
   it('types, scrolls, hotkeys, and waits through the fake backend', async () => {
     const { ctx, backend } = await setup()
     const typed = await execute(ctx, 'input_text', {
@@ -638,6 +687,8 @@ describe('computer-use tools', () => {
     expect(POLICY).toContain('Do not use bash open as a substitute')
     expect(POLICY).toContain('Drag sliders, window edges, and files with drag')
     expect(POLICY).toContain('Press and hold with long_press')
+    expect(POLICY).toContain('Multi-select with click plus shift or cmd on each later click')
+    expect(POLICY).toContain('do not hold a modifier across calls')
     expect(POLICY).toContain('call wait')
     expect(POLICY).toContain('call long_wait with the smallest of 10, 30, 60, or 120')
     expect(POLICY).toContain('Do not use long_wait for ordinary page load')
@@ -839,10 +890,12 @@ describe('computer-use session coordinate modes', () => {
     expect(JSON.stringify(milliClick)).toContain('0–1000 fraction of that screenshot, not pixels')
     expect(milliClick?.description).not.toContain('Exclusive')
     expect(milliClick?.description).not.toContain('do not combine')
+    expect(milliClick?.description).toContain('Optional modifiers (shift, cmd, option, control) are held only for this click.')
     expect(JSON.stringify(pixelClick)).toContain('pixel columns and rows of the attached screenshot')
     expect(JSON.stringify(pixelClick)).not.toContain('0–1000 fraction of that screenshot, not pixels')
     expect(pixelClick?.description).not.toContain('Exclusive')
     expect(pixelClick?.description).not.toContain('do not combine')
+    expect(pixelClick?.description).toContain('Optional modifiers (shift, cmd, option, control) are held only for this click.')
     expect(JSON.stringify(pixelDrag)).toContain('start as pixel columns')
     expect(JSON.stringify(pixelDrag)).toContain('end as pixel columns')
   })

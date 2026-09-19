@@ -1,6 +1,10 @@
 /** macOS selection-toolbar overlay window geometry and BrowserWindow construction. */
 
 import { BrowserWindow, screen } from 'electron'
+import {
+  FLOATING_OVERLAY_ALWAYS_ON_TOP_RELATIVE,
+  OVERLAY_ALWAYS_ON_TOP_LEVEL,
+} from './observation-frame-window.ts'
 
 /** Default toolbar size before the renderer reports content width. */
 export const SELECTION_TOOLBAR_SIZE = { width: 280, height: 46 } as const
@@ -112,6 +116,7 @@ export function createSelectionToolbarWindow(preload: string): BrowserWindow {
     },
   })
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
+  window.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, FLOATING_OVERLAY_ALWAYS_ON_TOP_RELATIVE)
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   return window
 }
@@ -124,6 +129,7 @@ export function createSelectionToolbarWindow(preload: string): BrowserWindow {
 export function showSelectionToolbar(window: BrowserWindow, bounds: OverlayRect): void {
   if (window.isDestroyed()) return
   window.setBounds(bounds)
+  window.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, FLOATING_OVERLAY_ALWAYS_ON_TOP_RELATIVE)
   window.showInactive()
 }
 

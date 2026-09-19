@@ -41,7 +41,9 @@ import { computerUsePresetRoot } from './computer-use-preset-root.ts'
 import {
   clearOverlayGuardTransport,
   completeOverlayGuardAck,
+  completeObservationFrameAck,
   setOverlayGuardTransport,
+  type ObservationFrameIpcEvent,
   type OverlayGuardIpcEvent,
 } from './computer-use-overlay-guard.ts'
 import { setOrbCodeAgentModelSelection } from './computer-use-orb-code-agent-model.ts'
@@ -79,6 +81,9 @@ export type DesktopHostCommand = {
   readonly requestId: number
   readonly excludeWindowIds: readonly number[]
 } | {
+  readonly type: 'observation-frame-ack'
+  readonly requestId: number
+} | {
   readonly type: 'orb-code-agent-model'
   readonly provider: string
   readonly model: string
@@ -110,7 +115,7 @@ export type DesktopHostEvent = {
 } | {
   readonly type: 'fatal'
   readonly message: string
-} | OverlayGuardIpcEvent | PluginRunIpcEvent | PluginRunCancelIpcEvent
+} | OverlayGuardIpcEvent | ObservationFrameIpcEvent | PluginRunIpcEvent | PluginRunCancelIpcEvent
 
 /** Controller returned to tests and the self-executing process entry. */
 export interface DesktopHostController {
@@ -153,6 +158,8 @@ function isDesktopHostCommand(message: unknown): message is DesktopHostCommand {
     case 'overlay-guard-ack':
       return typeof candidate.requestId === 'number' && Number.isInteger(candidate.requestId)
         && candidate.requestId >= 1 && isExcludeWindowIds(candidate.excludeWindowIds)
+    case 'observation-frame-ack':
+      return isPositiveInteger(candidate.requestId)
     case 'orb-code-agent-model':
       return typeof candidate.provider === 'string' && candidate.provider !== ''
         && typeof candidate.model === 'string' && candidate.model !== ''
@@ -706,6 +713,9 @@ async function main(): Promise<void> {
         return
       case 'overlay-guard-ack':
         completeOverlayGuardAck(message.requestId, message.excludeWindowIds)
+        return
+      case 'observation-frame-ack':
+        completeObservationFrameAck(message.requestId)
         return
       case 'orb-code-agent-model':
         setOrbCodeAgentModelSelection(message)

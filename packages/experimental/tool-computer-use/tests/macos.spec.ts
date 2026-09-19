@@ -633,6 +633,24 @@ describe('macOS backend with an injected runner', () => {
     expect(scripts.join('\n')).toContain('postMouse(LEFT_DRAGGED,')
   })
 
+  it('holds click modifiers then releases them in one JXA script', async () => {
+    const scripts: string[] = []
+    const backend = createMacosDesktopBackend(runner({ scripts }))
+    const [screen] = await backend.listScreens()
+    scripts.length = 0
+    await backend.click({
+      screen: screen!, position: [0, 0], button: 'left', count: 1, modifiers: ['cmd', 'shift'],
+    })
+    expect(scripts[0]).toContain('clickWithModifiers(0, 0, 0, 1, [55,56])')
+    expect(scripts[0]).toContain('if (flags) $.CGEventSetFlags(event, flags)')
+    expect(scripts[0]).toContain('postKey(mods[m], true, flags)')
+    expect(scripts[0]).toContain('postKey(mods[r], false, 0)')
+    scripts.length = 0
+    await backend.click({ screen: screen!, position: [0, 0], button: 'left', count: 1 })
+    expect(scripts[0]).toContain('clickAt(0, 0, 0, 1)')
+    expect(scripts[0]).not.toContain('clickWithModifiers(0, 0, 0, 1')
+  })
+
   it('opens URLs, the default browser, Desktop files, and Finder reveals', async () => {
     const files: string[] = []
     const args: string[][] = []

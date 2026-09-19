@@ -25,7 +25,13 @@ import {
   toolsForCoordinateMode,
   type CoordinateOutcome,
 } from './coordinate-mode.ts'
-import { assertAllowedHotkey, modelPositionToHid, requireNormalizedPosition, requirePixelPosition } from './coordinates.ts'
+import {
+  assertAllowedHotkey,
+  modelPositionToHid,
+  requireClickModifiers,
+  requireNormalizedPosition,
+  requirePixelPosition,
+} from './coordinates.ts'
 import {
   requireBrowserUrl,
   requireLongPressDuration,
@@ -45,6 +51,7 @@ import { pairScreenshotFiles, writeDesktopScreenshots } from './screenshot.ts'
 import { delay } from './wait.ts'
 import { LONG_WAIT_SECONDS, WAIT_SECONDS, requireLongWaitSeconds } from './wait-args.ts'
 
+import type {} from './overlay-guard.ts'
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-attachment'
 import type {} from '@deepseek-ai/dsh-llm'
@@ -214,6 +221,19 @@ function screenshotIntro(paths: readonly string[], outcome: CoordinateOutcome): 
   return `Saved screenshot to ${paths[0]} and copied it to the clipboard. The image is ready to paste. ${coordinatesRemain(outcome)}`
 }
 
+function clickResultText(value: {
+  readonly screenIndex: number
+  readonly position: readonly number[]
+  readonly button: string
+  readonly count: number
+  readonly modifiers?: readonly string[]
+} & CoordinateOutcome): string {
+  const mods = value.modifiers === undefined
+    ? ''
+    : `, modifiers ${value.modifiers.join(', ')}`
+  return `Clicked screen ${String(value.screenIndex)} at [${value.position.join(', ')}] (${value.button}, count ${String(value.count)}${mods}). ${coordinatesRemain(value)}`
+}
+
 /**
  * Register the exclusive GUI tools, the policy section, and first-frame screenshot attachment.
  * @param ctx - registration scope; requires `tools`, `systemPrompt`, and `attachments`.
@@ -237,12 +257,21 @@ export function applyComputerUse(
     if (mode === 'millifraction') return nextAssembly
     return { ...nextAssembly, tools: toolsForCoordinateMode(nextAssembly.tools, mode) }
   })
+  ctx.on('session/event', (_session, event) => {
+    if (event.type !== 'turn/end') return
+    const guard = ctx.get('computerUseOverlayGuard')
+    if (guard === undefined) return
+    void guard.setObservationFrame(null).catch(() => {
+      // Host IPC already gone or observation-frame ack timed out; hide is best-effort after turn/end.
+    })
+  })
 
   ctx.tools.register(defineTool({
     name: 'click',
     description:
       'Click at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. '
-      + 'Use left (default) or right button; count 2 is a double-click.',
+      + 'Use left (default) or right button; count 2 is a double-click. '
+      + 'Optional modifiers (shift, cmd, option, control) are held only for this click.',
     parameters: {
       screen_index: { type: 'integer', required: true, description: '0 for the attached frontmost-window screenshot.' },
       position: {
@@ -263,6 +292,12 @@ export function applyComputerUse(
         default: 1,
         description: '1 for a single click, 2 for a double-click. Default: 1.',
       },
+      modifiers: {
+        type: 'array',
+        items: { type: 'string' },
+        description:
+          'Modifier keys held only for this click, for example ["shift"] or ["cmd"]. Omit for a plain click.',
+      },
     },
     output: {
       schema: {
@@ -273,13 +308,14 @@ export function applyComputerUse(
           position: { type: 'array', required: true, items: { type: 'number' } },
           button: { type: 'string', required: true, enum: ['left', 'right'] },
           count: { type: 'integer', required: true },
+          modifiers: { type: 'array', items: { type: 'string' } },
           ...COORDINATE_FIELDS,
           screens: SCREENS_FIELD,
           foreground: FOREGROUND_FIELD,
         },
       },
       render: (_args, value) => resultBlocks(
-        `Clicked screen ${String(value.screenIndex)} at [${value.position.join(', ')}] (${value.button}, count ${String(value.count)}). ${coordinatesRemain(value)}`,
+        clickResultText(value),
         value.screens,
         value.foreground,
         value,
@@ -289,22 +325,31 @@ export function applyComputerUse(
     presentCall: args => genericExecute('Click', {
       screen_index: args.screen_index,
       position: args.position,
+      ...args.modifiers !== undefined && args.modifiers.length > 0 ? { modifiers: args.modifiers } : {},
     }),
     async execute(args, exec) {
       await assertImageCapableRoute(ctx, exec)
       const position = validatedPosition(exec, args.position)
       const button: ClickButton = args.button === 'right' ? 'right' : 'left'
       const count: 1 | 2 = args.count === 2 ? 2 : 1
+      const modifiers = requireClickModifiers(args.modifiers)
       return guiTurn(backend, exec.signal, async () => {
         const screens = await backend.listScreens(exec.signal)
         const screen = requireScreen(screens, args.screen_index)
-        await backend.click({ screen, position: hidPosition(exec, position), button, count }, exec.signal)
+        await backend.click({
+          screen,
+          position: hidPosition(exec, position),
+          button,
+          count,
+          ...modifiers === undefined ? {} : { modifiers },
+        }, exec.signal)
         const observation = await recapture(ctx, backend, exec, config.postActionWaitMs)
         return {
           screenIndex: args.screen_index,
           position,
           button,
           count,
+          ...modifiers === undefined ? {} : { modifiers },
           ...observedFields(sessionOf(exec), observation),
         }
       })

@@ -53,6 +53,9 @@ const harness = await vi.hoisted(async () => {
     readonly focus = vi.fn(() => { this.focused = true })
     readonly blur = vi.fn(() => { this.focused = false })
     readonly restore = vi.fn()
+    readonly moveTop = vi.fn()
+    alwaysOnTopLevel: string | undefined
+    alwaysOnTopRelativeLevel: number | undefined
     constructor(readonly options: {
       show?: boolean
       type?: string
@@ -80,6 +83,10 @@ const harness = await vi.hoisted(async () => {
     setIgnoreMouseEvents(value: boolean, options?: { forward?: boolean }) {
       this.ignoreMouseEvents = value
       this.ignoreMouseEventsForward = options?.forward
+    }
+    setAlwaysOnTop(_flag: boolean, level?: string, relativeLevel?: number) {
+      this.alwaysOnTopLevel = level
+      this.alwaysOnTopRelativeLevel = relativeLevel
     }
     setVisibleOnAllWorkspaces(
       value: boolean,
@@ -112,6 +119,11 @@ const harness = await vi.hoisted(async () => {
       action: 'begin' | 'end'
       mode: 'capture' | 'input'
     }) => readonly number[] | Promise<readonly number[]>) | undefined
+    readonly onObservationFrame: ((event: {
+      type: 'observation-frame'
+      requestId: number
+      bounds: { x: number; y: number; width: number; height: number } | null
+    }) => void | Promise<void>) | undefined
     readonly start = vi.fn(() => { hostStarted.resolve(); return this.ready.promise })
     readonly stop = vi.fn(() => {
       this.stopping.resolve()
@@ -119,6 +131,7 @@ const harness = await vi.hoisted(async () => {
       return this.exited.promise
     })
     readonly setOrbCodeAgentModel = vi.fn()
+    readonly setOrbCoordinateMode = vi.fn()
     readonly setOrbPermissionPreset = vi.fn()
     constructor(
       readonly node: string,
@@ -128,8 +141,12 @@ const harness = await vi.hoisted(async () => {
       _environment?: NodeJS.ProcessEnv,
       readonly onFailure?: (error: Error) => void,
       onOverlayGuard?: FakeHost['onOverlayGuard'],
+      _pluginProfileDir?: string,
+      _onPluginRun?: unknown,
+      onObservationFrame?: FakeHost['onObservationFrame'],
     ) {
       this.onOverlayGuard = onOverlayGuard
+      this.onObservationFrame = onObservationFrame
       hosts.push(this)
     }
   }
@@ -251,7 +268,7 @@ function invokeFloating(channel: string, ...args: unknown[]): unknown {
 function invokeSelection(channel: string, ...args: unknown[]): unknown {
   const handler = harness.handlers.get(channel)
   if (handler === undefined) throw new Error(`missing handler ${channel}`)
-  const window = harness.windows.find(entry => entry.options.focusable === false)
+  const window = harness.windows.find(entry => entry.urls.includes('dsh-app://shell/selection-toolbar.html'))
   if (window === undefined) throw new Error('missing selection toolbar')
   return handler({ sender: window.webContents, senderFrame: { url: 'dsh-app://shell/selection-toolbar.html' } }, ...args)
 }
@@ -539,8 +556,16 @@ describe('desktop floating overlay', () => {
       reasoningEffort: 'max',
     })
     expect(invokeFloating(DESKTOP_IPC.floatingOverlayPermissionGet)).toBe('danger-full-access')
-    const toolbar = harness.windows.find(window => window.options.focusable === false)
+    const toolbar = harness.windows.find(window => window.urls.includes('dsh-app://shell/selection-toolbar.html'))
     expect(toolbar?.urls).toEqual(['dsh-app://shell/selection-toolbar.html'])
+    const frame = harness.windows.find(window => window.urls.includes('dsh-app://shell/observation-frame.html'))
+    expect(frame?.urls).toEqual(['dsh-app://shell/observation-frame.html'])
+    expect(frame?.options.focusable).toBe(false)
+    expect(frame?.ignoreMouseEvents).toBe(true)
+    expect(frame?.ignoreMouseEventsForward).toBe(true)
+    expect(frame?.visible).toBe(false)
+    expect(frame?.alwaysOnTopRelativeLevel).toBe(0)
+    expect(overlay?.alwaysOnTopRelativeLevel).toBe(1)
     expect(overlay?.contentProtection).toBe(false)
     expect(overlay?.visibleOnAllWorkspaces).toBe(true)
     expect(overlay?.visibleOnAllWorkspacesOptions).toEqual({
@@ -559,6 +584,27 @@ describe('desktop floating overlay', () => {
     toolbar?.showInactive()
     expect(harness.hosts[0]!.onOverlayGuard?.({
       type: 'overlay-guard', requestId: 5, action: 'begin', mode: 'capture',
+    })).toEqual([4243, 4244])
+    await harness.hosts[0]!.onObservationFrame?.({
+      type: 'observation-frame',
+      requestId: 9,
+      bounds: { x: 100, y: 80, width: 400, height: 300 },
+    })
+    expect(frame?.visible).toBe(true)
+    expect(frame?.ignoreMouseEvents).toBe(true)
+    expect(frame?.ignoreMouseEventsForward).toBe(true)
+    expect(overlay?.moveTop).toHaveBeenCalled()
+    expect(harness.hosts[0]!.onOverlayGuard?.({
+      type: 'overlay-guard', requestId: 10, action: 'begin', mode: 'capture',
+    })).toEqual([4243, 4244, 4245])
+    await harness.hosts[0]!.onObservationFrame?.({
+      type: 'observation-frame',
+      requestId: 11,
+      bounds: null,
+    })
+    expect(frame?.visible).toBe(false)
+    expect(harness.hosts[0]!.onOverlayGuard?.({
+      type: 'overlay-guard', requestId: 12, action: 'begin', mode: 'capture',
     })).toEqual([4243, 4244])
     expect(overlay?.contentProtection).toBe(false)
     expect(overlay?.ignoreMouseEvents).toBe(false)
@@ -615,9 +661,16 @@ describe('desktop floating overlay', () => {
     harness.hosts[0]!.ready.resolve()
     await harness.navigated.promise
     const overlay = harness.windows.find(window => window.options.type === 'panel')
+    const frame = harness.windows.find(window => window.urls.includes('dsh-app://shell/observation-frame.html'))
     const host = harness.hosts[0]!
     host.onOverlayGuard?.({ type: 'overlay-guard', requestId: 1, action: 'begin', mode: 'input' })
     expect(overlay?.ignoreMouseEvents).toBe(true)
+    await host.onObservationFrame?.({
+      type: 'observation-frame',
+      requestId: 2,
+      bounds: { x: 40, y: 40, width: 200, height: 120 },
+    })
+    expect(frame?.visible).toBe(true)
     host.stop.mockImplementation(() => {
       host.stopping.resolve()
       return host.exited.promise
@@ -628,6 +681,7 @@ describe('desktop floating overlay', () => {
     await harness.quitCompleted.promise
     expect(overlay?.contentProtection).toBe(false)
     expect(overlay?.ignoreMouseEvents).toBe(false)
+    expect(frame?.visible).toBe(false)
   })
 
   it('does not create a floating overlay off macOS', async () => {

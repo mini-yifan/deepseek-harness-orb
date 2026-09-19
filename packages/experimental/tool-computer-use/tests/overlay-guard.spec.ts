@@ -19,6 +19,7 @@ import { createFakeDesktopBackend } from '../src/fake.ts'
 import { wrapDesktopBackend, type ComputerUseOverlayGuard } from '../src/overlay-guard.ts'
 import { activeCaptureExcludeWindowIds } from '../src/capture-exclude.ts'
 import type { DesktopBackend } from '../src/backend.ts'
+import { Session, SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
 
 const platformBackend = vi.hoisted(() => {
   const png = Buffer.from(
@@ -78,11 +79,18 @@ class CatalogAdapter extends LlmAdapter {
   }
 }
 
-function recordingGuard(): ComputerUseOverlayGuard & { readonly calls: readonly string[] } {
+function recordingGuard(): ComputerUseOverlayGuard & {
+  readonly calls: readonly string[]
+  readonly frames: ReadonlyArray<Parameters<ComputerUseOverlayGuard['setObservationFrame']>[0]>
+} {
   const calls: string[] = []
+  const frames: Array<Parameters<ComputerUseOverlayGuard['setObservationFrame']>[0]> = []
   return {
     get calls() {
       return calls
+    },
+    get frames() {
+      return frames
     },
     async withCapture(run) {
       calls.push('capture')
@@ -100,6 +108,19 @@ function recordingGuard(): ComputerUseOverlayGuard & { readonly calls: readonly 
         calls.push('input-end')
       }
     },
+    async setObservationFrame(bounds) {
+      calls.push('frame')
+      frames.push(bounds)
+    },
+  }
+}
+
+function idleGuard(overrides: Partial<ComputerUseOverlayGuard> = {}): ComputerUseOverlayGuard {
+  return {
+    withCapture: run => run({ excludeWindowIds: [] }),
+    withInput: run => run(),
+    setObservationFrame: () => Promise.resolve(),
+    ...overrides,
   }
 }
 
@@ -155,7 +176,7 @@ describe('wrapDesktopBackend', () => {
       await backend.listScreens()
     })
     expect(guard.calls).toEqual([
-      'capture', 'capture-end',
+      'capture', 'frame', 'capture-end',
       'capture', 'capture-end',
       'capture', 'capture-end',
       'input', 'input-end',
@@ -167,7 +188,7 @@ describe('wrapDesktopBackend', () => {
       'input', 'input-end',
       'input',
       'input', 'input-end',
-      'capture', 'capture-end',
+      'capture', 'frame', 'capture-end',
       'input-end',
     ])
     expect(inner.actions.map(action => action.type)).toEqual([
@@ -184,10 +205,9 @@ describe('wrapDesktopBackend', () => {
         return Promise.resolve({ data: new Uint8Array(), mediaType: 'image/png' as const })
       },
     })
-    const backend = wrapDesktopBackend(inner, {
+    const backend = wrapDesktopBackend(inner, idleGuard({
       withCapture: run => run({ excludeWindowIds: [11, 22] }),
-      withInput: run => run(),
-    })
+    }))
     await backend.capture(screen)
     expect(seen).toEqual([[11, 22]])
     expect(activeCaptureExcludeWindowIds()).toEqual([])
@@ -207,10 +227,9 @@ describe('wrapDesktopBackend', () => {
         return Promise.resolve({ data: new Uint8Array(), mediaType: 'image/png' as const })
       },
     })
-    const backend = wrapDesktopBackend(inner, {
+    const backend = wrapDesktopBackend(inner, idleGuard({
       withCapture: run => run({ excludeWindowIds: [11, 22] }),
-      withInput: run => run(),
-    })
+    }))
     await backend.capture(menuScreen)
     expect(seen).toEqual([[11, 22]])
   })
@@ -223,10 +242,9 @@ describe('wrapDesktopBackend', () => {
         return Promise.resolve([screen])
       },
     })
-    const backend = wrapDesktopBackend(inner, {
+    const backend = wrapDesktopBackend(inner, idleGuard({
       withCapture: run => run({ excludeWindowIds: [11, 22] }),
-      withInput: run => run(),
-    })
+    }))
     await backend.listScreens()
     expect(seen).toEqual([[11, 22]])
     expect(activeCaptureExcludeWindowIds()).toEqual([])
@@ -240,10 +258,9 @@ describe('wrapDesktopBackend', () => {
         return Promise.resolve({ appName: 'Pages' })
       },
     })
-    const backend = wrapDesktopBackend(inner, {
+    const backend = wrapDesktopBackend(inner, idleGuard({
       withCapture: run => run({ excludeWindowIds: [11, 22] }),
-      withInput: run => run(),
-    })
+    }))
     await expect(backend.inspectForeground()).resolves.toEqual({ appName: 'Pages' })
     expect(seen).toEqual([[11, 22]])
     expect(activeCaptureExcludeWindowIds()).toEqual([])
@@ -257,12 +274,31 @@ describe('wrapDesktopBackend', () => {
         return Promise.resolve({ data: new Uint8Array(), mediaType: 'image/png' as const })
       },
     })
-    const backend = wrapDesktopBackend(inner, {
+    const backend = wrapDesktopBackend(inner, idleGuard({
       withCapture: run => run(undefined as never),
-      withInput: run => run(),
-    })
+    }))
     await backend.capture(screen)
     expect(seen).toEqual([[]])
+  })
+
+  it('sets the observation frame from listScreens bounds and clears when empty', async () => {
+    const guard = recordingGuard()
+    const inner = stubBackend({
+      listScreens: () => Promise.resolve([screen]),
+    })
+    const backend = wrapDesktopBackend(inner, guard)
+    await expect(backend.listScreens()).resolves.toEqual([screen])
+    expect(guard.frames).toEqual([screen.bounds])
+    const empty = wrapDesktopBackend(stubBackend({
+      listScreens: () => Promise.resolve([]),
+    }), guard)
+    await expect(empty.listScreens()).resolves.toEqual([])
+    expect(guard.frames).toEqual([screen.bounds, null])
+  })
+
+  it('does not throw when setObservationFrame is a pass-through', async () => {
+    const backend = wrapDesktopBackend(stubBackend(), idleGuard())
+    await expect(backend.listScreens()).resolves.toEqual([screen])
   })
 
   it('restores the cloak when the inner call throws', async () => {
@@ -316,10 +352,10 @@ describe('apply overlay guard wiring', () => {
     contexts.push(host)
     const home = await mkdtemp(join(tmpdir(), 'dsh-cu-guard-'))
     homes.push(home)
-    host.provide('computerUseOverlayGuard', {
+    host.provide('computerUseOverlayGuard', idleGuard({
       withCapture: () => Promise.reject(new Error('cloaked-capture')),
       withInput: () => Promise.reject(new Error('cloaked-input')),
-    })
+    }))
     await host.plugin(SystemPrompt)
     await host.plugin(ToolRuntime)
     await host.plugin(LocalAttachmentStore, { dshHome: home })
@@ -347,10 +383,10 @@ describe('apply overlay guard wiring', () => {
     contexts.push(host)
     const home = await mkdtemp(join(tmpdir(), 'dsh-cu-guard-child-'))
     homes.push(home)
-    host.provide('computerUseOverlayGuard', {
+    host.provide('computerUseOverlayGuard', idleGuard({
       withCapture: () => Promise.reject(new Error('cloaked-capture')),
       withInput: () => Promise.reject(new Error('cloaked-input')),
-    })
+    }))
     await host.plugin(SystemPrompt)
     await host.plugin(ToolRuntime)
     await host.plugin(LocalAttachmentStore, { dshHome: home })
@@ -371,5 +407,35 @@ describe('apply overlay guard wiring', () => {
     })
     expect(result.isError).toBe(true)
     expect(text(result)).toContain('cloaked-input')
+  })
+
+  it('clears the observation frame on turn/end', async () => {
+    const host = new Context()
+    contexts.push(host)
+    const home = await mkdtemp(join(tmpdir(), 'dsh-cu-guard-turn-'))
+    homes.push(home)
+    const frames: Array<Parameters<ComputerUseOverlayGuard['setObservationFrame']>[0]> = []
+    host.provide('computerUseOverlayGuard', idleGuard({
+      setObservationFrame: (bounds) => {
+        frames.push(bounds)
+        return Promise.resolve()
+      },
+    }))
+    await host.plugin(SystemPrompt)
+    await host.plugin(ToolRuntime)
+    await host.plugin(LocalAttachmentStore, { dshHome: home })
+    await host.plugin(LlmRuntime)
+    host.llm.registerAdapter(['visual'], new CatalogAdapter([
+      { provider: 'visual', id: 'vision-model', name: 'Vision', inputModalities: ['text', 'image'] },
+    ]))
+    apply(host, { postActionWaitMs: 0 })
+    const session = Session.create(SessionId('computer-use-frame-turn'))
+    host.emit('session/event', session, {
+      type: 'turn/end',
+      seq: SessionSeq(1),
+      time: 1,
+      data: { turn: 1, reason: { kind: 'completed' } },
+    })
+    await expect.poll(() => frames).toEqual([null])
   })
 })

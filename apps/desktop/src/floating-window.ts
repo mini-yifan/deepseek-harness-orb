@@ -7,6 +7,10 @@ import {
   type FloatingModelCatalog,
 } from './floating-agent-menu.ts'
 import type { OrbAgentModelSelection } from './orb-agent-models.ts'
+import {
+  FLOATING_OVERLAY_ALWAYS_ON_TOP_RELATIVE,
+  OVERLAY_ALWAYS_ON_TOP_LEVEL,
+} from './observation-frame-window.ts'
 
 /** Electron `context-menu` fields that choose overlay right-click items. */
 export interface FloatingContextEditState {
@@ -366,6 +370,7 @@ export function createFloatingWindow(
     },
   })
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
+  window.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, FLOATING_OVERLAY_ALWAYS_ON_TOP_RELATIVE)
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('context-menu', (_event, params) => {
     void popupFloatingContextMenu(
@@ -522,7 +527,7 @@ export function cgWindowIdFromMediaSourceId(sourceId: string): number {
  * Pass every Desktop overlay that must stay out of the shot.
  * Hidden windows are omitted: ScreenCaptureKit `onScreenWindowsOnly` cannot see them,
  * and a missing exclude id fails capture.
- * @param windows - floating ball, selection toolbar, or other capture-excluded chrome.
+ * @param windows - floating ball, selection toolbar, observation frame, or other capture-excluded chrome.
  * @returns CGWindowIDs, omitting destroyed or hidden windows.
  */
 export function overlayWindowExcludeIds(...windows: Array<BrowserWindow | undefined>): number[] {

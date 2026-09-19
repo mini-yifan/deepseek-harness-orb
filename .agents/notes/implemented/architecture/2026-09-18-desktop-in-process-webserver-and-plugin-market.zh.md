@@ -12,7 +12,7 @@ dsh-market（npm 上的 `dshmarket`）把 `/dsh-market/*` 挂在 `ctx.webServer`
 
 Desktop 以 `listen: false` 启用 `@deepseek-ai/dsh-host-webserver`。激活不绑定 TCP 端口。`WebServer.dispatch(request)` 只匹配具名 exact／prefix 路由，未命中返回 `undefined`，以便 Desktop 保留 SPA `assetHandler`。Fetch 顺序为 `/.dsh/remote-stream`、`/api/*`、`/plugins/*`、具名 `webServer.dispatch`，然后是 SPA 资产。合成的 `IncomingMessage` 头转发 `Host` 与 `Origin`；`dsh-app://app` 使用 `Host: app` 与 `Origin: dsh-app://app`，以便市场的 `sameOrigin` POST 检查通过。
 
-在 Loader 条目挂载之前，Desktop Host 提供 `desktopProfiles.current = { name: 'desktop', dir }` 以及带 `runPlugin`／`runExternalMarketPluginInstall` 的 `desktopPnpm`。这些方法发送 Host→Electron 的 `plugin-run` IPC（协议 6）。Electron 通过 `DesktopProjectManager.mutateWhileRunning` 运行内置 pnpm，不停止 Host，随后市场 UI 提示用户重启。GitHub、gist、git、file 和 URL spec 仍然被拒绝。
+在 Loader 条目挂载之前，Desktop Host 提供 `desktopProfiles.current = { name: 'desktop', dir }` 以及带 `runPlugin`／`runExternalMarketPluginInstall` 的 `desktopPnpm`。这些方法发送 Host→Electron 的 `plugin-run` IPC。Electron 通过 `DesktopProjectManager.mutateWhileRunning` 运行内置 pnpm，不停止 Host，随后市场 UI 提示用户重启。GitHub、gist、git、file 和 URL spec 仍然被拒绝。
 
 未打包启动把外部插件持久化在 `$DSH_HOME/profiles/desktop`，并重新链入被清空的 hoist 项目。链接器随后把各插件的宿主 peer 包从 hoist 放到 store 副本旁边，因为 Node ESM 对 store 插件做 realpath 后不会搜索 hoist 的 `node_modules`。`start:desktop` 在该 store 中钉入 `dshmarket@1.47.0`。`--skip-build` 会重建 `@deepseek-ai/dsh-host-webserver` 与 `@deepseek-ai/dsh-client-modules`，以便 Host 从这些包的 `lib/index.js` 加载 `dispatch` 以及 `/plugins` 载体注册。当载体已经提供时，client-modules 通过 `ctx.get('webServer')` 注册该路由，因为 Cordis 在插件 fiber 上通过属性访问服务需要 inject。市场包不是签名的 `DESKTOP_PROFILE_BUNDLES` 成员。打包应用默认预装市场不在本轮范围。
 

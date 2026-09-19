@@ -84,6 +84,8 @@ export interface ClickInput {
   readonly position: readonly [number, number]
   readonly button: ClickButton
   readonly count: 1 | 2
+  /** Modifier tokens held only for this click. Omit for a plain click. */
+  readonly modifiers?: readonly string[]
 }
 
 /** Focus click plus keyboard typing. */
@@ -186,7 +188,7 @@ export interface DesktopBackend {
   openApp(input: OpenAppInput, signal?: AbortSignal): Promise<OpenAppResult>
   /**
    * Click at a 0–1000 position on `input.screen`.
-   * @param input - screen, position, button, and click count.
+   * @param input - screen, position, button, click count, and optional modifiers held only for this click.
    * @param signal - cooperative cancellation.
    */
   click(input: ClickInput, signal?: AbortSignal): Promise<void>

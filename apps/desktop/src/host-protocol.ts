@@ -1,7 +1,7 @@
 /** Versioned control messages and framed byte transport for the Desktop Host child. */
 
 /** Protocol version implemented by the Electron shell and installed dsh Host. */
-export const DESKTOP_HOST_PROTOCOL_VERSION = 6 as const
+export const DESKTOP_HOST_PROTOCOL_VERSION = 7 as const
 
 /** Child descriptor Electron writes request frames to. */
 export const DESKTOP_REQUEST_PIPE_FD = 3
@@ -45,6 +45,14 @@ export type DesktopOverlayGuardMode = 'capture' | 'input'
 /** Begin or end one overlay-guard interval. */
 export type DesktopOverlayGuardAction = 'begin' | 'end'
 
+/** Logical global rectangle for the Computer Use observation-frame overlay. */
+export interface DesktopObservationFrameBounds {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
+
 /** Commands retained on Node IPC because they do not carry Fetch payload bytes. */
 export type DesktopHostCommand = {
   readonly type: 'shutdown'
@@ -52,6 +60,9 @@ export type DesktopHostCommand = {
   readonly type: 'overlay-guard-ack'
   readonly requestId: number
   readonly excludeWindowIds: readonly number[]
+} | {
+  readonly type: 'observation-frame-ack'
+  readonly requestId: number
 } | {
   readonly type: 'orb-code-agent-model'
   readonly provider: string
@@ -76,7 +87,7 @@ export type DesktopHostCommand = {
   readonly signal: string | null
 }
 
-/** Lifecycle, overlay-guard, and plugin-run events retained on Node IPC. */
+/** Lifecycle, overlay-guard, observation-frame, and plugin-run events retained on Node IPC. */
 export type DesktopHostEvent = {
   readonly type: 'ready'
   readonly protocolVersion: typeof DESKTOP_HOST_PROTOCOL_VERSION
@@ -89,6 +100,10 @@ export type DesktopHostEvent = {
   readonly requestId: number
   readonly action: DesktopOverlayGuardAction
   readonly mode: DesktopOverlayGuardMode
+} | {
+  readonly type: 'observation-frame'
+  readonly requestId: number
+  readonly bounds: DesktopObservationFrameBounds | null
 } | {
   readonly type: 'plugin-run'
   readonly requestId: number

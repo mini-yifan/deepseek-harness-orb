@@ -37,7 +37,7 @@ This session drives the real unsandboxed desktop. Use bash only for short comman
 
 Open a site in the user's visible browser with open_in_browser. web_search and web_fetch return text to you; they do not open a window the user can see.
 
-Drag sliders, window edges, and files with drag. Press and hold with long_press.
+Drag sliders, window edges, and files with drag. Press and hold with long_press. Multi-select with click plus shift or cmd on each later click; do not hold a modifier across calls.
 
 When the latest screenshot still shows a loader, spinner, or a control that has not appeared, call wait. After click or open, the tool result already has a new screenshot; do not immediately wait unless that image still shows loading. When the screenshot shows a long job still running (download, install, export, or in-window generation), call long_wait with the smallest of 10, 30, 60, or 120 that covers remaining progress. Do not use long_wait for ordinary page load.
 

@@ -71,7 +71,7 @@ Those background sessions are the same kind as a session you type in the main wi
 
 ## Limits
 
-The floating ball is macOS-only. Windows still lists **Floating ball** in Settings with every control disabled. There is no voice, lasso, or per-click approval. Computer Use capture omits the ball, expanded panel, and selection toolbar from that screenshot via ScreenCaptureKit window exclusion, and HID makes that whole overlay click-through only for that input burst while hiding the toolbar; the main window stays capturable and hittable. The Computer Use package is a signed runtime extra, not a Desktop Host npm dependency.
+The floating ball is macOS-only. Windows still lists **Floating ball** in Settings with every control disabled. There is no voice, lasso, or per-click approval. Computer Use capture omits the ball, expanded panel, selection toolbar, and observation-frame ribbon from that screenshot via ScreenCaptureKit window exclusion, and HID makes that whole overlay click-through only for that input burst while hiding the toolbar; the main window stays capturable and hittable. The Computer Use package is a signed runtime extra, not a Desktop Host npm dependency.
 
 ## Continue
 
