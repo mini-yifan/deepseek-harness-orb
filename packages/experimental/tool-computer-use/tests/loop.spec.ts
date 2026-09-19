@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import { createUserMessage, LlmAdapter } from '@deepseek-ai/dsh-llm'
-import type { LlmResolvedModelInfo } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, LlmAdapter, ToolCallId } from '@deepseek-ai/dsh-llm'
+import type { LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
@@ -50,6 +50,31 @@ function waitForIdle(ctx: Context, agent: Agent): Promise<void> {
 
 function send(agent: Agent, text: string): void {
   agent.followup(createUserMessage({ content: [{ type: 'text', text }], source: { kind: 'user' } }))
+}
+
+/** One assistant response that contains several tool calls. */
+function multiCall(calls: { id: string; name: string; args: object }[]): StreamChunk[] {
+  const chunks: StreamChunk[] = []
+  calls.forEach((call, index) => {
+    chunks.push(
+      { type: 'block-start', index, blockType: 'tool-call' },
+      {
+        type: 'block-end',
+        index,
+        block: {
+          type: 'tool-call',
+          id: ToolCallId(call.id),
+          name: call.name,
+          arguments: JSON.stringify(call.args),
+        },
+      },
+    )
+  })
+  chunks.push(
+    { type: 'usage', usage: { inputTokens: 5, outputTokens: 5 } },
+    { type: 'finish', reason: { kind: 'tool-calls' } },
+  )
+  return chunks
 }
 
 const homes: string[] = []
@@ -112,6 +137,39 @@ describe('computer-use agent loop', () => {
     expect(agent.session.deriveMessages().some(message =>
       message.content.some(block => block.type === 'image'
         || (block.type === 'tool-result' && block.content.some(part => part.type === 'image'))),
+    )).toBe(true)
+  }, 30_000)
+
+  it('runs same-step sibling clicks in order and returns each recapture on the next request', async () => {
+    const adapter = new VisionAdapter([
+      multiCall([
+        { id: 'click-a', name: 'click', args: { screen_index: 0, position: [100, 100] } },
+        { id: 'click-b', name: 'click', args: { screen_index: 0, position: [200, 300] } },
+      ]),
+      textResponse('DONE'),
+    ])
+    const { ctx, agent, backend } = await harness(adapter)
+    const idle = waitForIdle(ctx, agent)
+    send(agent, 'click both points')
+    await idle
+    const clicks = backend.actions.filter(action => action.type === 'click')
+    expect(clicks.map(action => action.type === 'click' ? action.input.position : undefined)).toEqual([
+      [100, 100],
+      [200, 300],
+    ])
+    const results = agent.session.snapshotEvents().filter(event => event.type === 'tool/result')
+    expect(results).toHaveLength(2)
+    expect(results.every(event => event.data.message.content.some(block =>
+      block.type === 'tool-result' && block.isError !== true
+      && block.content.some(part => part.type === 'image'),
+    ))).toBe(true)
+    expect(adapter.requests).toHaveLength(2)
+    const followUpResults = adapter.requests[1]?.messages.flatMap(message =>
+      message.content.filter(block => block.type === 'tool-result'),
+    ) ?? []
+    expect(followUpResults).toHaveLength(2)
+    expect(followUpResults.every(block =>
+      block.type === 'tool-result' && block.content.some(part => part.type === 'image'),
     )).toBe(true)
   }, 30_000)
 

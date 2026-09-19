@@ -242,7 +242,7 @@ export function applyComputerUse(
     name: 'click',
     description:
       'Click at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. '
-      + 'Use left (default) or right button; count 2 is a double-click. Exclusive: do not combine with other GUI tools in the same step.',
+      + 'Use left (default) or right button; count 2 is a double-click.',
     parameters: {
       screen_index: { type: 'integer', required: true, description: '0 for the attached frontmost-window screenshot.' },
       position: {
@@ -314,7 +314,7 @@ export function applyComputerUse(
   ctx.tools.register(defineTool({
     name: 'input_text',
     description:
-      'Click to focus a 0–1000 position on the attached frontmost-window screenshot, type text, optionally replace existing content and press Enter, then return the post-action screenshot. Exclusive.',
+      'Click to focus a 0–1000 position on the attached frontmost-window screenshot, type text, optionally replace existing content and press Enter, then return the post-action screenshot.',
     parameters: {
       screen_index: { type: 'integer', required: true, description: '0 for the attached frontmost-window screenshot.' },
       position: {
@@ -390,7 +390,7 @@ export function applyComputerUse(
   ctx.tools.register(defineTool({
     name: 'scroll',
     description:
-      'Scroll up or down at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. scroll_level is 1–10. Exclusive.',
+      'Scroll up or down at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. scroll_level is 1–10.',
     parameters: {
       screen_index: { type: 'integer', required: true, description: '0 for the attached frontmost-window screenshot.' },
       position: {
@@ -469,7 +469,7 @@ export function applyComputerUse(
     name: 'hotkey',
     description:
       'Press a key combination on the desktop, then return the post-action screenshot. '
-      + 'System screenshot shortcuts (Cmd/Win+Shift+3/4/5) are rejected. Exclusive.',
+      + 'System screenshot shortcuts (Cmd/Win+Shift+3/4/5) are rejected.',
     parameters: {
       keys: {
         type: 'array',
@@ -518,7 +518,7 @@ export function applyComputerUse(
     description:
       'Pause 1 second, then return a fresh frontmost-window screenshot without moving the pointer. '
       + 'Use for page refresh, a loader, or a control that has not appeared yet. '
-      + 'Do not use for code_agent. Exclusive.',
+      + 'Do not use for code_agent.',
     parameters: {},
     output: {
       schema: {
@@ -557,7 +557,7 @@ export function applyComputerUse(
       'Pause 10, 30, 60, or 120 seconds, then return a fresh frontmost-window screenshot without moving the pointer. '
       + 'Only for a visible long job such as a download, installer, export, or on-screen generation. '
       + 'Pick the smallest wait_seconds that covers remaining progress; 120 only when the screenshot already shows a minutes-long job. '
-      + 'Ordinary loading uses wait. Do not use for code_agent. Exclusive.',
+      + 'Ordinary loading uses wait. Do not use for code_agent.',
     parameters: {
       wait_seconds: {
         type: 'integer',
@@ -603,7 +603,7 @@ export function applyComputerUse(
     description:
       'Save the current frontmost-window screenshot to the user Desktop and copy it to the clipboard. '
       + 'Returns the saved file path. Do not use this to see the screen — the first user turn and every GUI result already attach the frontmost window. '
-      + 'Use when the user asked for a screenshot file or needs the image on the clipboard to paste. Exclusive.',
+      + 'Use when the user asked for a screenshot file or needs the image on the clipboard to paste.',
     parameters: {},
     output: {
       schema: {
@@ -652,7 +652,7 @@ export function applyComputerUse(
     name: 'long_press',
     description:
       'Press and hold the left button at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. '
-      + 'duration_seconds defaults to 3 and must be 1–10. Exclusive.',
+      + 'duration_seconds defaults to 3 and must be 1–10.',
     parameters: {
       screen_index: { type: 'integer', required: true, description: '0 for the attached frontmost-window screenshot.' },
       position: {
@@ -719,7 +719,7 @@ export function applyComputerUse(
   ctx.tools.register(defineTool({
     name: 'drag',
     description:
-      'Drag from a start 0–1000 position to an end 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. Exclusive.',
+      'Drag from a start 0–1000 position to an end 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot.',
     parameters: {
       start_screen_index: {
         type: 'integer',
@@ -802,7 +802,7 @@ export function applyComputerUse(
     description:
       'Open the default browser, or a full http(s) URL in it, then return the post-action screenshot. '
       + 'This is the user-visible browser. Do not use web_fetch as a substitute. '
-      + 'Chinese in path or query must be plain text, never CJK percent-encoding such as %E5... / %E8.... Exclusive.',
+      + 'Chinese in path or query must be plain text, never CJK percent-encoding such as %E5... / %E8....',
     parameters: {
       url: {
         type: 'string',
@@ -848,7 +848,7 @@ export function applyComputerUse(
     description:
       'Open a folder in Finder, open a file with its default app, or reveal a file in Finder, then return the post-action screenshot. '
       + 'Omit path to open the Desktop. Use reveal_only only to select a file in Finder (Open With or rename/move). '
-      + 'Pass a real path; do not OCR one from the screenshot. Exclusive.',
+      + 'Pass a real path; do not OCR one from the screenshot.',
     parameters: {
       path: {
         type: 'string',
@@ -906,7 +906,7 @@ export function applyComputerUse(
     name: 'list_apps',
     description:
       'List running regular (Dock-visible) applications by display name, then return the current frontmost-window screenshot. '
-      + 'Use this when the attached window is the wrong app. Exclusive.',
+      + 'Use this when the attached window is the wrong app.',
     parameters: {},
     output: {
       schema: {
@@ -945,7 +945,7 @@ export function applyComputerUse(
     name: 'open_app',
     description:
       'Activate a running application or launch it by display name or bundle id, then return the post-action screenshot. '
-      + 'Use this when the attached window is the wrong app. Do not click the Dock. Exclusive.',
+      + 'Use this when the attached window is the wrong app. Do not click the Dock.',
     parameters: {
       name: {
         type: 'string',

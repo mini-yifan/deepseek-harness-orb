@@ -83,7 +83,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 | `code_agent_status` | 无 | 列出这条 Computer Use 对话的后台会话（数量、最新任务、cwd、running 或 idle） |
 | `code_agent_stop` | `session_id` | 取消该会话当前回合和已排队的追加；会话保持 idle，仍可续写 |
 
-十三个 GUI 工具都互斥运行。`presentCall` 为 generic。每次观察先给出 `<frontmost_app>`（窗口有标题时还有 `<frontmost_window>`；前台是 Finder/访达时还有 `<frontmost_folder>`；跳过 overlay 后没有剩余窗口时是 `<focus_note>`）。随后可选的屏幕信封标明序号 0 和该会话的点击空间：千分比 0–1000 且不带像素尺寸，或像素外加该附件的 WxH。图片句柄尺寸仍不是点击空间。没有可操作窗口时，观察只有这些标签——不附整桌面全景。
+十三个 GUI 工具的 HID 互斥：同一步里的兄弟调用按模型顺序执行，每次都重新截屏。`presentCall` 为 generic。每次观察先给出 `<frontmost_app>`（窗口有标题时还有 `<frontmost_window>`；前台是 Finder/访达时还有 `<frontmost_folder>`；跳过 overlay 后没有剩余窗口时是 `<focus_note>`）。随后可选的屏幕信封标明序号 0 和该会话的点击空间：千分比 0–1000 且不带像素尺寸，或像素外加该附件的 WxH。图片句柄尺寸仍不是点击空间。没有可操作窗口时，观察只有这些标签——不附整桌面全景。
 
 测试通过 `applyComputerUse(ctx, backend, config)` 注入假桌面，而不是 Config 上的 `driver` 钩子。
 
@@ -178,7 +178,7 @@ See: trust only the attached screenshot of the frontmost application on this dis
 
 Coordinates: the attached screenshot uses a 0–1000 space of that window. [0, 0] is the top-left of that image and [1000, 1000] is the bottom-right. x and y scale independently; do not treat the space as a square overlay. Pass position as [x, y] in that space together with screen_index 0. Encode x and y as fractions of this screenshot × 1000 (center x is 500, not a pixel x). Ignore pixel widths and any other image-handle dimensions. Do not send raw pixel coordinates.
 
-Step: take exactly one GUI action per tool call. After the call, the new screenshot is in the tool result; use that image for the next action.
+Step: you may emit several GUI tool calls in one step when every target is already visible in the latest screenshot and later calls do not need UI that earlier calls create. The host runs those calls in order. Each result includes its own post-action screenshot; after the step, use the last image for any action that depends on what changed. Do not batch a click, type, or hotkey whose target appears only after an earlier action in the same step (menu, dialog, new page, loader).
 
 Do not click or type into a target you cannot see. Do not OCR file paths from the screenshot. When a file or folder path is known, call open_in_finder with that path; do not click Desktop icons to open it. When <frontmost_folder> is present, copy that path; otherwise use bash with real paths. When <focus_note> is present, call open_app to bring the target application forward if the next step needs a window. Do not click chrome that is not in the image.
 

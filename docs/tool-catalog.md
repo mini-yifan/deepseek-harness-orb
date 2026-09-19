@@ -2079,7 +2079,7 @@ All nine tools are scoped to implicit Team Leads and durable teammates. The ship
 
 ### `click`
 
-Click at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. Use left (default) or right button; count 2 is a double-click. Exclusive: do not combine with other GUI tools in the same step.
+Click at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. Use left (default) or right button; count 2 is a double-click.
 
 ```json
 {
@@ -2189,7 +2189,7 @@ Source: [`packages/experimental/tool-computer-use/src/code-agent.ts`](../package
 
 ### `drag`
 
-Drag from a start 0–1000 position to an end 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. Exclusive.
+Drag from a start 0–1000 position to an end 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot.
 
 ```json
 {
@@ -2231,7 +2231,7 @@ Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/ex
 
 ### `hotkey`
 
-Press a key combination on the desktop, then return the post-action screenshot. System screenshot shortcuts (Cmd/Win+Shift+3/4/5) are rejected. Exclusive.
+Press a key combination on the desktop, then return the post-action screenshot. System screenshot shortcuts (Cmd/Win+Shift+3/4/5) are rejected.
 
 ```json
 {
@@ -2255,7 +2255,7 @@ Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/ex
 
 ### `input_text`
 
-Click to focus a 0–1000 position on the attached frontmost-window screenshot, type text, optionally replace existing content and press Enter, then return the post-action screenshot. Exclusive.
+Click to focus a 0–1000 position on the attached frontmost-window screenshot, type text, optionally replace existing content and press Enter, then return the post-action screenshot.
 
 ```json
 {
@@ -2299,7 +2299,7 @@ Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/ex
 
 ### `list_apps`
 
-List running regular (Dock-visible) applications by display name, then return the current frontmost-window screenshot. Use this when the attached window is the wrong app. Exclusive.
+List running regular (Dock-visible) applications by display name, then return the current frontmost-window screenshot. Use this when the attached window is the wrong app.
 
 ```json
 {
@@ -2312,7 +2312,7 @@ Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/ex
 
 ### `long_press`
 
-Press and hold the left button at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. duration_seconds defaults to 3 and must be 1–10. Exclusive.
+Press and hold the left button at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. duration_seconds defaults to 3 and must be 1–10.
 
 ```json
 {
@@ -2346,7 +2346,7 @@ Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/ex
 
 ### `long_wait`
 
-Pause 10, 30, 60, or 120 seconds, then return a fresh frontmost-window screenshot without moving the pointer. Only for a visible long job such as a download, installer, export, or on-screen generation. Pick the smallest wait_seconds that covers remaining progress; 120 only when the screenshot already shows a minutes-long job. Ordinary loading uses wait. Do not use for code_agent. Exclusive.
+Pause 10, 30, 60, or 120 seconds, then return a fresh frontmost-window screenshot without moving the pointer. Only for a visible long job such as a download, installer, export, or on-screen generation. Pick the smallest wait_seconds that covers remaining progress; 120 only when the screenshot already shows a minutes-long job. Ordinary loading uses wait. Do not use for code_agent.
 
 ```json
 {
@@ -2373,7 +2373,7 @@ Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/ex
 
 ### `open_app`
 
-Activate a running application or launch it by display name or bundle id, then return the post-action screenshot. Use this when the attached window is the wrong app. Do not click the Dock. Exclusive.
+Activate a running application or launch it by display name or bundle id, then return the post-action screenshot. Use this when the attached window is the wrong app. Do not click the Dock.
 
 ```json
 {
@@ -2394,7 +2394,7 @@ Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/ex
 
 ### `open_in_browser`
 
-Open the default browser, or a full http(s) URL in it, then return the post-action screenshot. This is the user-visible browser. Do not use web_fetch as a substitute. Chinese in path or query must be plain text, never CJK percent-encoding such as %E5... / %E8.... Exclusive.
+Open the default browser, or a full http(s) URL in it, then return the post-action screenshot. This is the user-visible browser. Do not use web_fetch as a substitute. Chinese in path or query must be plain text, never CJK percent-encoding such as %E5... / %E8....
 
 ```json
 {
@@ -2412,7 +2412,7 @@ Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/ex
 
 ### `open_in_finder`
 
-Open a folder in Finder, open a file with its default app, or reveal a file in Finder, then return the post-action screenshot. Omit path to open the Desktop. Use reveal_only only to select a file in Finder (Open With or rename/move). Pass a real path; do not OCR one from the screenshot. Exclusive.
+Open a folder in Finder, open a file with its default app, or reveal a file in Finder, then return the post-action screenshot. Omit path to open the Desktop. Use reveal_only only to select a file in Finder (Open With or rename/move). Pass a real path; do not OCR one from the screenshot.
 
 ```json
 {
@@ -2435,7 +2435,7 @@ Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/ex
 
 ### `screenshot`
 
-Save the current frontmost-window screenshot to the user Desktop and copy it to the clipboard. Returns the saved file path. Do not use this to see the screen — the first user turn and every GUI result already attach the frontmost window. Use when the user asked for a screenshot file or needs the image on the clipboard to paste. Exclusive.
+Save the current frontmost-window screenshot to the user Desktop and copy it to the clipboard. Returns the saved file path. Do not use this to see the screen — the first user turn and every GUI result already attach the frontmost window. Use when the user asked for a screenshot file or needs the image on the clipboard to paste.
 
 ```json
 {
@@ -2448,7 +2448,7 @@ Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/ex
 
 ### `scroll`
 
-Scroll up or down at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. scroll_level is 1–10. Exclusive.
+Scroll up or down at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. scroll_level is 1–10.
 
 ```json
 {
@@ -2491,7 +2491,7 @@ Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/ex
 
 ### `wait`
 
-Pause 1 second, then return a fresh frontmost-window screenshot without moving the pointer. Use for page refresh, a loader, or a control that has not appeared yet. Do not use for code_agent. Exclusive.
+Pause 1 second, then return a fresh frontmost-window screenshot without moving the pointer. Use for page refresh, a loader, or a control that has not appeared yet. Do not use for code_agent.
 
 ```json
 {

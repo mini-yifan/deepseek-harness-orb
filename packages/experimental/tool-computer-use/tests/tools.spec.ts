@@ -628,6 +628,11 @@ describe('computer-use tools', () => {
     expect(POLICY).toContain('Ignore pixel widths and any other image-handle dimensions')
     expect(POLICY).not.toContain('downscale')
     expect(POLICY).not.toContain('multiply')
+    expect(POLICY).toContain('you may emit several GUI tool calls in one step')
+    expect(POLICY).toContain('The host runs those calls in order')
+    expect(POLICY).toContain('Each result includes its own post-action screenshot')
+    expect(POLICY).toContain('Do not batch a click, type, or hotkey')
+    expect(POLICY).not.toContain('exactly one GUI action')
     expect(POLICY).toContain('call open_in_finder with that path')
     expect(POLICY).toContain('Open a site in the user\'s visible browser with open_in_browser')
     expect(POLICY).toContain('Do not use bash open as a substitute')
@@ -646,6 +651,10 @@ describe('computer-use tools', () => {
       'When a user message starts with "Desktop selection. Answer in this chat only. Do not call GUI tools or code_agent."',
     )
     expect(POLICY).toContain('Do not call GUI tools, code_agent, or screenshot on that turn')
+    for (const schema of ctx.tools.schemas()) {
+      expect(schema.description, schema.name).not.toContain('Exclusive')
+      expect(schema.description, schema.name).not.toContain('do not combine')
+    }
   })
 
   it('unregisters tools and the policy on fiber disposal', async () => {
@@ -828,8 +837,12 @@ describe('computer-use session coordinate modes', () => {
     const pixelClick = pixelAssembly.tools.find(tool => tool.name === 'click')
     const pixelDrag = pixelAssembly.tools.find(tool => tool.name === 'drag')
     expect(JSON.stringify(milliClick)).toContain('0–1000 fraction of that screenshot, not pixels')
+    expect(milliClick?.description).not.toContain('Exclusive')
+    expect(milliClick?.description).not.toContain('do not combine')
     expect(JSON.stringify(pixelClick)).toContain('pixel columns and rows of the attached screenshot')
     expect(JSON.stringify(pixelClick)).not.toContain('0–1000 fraction of that screenshot, not pixels')
+    expect(pixelClick?.description).not.toContain('Exclusive')
+    expect(pixelClick?.description).not.toContain('do not combine')
     expect(JSON.stringify(pixelDrag)).toContain('start as pixel columns')
     expect(JSON.stringify(pixelDrag)).toContain('end as pixel columns')
   })
