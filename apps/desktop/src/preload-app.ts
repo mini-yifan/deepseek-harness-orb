@@ -6,6 +6,7 @@ import {
   type DshDesktopAppApi,
   type DshDesktopStartupApi,
   type OrbAvatarWriteResult,
+  type OrbMillifractionWriteResult,
   type OrbSettingsSnapshot,
 } from './ipc.ts'
 import type { DesktopBackendState } from './backend-controller.ts'
@@ -42,6 +43,9 @@ const app: DshDesktopAppApi = {
     ),
     setSelectionEnabled: (enabled: boolean) => (
       ipcRenderer.invoke(DESKTOP_IPC.orbSetSelectionEnabled, enabled) as Promise<void>
+    ),
+    setMillifractionEnabled: (enabled: boolean) => (
+      ipcRenderer.invoke(DESKTOP_IPC.orbSetMillifractionEnabled, enabled) as Promise<OrbMillifractionWriteResult>
     ),
   },
 }

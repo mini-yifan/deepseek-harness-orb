@@ -66,7 +66,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 
 | 工具 | 参数 | 动作之后 |
 |---|---|---|
-| `click` | `screen_index`（0）、`position: [x,y]`（0–1000）、可选 `button`（`left`/`right`）、可选 `count`（1 或 2） | 点击、等待、重新截屏 |
+| `click` | `screen_index`（0）、`position: [x,y]`（默认 0–1000 千分比；overlay 像素会话使用附件 WxH）、可选 `button`（`left`/`right`）、可选 `count`（1 或 2） | 点击、等待、重新截屏 |
 | `input_text` | `screen_index`、`position`、`text`、可选 `replace`、可选 `submit` | 点击聚焦、输入、可选 Enter、等待、重新截屏 |
 | `scroll` | `screen_index`、`position`、`direction`（`up`/`down`）、`scroll_level` 1–10 | 滚动、等待、重新截屏 |
 | `hotkey` | `keys: string[]` | 组合键；系统截屏快捷键会被拒绝；等待、重新截屏 |
@@ -83,7 +83,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 | `code_agent_status` | 无 | 列出这条 Computer Use 对话的后台会话（数量、最新任务、cwd、running 或 idle） |
 | `code_agent_stop` | `session_id` | 取消该会话当前回合和已排队的追加；会话保持 idle，仍可续写 |
 
-十三个 GUI 工具都互斥运行。`presentCall` 为 generic。每次观察先给出 `<frontmost_app>`（窗口有标题时还有 `<frontmost_window>`；前台是 Finder/访达时还有 `<frontmost_folder>`；跳过 overlay 后没有剩余窗口时是 `<focus_note>`）。随后可选的屏幕信封标明序号 0 和该窗口的 0–1000 坐标空间。信封不含像素尺寸、缩放倍率或截图文件路径。没有可操作窗口时，观察只有这些标签——不附整桌面全景。
+十三个 GUI 工具都互斥运行。`presentCall` 为 generic。每次观察先给出 `<frontmost_app>`（窗口有标题时还有 `<frontmost_window>`；前台是 Finder/访达时还有 `<frontmost_folder>`；跳过 overlay 后没有剩余窗口时是 `<focus_note>`）。随后可选的屏幕信封标明序号 0 和该会话的点击空间：千分比 0–1000 且不带像素尺寸，或像素外加该附件的 WxH。图片句柄尺寸仍不是点击空间。没有可操作窗口时，观察只有这些标签——不附整桌面全景。
 
 测试通过 `applyComputerUse(ctx, backend, config)` 注入假桌面，而不是 Config 上的 `driver` 钩子。
 
@@ -105,7 +105,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 
 首帧附件使用 `agent/pre-step`：监听器始终 `await next()`，然后在已领取批次包含 `source.kind === 'user'` 消息且路由声明图片输入时，追加 `form: 'notice'` 的插件 `user` 通知，除非该用户文本以 `Desktop selection. Answer in this chat only. Do not call GUI tools or code_agent.` 开头。`agent.inject()` 只会落在下一步。
 
-Desktop 上新建 `code_agent` 会在 `session.create` 之后、`session.prompt` 之前读取可选的 `ctx.get('orbCodeAgentModel')`，并传入 `saveAsDefault: false`。按 `session_id` 续写不会。本包不导入 Desktop Host。
+Desktop 上新建 `code_agent` 会在 `session.create` 之后、`session.prompt` 之前读取可选的 `ctx.get('orbCodeAgentModel')`，并传入 `saveAsDefault: false`。按 `session_id` 续写不会。空白 overlay Computer Use 新建会在 `agent/created` 读取可选的 `ctx.get('orbCoordinateMode')` 并追加 `'computer-use/coordinate-mode'`；已有 `session/end-seed` 或已有编码事件的日志不动。Headless/Web 不提供该服务，保持千分比。本包不导入 Desktop Host。
 
 ### 源码地图
 
@@ -125,8 +125,9 @@ Desktop 上新建 `code_agent` 会在 `session.create` 之后、`session.prompt`
 | [`src/wait-args.ts`](src/wait-args.ts) | 固定 1 秒的 `wait` 与 `long_wait` 的 10/30/60/120 分档 |
 | [`src/screenshot.ts`](src/screenshot.ts) | `screenshot` 的桌面文件名与唯一路径写入 |
 | [`src/overlay-guard.ts`](src/overlay-guard.ts) | 可选的 Desktop overlay 遮蔽：把 listScreens、capture、inspect、HID、`open_app` 与 `withGuiTurn` 包进 `wrapDesktopBackend`；`list_apps` / `open_in_browser` / `open_in_finder` / `copyImageToClipboard` 不包 |
+| [`src/coordinate-mode.ts`](src/coordinate-mode.ts) | 按会话的千分比/像素打戳、投影、观察栅格缓存，以及像素工具 schema 改写 |
 | [`presets/computer-use/`](presets/computer-use/) | Computer Use agent preset：Shell、网页、GUI 工具、`code_agent` 一族、`ask_user_question`、压缩 |
-| — | 不发布运行时不变式伴生入口，因为本插件不引入新的会话事件；观察结果走现有的 `user/message` 与 `tool/result`。 |
+| — | 不发布运行时不变式伴生入口：assemble、execute 与信封都读本条会话日志，独立观察无法分叉。 |
 
 </details>
 
@@ -149,7 +150,8 @@ Desktop 上新建 `code_agent` 会在 `session.create` 之后、`session.prompt`
 - [Computer Use 应用窗口观察](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-app-window-observation.zh.md) — 前台应用族窗口并集与始终区域捕获。
 - [Computer Use 瞬时窗口观察](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-transient-window-observation.zh.md) — 该并集矩形的区域 helper。
 - [Computer Use 右键菜单观察](../../../.agents/notes/implemented/bug-fix/2026-09-16-computer-use-context-menu-observation.zh.md) — 先等待再 inspect，以及 recapture 期间的 overlay input 遮蔽。
-- [Computer Use 0–1000 比例坐标](../../../.agents/notes/implemented/bug-fix/2026-09-15-computer-use-fraction-coordinates.zh.md) — 模型侧 0–1000 是可见截图上的比例，不是捕获像素。
+- [Computer Use 0–1000 比例坐标](../../../.agents/notes/implemented/bug-fix/2026-09-15-computer-use-fraction-coordinates.zh.md) — 默认千分比编码：模型侧 0–1000 是可见截图上的比例，不是捕获像素。
+- [Overlay 会话上的 Computer Use 千分比与像素坐标模式](../../../.agents/notes/implemented/feature/2026-09-19-computer-use-session-coordinate-modes.zh.md) — 按会话的点击编码、Desktop 确认后创建，以及像素附件 WxH。
 - [图片句柄省略请求预览像素](../../../.agents/notes/implemented/bug-fix/2026-09-15-omit-request-preview-handle-dimensions.zh.md) — 共用图片句柄只写身份，不写请求预览宽高。
 - [桌面悬浮球](../../../.agents/notes/implemented/feature/2026-09-14-desktop-floating-orb.zh.md) — macOS overlay、runtime extra，以及一等 `code_agent` 会话。
 - [悬浮球 Agent 模型菜单](../../../.agents/notes/implemented/feature/2026-09-17-orb-agent-model-menus.zh.md) — overlay 与后台模型持久化、`saveAsDefault: false`、仅新建时应用到 `code_agent`。
@@ -165,7 +167,7 @@ Desktop 上新建 `code_agent` 会在 `session.create` 之后、`session.prompt`
 
 #### 模型看到什么
 
-插件挂载期间，每次请求都会组装一段稳定的 `tool:computer-use` 分节。下面的文本就是完整策略。
+插件挂载期间，每次请求都会组装一段稳定的 `tool:computer-use` 分节。Overlay 像素会话会换成像素 Coordinates 段落；下面的千分比文本是 Headless/Web 默认。
 
 ##### Computer Use policy
 
@@ -249,7 +251,7 @@ When a user message starts with "Desktop selection. Answer in this chat only. Do
 - **没有逐次点击批准** — 安装或 patch 插件就是同意门槛；视觉循环不能在每个动作上询问。
 - **宿主 chrome 不是最前窗口时不会进图** — Web 窗口只在它是最前窗口时出现。Desktop 主窗口在 overlay 跳过后仍可被截到。macOS overlay 由 ScreenCaptureKit 的 exclude id 校验从 Computer Use 截图中省略（display exclude 加裁切），并在 HID 突发、`open_app` 及其 recapture 期间通过带确认的 overlay-guard IPC 点击穿透。前台检查与 `listScreens` 都跳过这些 overlay 窗口 id，因此主窗口可以出现在 `<frontmost_app>` 里。
 - **输入会使用字符串剪贴板** — `input_text` 通过 Cmd+V 粘贴，并在之后恢复先前的字符串剪贴板。其他剪贴板类型不会被恢复。`screenshot` 会用捕获的图片替换剪贴板，不恢复先前内容。
-- **Retina 与附件尺寸** — backing scale 与请求栅格可能和捕获栅格不同；对可见截图使用 0–1000 比例坐标。
+- **Retina 与附件尺寸** — backing scale 与请求栅格可能和捕获栅格不同；千分比会话对可见截图使用 0–1000 比例坐标。Overlay 像素会话按 Computer Use 信封上该次观察的附件 WxH 相除。
 - **固定等待** — 动作后延迟是 inspect 与截取像素之前的 `postActionWaitMs`；没有像素差 stall。
 - **没有套索或 `manage_files`** — GUI 覆盖是 click、type、scroll、hotkey、wait、long_wait、screenshot、长按、拖拽、open-in-browser、open-in-finder、list-apps 与 open-app。切换应用用 `open_app`，不要去点 Dock。后台文档与代码走 `code_agent`。
 - **`code_agent` 通知需要活的 Agent** — execute 仍在入队接受后返回。找不到活的 Code agent、Computer Use 调用方已销毁、或 Code 会话再也不回到空闲，都会丢掉通知。`code_agent_stop` 会中止该区间的监视。后台 Code agent 自动允许批准并自动应答向用户提问；Computer Use 自己仍在球上显示提问。策略拦不住仍然调用 `wait` 或 `long_wait` 的模型。

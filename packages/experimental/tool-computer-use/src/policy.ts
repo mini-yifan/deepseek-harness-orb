@@ -3,14 +3,19 @@
  * @module @deepseek-ai/dsh-experimental-tool-computer-use/src/policy
  */
 
-/**
- * Stable Computer Use policy text assembled into every request while this plugin is mounted.
- */
-export const POLICY = `Computer Use lets you see the current frontmost application window and operate the GUI.
+import type { CoordinateMode } from './coordinate-mode.ts'
+
+const POLICY_BEFORE_COORDINATES = `Computer Use lets you see the current frontmost application window and operate the GUI.
 
 See: trust only the attached screenshot of the frontmost application on this display for windows, buttons, and on-screen text. The image includes that app's open menus, popovers, and panels. It does not include the Dock, menu bar, other applications (except where they overlap this app's windows), or other displays. Do not assume UI that is not visible in the latest image. You may use observation tags <frontmost_app>, <frontmost_window>, <frontmost_folder>, and <focus_note> as OS metadata.
 
-Coordinates: the attached screenshot uses a 0–1000 space of that window. [0, 0] is the top-left of that image and [1000, 1000] is the bottom-right. x and y scale independently; do not treat the space as a square overlay. Pass position as [x, y] in that space together with screen_index 0. Encode x and y as fractions of this screenshot × 1000 (center x is 500, not a pixel x). Ignore pixel widths and any other image-handle dimensions. Do not send raw pixel coordinates.
+`
+
+const MILLIFRACTION_COORDINATES = 'Coordinates: the attached screenshot uses a 0–1000 space of that window. [0, 0] is the top-left of that image and [1000, 1000] is the bottom-right. x and y scale independently; do not treat the space as a square overlay. Pass position as [x, y] in that space together with screen_index 0. Encode x and y as fractions of this screenshot × 1000 (center x is 500, not a pixel x). Ignore pixel widths and any other image-handle dimensions. Do not send raw pixel coordinates.'
+
+const PIXEL_COORDINATES = 'Coordinates: the attached screenshot uses pixel columns and rows of that image. [0, 0] is the top-left pixel. Pass position as [x, y] in that pixel space together with screen_index 0. Read attached_size on the latest observation envelope as width×height of this screenshot; x runs 0 to that width and y runs 0 to that height. Do not send 0–1000 fractions. Ignore image-handle dimensions that are not on the Computer Use envelope.'
+
+const POLICY_AFTER_COORDINATES = `
 
 Step: take exactly one GUI action per tool call. After the call, the new screenshot is in the tool result; use that image for the next action.
 
@@ -50,3 +55,18 @@ Call code_agent_status when the user asks how many background tasks there are, w
 When a plugin notice reports that a Code agent session finished, tell the user which background task completed and what it produced.
 
 When a user message starts with "Desktop selection. Answer in this chat only. Do not call GUI tools or code_agent.", answer in this chat only. Do not call GUI tools, code_agent, or screenshot on that turn.`
+
+/**
+ * Computer Use policy for one session encoding.
+ * @param mode - millifraction 0–1000 or attached-raster pixels.
+ * @returns the assembled policy section text.
+ */
+export function policyFor(mode: CoordinateMode): string {
+  return `${POLICY_BEFORE_COORDINATES}${mode === 'pixel' ? PIXEL_COORDINATES : MILLIFRACTION_COORDINATES}${POLICY_AFTER_COORDINATES}`
+}
+
+/**
+ * Stable millifraction Computer Use policy text. Assemblies without an agent
+ * and Headless/Web sessions without a coordinate-mode event use this text.
+ */
+export const POLICY = policyFor('millifraction')

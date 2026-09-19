@@ -204,6 +204,7 @@ it('creates a Computer Use session on dsh_orb and sends from the overlay', async
       onOverlayModel: () => () => {},
       onSelectionPrompt: () => () => {},
       onSelectionAttach: () => () => {},
+      onCreateSession: () => () => {},
     },
   }
   Object.defineProperty(dom.window, 'dshDesktop', { value: api })
@@ -361,6 +362,7 @@ it('collapses then moves by the ball grab offset instead of the window origin', 
       onOverlayModel: () => () => {},
       onSelectionPrompt: () => () => {},
       onSelectionAttach: () => () => {},
+      onCreateSession: () => () => {},
     },
   }
   Object.defineProperty(dom.window, 'dshDesktop', { value: api })
@@ -465,6 +467,7 @@ async function mountPointerOverlay(options?: { dark?: boolean }) {
       onOverlayModel: () => () => {},
       onSelectionPrompt: () => () => {},
       onSelectionAttach: () => () => {},
+      onCreateSession: () => () => {},
     },
   }
   Object.defineProperty(dom.window, 'dshDesktop', { value: api })
@@ -769,6 +772,7 @@ it('lists orb Computer Use chats and reopens the selected session', async () => 
       onOverlayModel: () => () => {},
       onSelectionPrompt: () => () => {},
       onSelectionAttach: () => () => {},
+      onCreateSession: () => () => {},
     },
   }
   Object.defineProperty(dom.window, 'dshDesktop', { value: api })
@@ -817,6 +821,17 @@ it('lists orb Computer Use chats and reopens the selected session', async () => 
       const request = (call.payload as { request?: { sessionId?: string } }).request
       return request?.sessionId === 'session-old'
     })).toBe(true)
+    expect(calls.find((call) => {
+      if (call.method !== 'session/create') return false
+      const request = (call.payload as { request?: { sessionId?: string } }).request
+      return request?.sessionId === 'session-old'
+    })?.payload).toEqual({
+      request: {
+        sessionId: 'session-old',
+        agentPreset: 'computer-use',
+        workspaceId: 'ws-orb',
+      },
+    })
     const prompt = document.querySelector<HTMLInputElement>('#prompt')
     if (prompt === null) throw new Error('missing prompt')
     prompt.value = 'Scroll down'
@@ -936,6 +951,7 @@ async function mountQuestionOverlay() {
         onOverlayModel: () => () => {},
         onSelectionPrompt: () => () => {},
         onSelectionAttach: () => () => {},
+        onCreateSession: () => () => {},
       },
     },
   })
@@ -1251,6 +1267,7 @@ it('expands and session/prompts a Desktop selection-toolbar translate message', 
         return () => {}
       },
       onSelectionAttach: () => () => {},
+      onCreateSession: () => () => {},
     },
   }
   Object.defineProperty(dom.window, 'dshDesktop', { value: api })
@@ -1359,6 +1376,7 @@ it('attaches selected text to the composer until the first send or dismiss', asy
         selectionAttach = listener
         return () => {}
       },
+      onCreateSession: () => () => {},
     },
   }
   Object.defineProperty(dom.window, 'dshDesktop', { value: api })
@@ -1468,6 +1486,7 @@ it('places an attached selection chip below the input when the panel expands dow
           selectionAttach = listener
           return () => {}
         },
+        onCreateSession: () => () => {},
       },
     },
   })
@@ -1543,6 +1562,7 @@ it('applies a live overlay model change without writing the Agent default', asyn
         },
         onSelectionPrompt: () => () => {},
         onSelectionAttach: () => () => {},
+        onCreateSession: () => () => {},
       },
     },
   })
@@ -1574,6 +1594,87 @@ it('applies a live overlay model change without writing the Agent default', asyn
         saveAsDefault: false,
       },
     })
+  } finally { dom.window.close() }
+})
+
+it('creates a blank overlay session from Host New IPC without selectModel-as-encoding', async () => {
+  const html = readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8')
+  const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'dsh-app://shell/floating.html' })
+  const calls: { method: string; payload: unknown }[] = []
+  const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+    if (isRemoteStream(_input)) return hangingStreamResponse(init?.signal)
+    const body = JSON.parse(String(init?.body)) as {
+      rpcId: string
+      method: string
+      payload: { args: Record<string, unknown> }
+    }
+    calls.push({ method: body.method, payload: body.payload.args })
+    let value: unknown = {}
+    if (body.method === 'workspace/create') {
+      value = { workspace: { workspaceId: 'ws-orb' }, created: true }
+    }
+    if (body.method === 'session/create') {
+      const creates = calls.filter(call => call.method === 'session/create').length
+      value = {
+        sessionId: creates === 1 ? 'session-orb' : 'session-new',
+        agentPreset: 'computer-use',
+      }
+    }
+    if (body.method === 'session/modelCatalog') {
+      value = { groups: [{ id: 'deepseek-official', models: [{ id: 'deepseek-flash' }] }] }
+    }
+    if (body.method === 'session/list') {
+      value = { items: [{ sessionId: 'session-orb', running: false, projections: { asOfSeq: 0 } }] }
+    }
+    if (body.method === 'session/selectModel') value = {}
+    return rpcResponse(body.rpcId, value)
+  })
+  Object.defineProperty(dom.window, 'fetch', { value: fetchMock })
+  Object.defineProperty(dom.window, 'crypto', { value: globalThis.crypto })
+  const setSessionId = vi.fn()
+  let createListener: (() => void) | undefined
+  Object.defineProperty(dom.window, 'dshDesktop', {
+    value: {
+      locale: async () => resolveDesktopLocale('en'),
+      backend: { status: async () => ({ phase: 'ready' }), subscribe: vi.fn() },
+      floating: {
+        sessionId: async () => undefined,
+        setSessionId,
+        move: vi.fn(),
+        clamp: vi.fn(),
+        setExpanded: vi.fn(async (expanded: boolean) => ({
+          expanded, horizontal: 'left', vertical: 'up',
+        })),
+        orbWorkspacePath: async () => '/tmp/dsh_orb',
+        setSessionRunning: vi.fn(),
+        overlayModel: async () => ({
+          provider: 'deepseek-official',
+          model: 'deepseek-flash',
+          reasoningEffort: 'max',
+        }),
+        overlayPermission: async () => 'danger-full-access',
+        setOverlayPermission: vi.fn(),
+        onOverlayModel: () => () => {},
+        onSelectionPrompt: () => () => {},
+        onSelectionAttach: () => () => {},
+        onCreateSession(listener: () => void) {
+          createListener = listener
+          return () => {}
+        },
+      },
+    },
+  })
+  try {
+    runInContext(readFileSync(new URL('../renderer/floating.js', import.meta.url), 'utf8'), dom.getInternalVMContext())
+    await expect.poll(() => setSessionId.mock.calls).toEqual([['session-orb']])
+    if (createListener === undefined) throw new Error('missing overlay create listener')
+    await createListener()
+    await expect.poll(() => setSessionId.mock.calls.at(-1)).toEqual(['session-new'])
+    const creates = calls.filter(call => call.method === 'session/create')
+    expect(creates.at(-1)?.payload).toEqual({
+      request: { agentPreset: 'computer-use', workspaceId: 'ws-orb' },
+    })
+    expect(calls.filter(call => call.method === 'session/selectModel').length).toBeGreaterThanOrEqual(2)
   } finally { dom.window.close() }
 })
 
@@ -1625,6 +1726,7 @@ it('sends from the overlay when Access IPC is missing', async () => {
         onOverlayModel: () => () => {},
         onSelectionPrompt: () => () => {},
         onSelectionAttach: () => () => {},
+        onCreateSession: () => () => {},
       },
     },
   })
@@ -1696,6 +1798,7 @@ it('applies a pushed custom avatar URL to the ball image', async () => {
         onOverlayModel: () => () => {},
         onSelectionPrompt: () => () => {},
         onSelectionAttach: () => () => {},
+        onCreateSession: () => () => {},
       },
     },
   })

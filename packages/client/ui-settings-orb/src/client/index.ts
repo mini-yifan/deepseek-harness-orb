@@ -27,7 +27,8 @@ export type {
   OrbCatalogModel, OrbModelCatalog, OrbModelProviderGroup, OrbSettingsState,
 } from './section-store.ts'
 export type {
-  DshDesktopAppApi, OrbAgentModelSelection, OrbAvatarWriteResult, OrbSettingsSnapshot,
+  DshDesktopAppApi, OrbAgentModelSelection, OrbAvatarWriteResult, OrbMillifractionWriteResult,
+  OrbSettingsSnapshot,
 } from './desktop-api.ts'
 
 /** Required services (cordis fiber inject). */
@@ -49,6 +50,7 @@ export function apply(ctx: ClientContext): void {
     setOverlayModel: selection => controller.setOverlayModel(selection),
     setBackgroundModel: selection => controller.setBackgroundModel(selection),
     setSelectionEnabled: enabled => controller.setSelectionEnabled(enabled),
+    setMillifractionEnabled: enabled => controller.setMillifractionEnabled(enabled),
   })
 
   ctx.slots.inject('settings.section', () => ctx.slots.register({

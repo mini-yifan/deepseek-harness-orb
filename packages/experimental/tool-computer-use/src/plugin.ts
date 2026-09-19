@@ -10,10 +10,22 @@ import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import type { GenericCallView } from '@deepseek-ai/dsh-tools'
+import type { GenericCallView, ToolExecution } from '@deepseek-ai/dsh-tools'
+import type { Session } from '@deepseek-ai/dsh-session'
 import type { CapturedScreen, ClickButton, DesktopBackend, DesktopForeground } from './backend.ts'
 import type { ResolvedComputerUseConfig } from './config.ts'
-import { assertAllowedHotkey, requireNormalizedPosition } from './coordinates.ts'
+import {
+  coordinateModeOf,
+  coordinateOutcome,
+  coordinatesRemain,
+  firstFrameNotice,
+  installCoordinateMode,
+  lastAttachedRaster,
+  rememberObservation,
+  toolsForCoordinateMode,
+  type CoordinateOutcome,
+} from './coordinate-mode.ts'
+import { assertAllowedHotkey, modelPositionToHid, requireNormalizedPosition, requirePixelPosition } from './coordinates.ts'
 import {
   requireBrowserUrl,
   requireLongPressDuration,
@@ -26,7 +38,7 @@ import {
   requireScreen,
   type ObservedScreen,
 } from './observe.ts'
-import { POLICY } from './policy.ts'
+import { policyFor } from './policy.ts'
 import { assertImageCapableRoute, routeAcceptsImages } from './route.ts'
 import { isDesktopSelectionTurn } from './selection-turn.ts'
 import { pairScreenshotFiles, writeDesktopScreenshots } from './screenshot.ts'
@@ -101,6 +113,16 @@ const FOREGROUND_FIELD = {
   },
 } as const
 
+const COORDINATE_FIELDS = {
+  coordinateMode: {
+    type: 'string',
+    required: true,
+    enum: ['millifraction', 'pixel'],
+  },
+  attachedWidth: { type: 'integer' },
+  attachedHeight: { type: 'integer' },
+} as const
+
 function genericExecute(title: string, rawInput: unknown): GenericCallView {
   return { card: 'generic', title, kind: 'execute', rawInput }
 }
@@ -109,21 +131,63 @@ function resultBlocks(
   intro: string,
   screens: readonly ObservedScreen[],
   foreground: DesktopForeground,
+  outcome: CoordinateOutcome,
 ): ContentBlock[] {
-  return [{ type: 'text', text: intro }, ...observationContent(screens, foreground)]
+  return [{ type: 'text', text: intro }, ...observationContent(screens, foreground, outcome.coordinateMode)]
+}
+
+function sessionOf(exec: ToolExecution): Session | undefined {
+  return exec.agent?.session
+}
+
+function validatedPosition(exec: ToolExecution, position: readonly number[]): [number, number] {
+  const session = sessionOf(exec)
+  const mode = coordinateModeOf(session)
+  if (mode === 'millifraction') return requireNormalizedPosition(position)
+  const attached = lastAttachedRaster(session)
+  if (attached === undefined) {
+    throw new Error('computer-use: pixel coordinates require an attached screenshot raster')
+  }
+  return requirePixelPosition(position, attached)
+}
+
+function hidPosition(exec: ToolExecution, position: readonly number[]): [number, number] {
+  const session = sessionOf(exec)
+  const mode = coordinateModeOf(session)
+  return modelPositionToHid(position, mode, mode === 'pixel' ? lastAttachedRaster(session) : undefined)
+}
+
+function observedFields(
+  session: Session | undefined,
+  observation: { screens: ObservedScreen[]; foreground: DesktopForeground },
+): {
+  screens: ObservedScreen[]
+  foreground: DesktopForeground
+} & CoordinateOutcome {
+  return {
+    screens: observation.screens,
+    foreground: observation.foreground,
+    ...coordinateOutcome(session, observation.screens),
+  }
 }
 
 async function recapture(
   ctx: Context,
   backend: DesktopBackend,
-  signal: AbortSignal,
+  exec: ToolExecution,
   settleMs = 0,
 ): Promise<{
   screens: ObservedScreen[]
   foreground: DesktopForeground
   captures: CapturedScreen[]
 }> {
-  const observation = await observeDesktop(ctx, backend, signal, { settleMs })
+  const session = sessionOf(exec)
+  const mode = coordinateModeOf(session)
+  const observation = await observeDesktop(ctx, backend, exec.signal, {
+    settleMs,
+    coordinateMode: mode,
+  })
+  rememberObservation(session, observation.screens)
   return {
     screens: [...observation.screens],
     foreground: compactForeground(observation.foreground),
@@ -146,8 +210,8 @@ function guiTurn<T>(
   return backend.withGuiTurn(run, signal)
 }
 
-function screenshotIntro(paths: readonly string[]): string {
-  return `Saved screenshot to ${paths[0]} and copied it to the clipboard. The image is ready to paste. Coordinates remain 0–1000.`
+function screenshotIntro(paths: readonly string[], outcome: CoordinateOutcome): string {
+  return `Saved screenshot to ${paths[0]} and copied it to the clipboard. The image is ready to paste. ${coordinatesRemain(outcome)}`
 }
 
 /**
@@ -161,10 +225,17 @@ export function applyComputerUse(
   backend: DesktopBackend,
   config: ResolvedComputerUseConfig,
 ): void {
+  installCoordinateMode(ctx)
   ctx.systemPrompt.section({
     name: 'tool:computer-use',
     order: POLICY_SECTION_ORDER,
-    text: POLICY,
+    text: context => policyFor(coordinateModeOf(context.agent?.session)),
+  })
+  ctx.on('system-prompt/assemble', async (_assembly, context, next) => {
+    const nextAssembly = await next()
+    const mode = coordinateModeOf(context.agent?.session)
+    if (mode === 'millifraction') return nextAssembly
+    return { ...nextAssembly, tools: toolsForCoordinateMode(nextAssembly.tools, mode) }
   })
 
   ctx.tools.register(defineTool({
@@ -202,14 +273,16 @@ export function applyComputerUse(
           position: { type: 'array', required: true, items: { type: 'number' } },
           button: { type: 'string', required: true, enum: ['left', 'right'] },
           count: { type: 'integer', required: true },
+          ...COORDINATE_FIELDS,
           screens: SCREENS_FIELD,
           foreground: FOREGROUND_FIELD,
         },
       },
       render: (_args, value) => resultBlocks(
-        `Clicked screen ${String(value.screenIndex)} at [${value.position.join(', ')}] (${value.button}, count ${String(value.count)}). Coordinates remain 0–1000.`,
+        `Clicked screen ${String(value.screenIndex)} at [${value.position.join(', ')}] (${value.button}, count ${String(value.count)}). ${coordinatesRemain(value)}`,
         value.screens,
         value.foreground,
+        value,
       ),
     },
     isConcurrencySafe: () => false,
@@ -219,21 +292,20 @@ export function applyComputerUse(
     }),
     async execute(args, exec) {
       await assertImageCapableRoute(ctx, exec)
-      const position = requireNormalizedPosition(args.position)
+      const position = validatedPosition(exec, args.position)
       const button: ClickButton = args.button === 'right' ? 'right' : 'left'
       const count: 1 | 2 = args.count === 2 ? 2 : 1
       return guiTurn(backend, exec.signal, async () => {
         const screens = await backend.listScreens(exec.signal)
         const screen = requireScreen(screens, args.screen_index)
-        await backend.click({ screen, position, button, count }, exec.signal)
-        const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
+        await backend.click({ screen, position: hidPosition(exec, position), button, count }, exec.signal)
+        const observation = await recapture(ctx, backend, exec, config.postActionWaitMs)
         return {
           screenIndex: args.screen_index,
           position,
           button,
           count,
-          screens: observation.screens,
-          foreground: observation.foreground,
+          ...observedFields(sessionOf(exec), observation),
         }
       })
     },
@@ -273,36 +345,43 @@ export function applyComputerUse(
           text: { type: 'string', required: true },
           replace: { type: 'boolean', required: true },
           submit: { type: 'boolean', required: true },
+          ...COORDINATE_FIELDS,
           screens: SCREENS_FIELD,
           foreground: FOREGROUND_FIELD,
         },
       },
       render: (_args, value) => resultBlocks(
-        `Typed on screen ${String(value.screenIndex)} at [${value.position.join(', ')}] (replace=${String(value.replace)}, submit=${String(value.submit)}). Coordinates remain 0–1000.`,
+        `Typed on screen ${String(value.screenIndex)} at [${value.position.join(', ')}] (replace=${String(value.replace)}, submit=${String(value.submit)}). ${coordinatesRemain(value)}`,
         value.screens,
         value.foreground,
+        value,
       ),
     },
     isConcurrencySafe: () => false,
     presentCall: args => genericExecute('Type text', { screen_index: args.screen_index, text: args.text }),
     async execute(args, exec) {
       await assertImageCapableRoute(ctx, exec)
-      const position = requireNormalizedPosition(args.position)
+      const position = validatedPosition(exec, args.position)
       const replace = args.replace ?? false
       const submit = args.submit ?? false
       return guiTurn(backend, exec.signal, async () => {
         const screens = await backend.listScreens(exec.signal)
         const screen = requireScreen(screens, args.screen_index)
-        await backend.typeText({ screen, position, text: args.text, replace, submit }, exec.signal)
-        const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
+        await backend.typeText({
+          screen,
+          position: hidPosition(exec, position),
+          text: args.text,
+          replace,
+          submit,
+        }, exec.signal)
+        const observation = await recapture(ctx, backend, exec, config.postActionWaitMs)
         return {
           screenIndex: args.screen_index,
           position,
           text: args.text,
           replace,
           submit,
-          screens: observation.screens,
-          foreground: observation.foreground,
+          ...observedFields(sessionOf(exec), observation),
         }
       })
     },
@@ -341,14 +420,16 @@ export function applyComputerUse(
           position: { type: 'array', required: true, items: { type: 'number' } },
           direction: { type: 'string', required: true, enum: ['up', 'down'] },
           scrollLevel: { type: 'integer', required: true },
+          ...COORDINATE_FIELDS,
           screens: SCREENS_FIELD,
           foreground: FOREGROUND_FIELD,
         },
       },
       render: (_args, value) => resultBlocks(
-        `Scrolled ${value.direction} on screen ${String(value.screenIndex)} at [${value.position.join(', ')}] (level ${String(value.scrollLevel)}). Coordinates remain 0–1000.`,
+        `Scrolled ${value.direction} on screen ${String(value.screenIndex)} at [${value.position.join(', ')}] (level ${String(value.scrollLevel)}). ${coordinatesRemain(value)}`,
         value.screens,
         value.foreground,
+        value,
       ),
     },
     isConcurrencySafe: () => false,
@@ -359,7 +440,7 @@ export function applyComputerUse(
     }),
     async execute(args, exec) {
       await assertImageCapableRoute(ctx, exec)
-      const position = requireNormalizedPosition(args.position)
+      const position = validatedPosition(exec, args.position)
       if (!Number.isInteger(args.scroll_level) || args.scroll_level < 1 || args.scroll_level > 10) {
         throw new Error('scroll_level must be an integer from 1 to 10')
       }
@@ -368,18 +449,17 @@ export function applyComputerUse(
         const screen = requireScreen(screens, args.screen_index)
         await backend.scroll({
           screen,
-          position,
+          position: hidPosition(exec, position),
           direction: args.direction,
           scrollLevel: args.scroll_level,
         }, exec.signal)
-        const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
+        const observation = await recapture(ctx, backend, exec, config.postActionWaitMs)
         return {
           screenIndex: args.screen_index,
           position,
           direction: args.direction,
           scrollLevel: args.scroll_level,
-          screens: observation.screens,
-          foreground: observation.foreground,
+          ...observedFields(sessionOf(exec), observation),
         }
       })
     },
@@ -404,14 +484,16 @@ export function applyComputerUse(
         additionalProperties: false,
         properties: {
           keys: { type: 'array', required: true, items: { type: 'string' } },
+          ...COORDINATE_FIELDS,
           screens: SCREENS_FIELD,
           foreground: FOREGROUND_FIELD,
         },
       },
       render: (_args, value) => resultBlocks(
-        `Pressed hotkey [${value.keys.join(', ')}]. Coordinates remain 0–1000.`,
+        `Pressed hotkey [${value.keys.join(', ')}]. ${coordinatesRemain(value)}`,
         value.screens,
         value.foreground,
+        value,
       ),
     },
     isConcurrencySafe: () => false,
@@ -422,11 +504,10 @@ export function applyComputerUse(
       assertAllowedHotkey(args.keys)
       return guiTurn(backend, exec.signal, async () => {
         await backend.hotkey({ keys: args.keys }, exec.signal)
-        const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
+        const observation = await recapture(ctx, backend, exec, config.postActionWaitMs)
         return {
           keys: args.keys,
-          screens: observation.screens,
-          foreground: observation.foreground,
+          ...observedFields(sessionOf(exec), observation),
         }
       })
     },
@@ -445,14 +526,16 @@ export function applyComputerUse(
         additionalProperties: false,
         properties: {
           waitSeconds: { type: 'number', required: true },
+          ...COORDINATE_FIELDS,
           screens: SCREENS_FIELD,
           foreground: FOREGROUND_FIELD,
         },
       },
       render: (_args, value) => resultBlocks(
-        `Waited ${String(value.waitSeconds)}s. Coordinates remain 0–1000.`,
+        `Waited ${String(value.waitSeconds)}s. ${coordinatesRemain(value)}`,
         value.screens,
         value.foreground,
+        value,
       ),
     },
     isConcurrencySafe: () => false,
@@ -460,11 +543,10 @@ export function applyComputerUse(
     async execute(_args, exec) {
       await assertImageCapableRoute(ctx, exec)
       await delay(WAIT_SECONDS * 1000, exec.signal)
-      const observation = await recapture(ctx, backend, exec.signal)
+      const observation = await recapture(ctx, backend, exec)
       return {
         waitSeconds: WAIT_SECONDS,
-        screens: observation.screens,
-        foreground: observation.foreground,
+        ...observedFields(sessionOf(exec), observation),
       }
     },
   }))
@@ -490,14 +572,16 @@ export function applyComputerUse(
         additionalProperties: false,
         properties: {
           waitSeconds: { type: 'number', required: true },
+          ...COORDINATE_FIELDS,
           screens: SCREENS_FIELD,
           foreground: FOREGROUND_FIELD,
         },
       },
       render: (_args, value) => resultBlocks(
-        `Waited ${String(value.waitSeconds)}s. Coordinates remain 0–1000.`,
+        `Waited ${String(value.waitSeconds)}s. ${coordinatesRemain(value)}`,
         value.screens,
         value.foreground,
+        value,
       ),
     },
     isConcurrencySafe: () => false,
@@ -506,11 +590,10 @@ export function applyComputerUse(
       await assertImageCapableRoute(ctx, exec)
       const waitSeconds = requireLongWaitSeconds(args.wait_seconds)
       await delay(waitSeconds * 1000, exec.signal)
-      const observation = await recapture(ctx, backend, exec.signal)
+      const observation = await recapture(ctx, backend, exec)
       return {
         waitSeconds,
-        screens: observation.screens,
-        foreground: observation.foreground,
+        ...observedFields(sessionOf(exec), observation),
       }
     },
   }))
@@ -529,21 +612,23 @@ export function applyComputerUse(
         properties: {
           paths: { type: 'array', required: true, items: { type: 'string' } },
           clipboard: { type: 'boolean', required: true },
+          ...COORDINATE_FIELDS,
           screens: SCREENS_FIELD,
           foreground: FOREGROUND_FIELD,
         },
       },
       render: (_args, value) => resultBlocks(
-        screenshotIntro(value.paths),
+        screenshotIntro(value.paths, value),
         value.screens,
         value.foreground,
+        value,
       ),
     },
     isConcurrencySafe: () => false,
     presentCall: () => genericExecute('Screenshot', {}),
     async execute(_args, exec) {
       await assertImageCapableRoute(ctx, exec)
-      const observation = await recapture(ctx, backend, exec.signal)
+      const observation = await recapture(ctx, backend, exec)
       const files = pairScreenshotFiles(observation.captures, observation.screens)
       const paths = await writeDesktopScreenshots(files, { home: homedir() })
       const first = files[0]
@@ -558,8 +643,7 @@ export function applyComputerUse(
       return {
         paths: [...paths],
         clipboard: true,
-        screens: observation.screens,
-        foreground: observation.foreground,
+        ...observedFields(sessionOf(exec), observation),
       }
     },
   }))
@@ -591,14 +675,16 @@ export function applyComputerUse(
           screenIndex: { type: 'integer', required: true },
           position: { type: 'array', required: true, items: { type: 'number' } },
           durationSeconds: { type: 'number', required: true },
+          ...COORDINATE_FIELDS,
           screens: SCREENS_FIELD,
           foreground: FOREGROUND_FIELD,
         },
       },
       render: (_args, value) => resultBlocks(
-        `Long-pressed screen ${String(value.screenIndex)} at [${value.position.join(', ')}] for ${String(value.durationSeconds)}s. Coordinates remain 0–1000.`,
+        `Long-pressed screen ${String(value.screenIndex)} at [${value.position.join(', ')}] for ${String(value.durationSeconds)}s. ${coordinatesRemain(value)}`,
         value.screens,
         value.foreground,
+        value,
       ),
     },
     isConcurrencySafe: () => false,
@@ -609,19 +695,22 @@ export function applyComputerUse(
     }),
     async execute(args, exec) {
       await assertImageCapableRoute(ctx, exec)
-      const position = requireNormalizedPosition(args.position)
+      const position = validatedPosition(exec, args.position)
       const durationSeconds = requireLongPressDuration(args.duration_seconds)
       return guiTurn(backend, exec.signal, async () => {
         const screens = await backend.listScreens(exec.signal)
         const screen = requireScreen(screens, args.screen_index)
-        await backend.longPress({ screen, position, durationSeconds }, exec.signal)
-        const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
+        await backend.longPress({
+          screen,
+          position: hidPosition(exec, position),
+          durationSeconds,
+        }, exec.signal)
+        const observation = await recapture(ctx, backend, exec, config.postActionWaitMs)
         return {
           screenIndex: args.screen_index,
           position,
           durationSeconds,
-          screens: observation.screens,
-          foreground: observation.foreground,
+          ...observedFields(sessionOf(exec), observation),
         }
       })
     },
@@ -664,15 +753,17 @@ export function applyComputerUse(
           startPosition: { type: 'array', required: true, items: { type: 'number' } },
           endScreenIndex: { type: 'integer', required: true },
           endPosition: { type: 'array', required: true, items: { type: 'number' } },
+          ...COORDINATE_FIELDS,
           screens: SCREENS_FIELD,
           foreground: FOREGROUND_FIELD,
         },
       },
       render: (_args, value) => resultBlocks(
         `Dragged from screen ${String(value.startScreenIndex)} [${value.startPosition.join(', ')}] `
-        + `to screen ${String(value.endScreenIndex)} [${value.endPosition.join(', ')}]. Coordinates remain 0–1000.`,
+        + `to screen ${String(value.endScreenIndex)} [${value.endPosition.join(', ')}]. ${coordinatesRemain(value)}`,
         value.screens,
         value.foreground,
+        value,
       ),
     },
     isConcurrencySafe: () => false,
@@ -682,21 +773,25 @@ export function applyComputerUse(
     }),
     async execute(args, exec) {
       await assertImageCapableRoute(ctx, exec)
-      const startPosition = requireNormalizedPosition(args.start_position)
-      const endPosition = requireNormalizedPosition(args.end_position)
+      const startPosition = validatedPosition(exec, args.start_position)
+      const endPosition = validatedPosition(exec, args.end_position)
       return guiTurn(backend, exec.signal, async () => {
         const screens = await backend.listScreens(exec.signal)
         const startScreen = requireScreen(screens, args.start_screen_index)
         const endScreen = requireScreen(screens, args.end_screen_index)
-        await backend.drag({ startScreen, startPosition, endScreen, endPosition }, exec.signal)
-        const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
+        await backend.drag({
+          startScreen,
+          startPosition: hidPosition(exec, startPosition),
+          endScreen,
+          endPosition: hidPosition(exec, endPosition),
+        }, exec.signal)
+        const observation = await recapture(ctx, backend, exec, config.postActionWaitMs)
         return {
           startScreenIndex: args.start_screen_index,
           startPosition,
           endScreenIndex: args.end_screen_index,
           endPosition,
-          screens: observation.screens,
-          foreground: observation.foreground,
+          ...observedFields(sessionOf(exec), observation),
         }
       })
     },
@@ -720,16 +815,18 @@ export function applyComputerUse(
         additionalProperties: false,
         properties: {
           url: { type: 'string' },
+          ...COORDINATE_FIELDS,
           screens: SCREENS_FIELD,
           foreground: FOREGROUND_FIELD,
         },
       },
       render: (_args, value) => resultBlocks(
         value.url === undefined
-          ? 'Opened the default browser. Coordinates remain 0–1000.'
-          : `Opened ${value.url} in the default browser. Coordinates remain 0–1000.`,
+          ? `Opened the default browser. ${coordinatesRemain(value)}`
+          : `Opened ${value.url} in the default browser. ${coordinatesRemain(value)}`,
         value.screens,
         value.foreground,
+        value,
       ),
     },
     isConcurrencySafe: () => false,
@@ -738,11 +835,10 @@ export function applyComputerUse(
       await assertImageCapableRoute(ctx, exec)
       const url = args.url === undefined || args.url.trim() === '' ? undefined : requireBrowserUrl(args.url)
       await backend.openInBrowser(url === undefined ? {} : { url }, exec.signal)
-      const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
+      const observation = await recapture(ctx, backend, exec, config.postActionWaitMs)
       return {
         ...url === undefined ? {} : { url },
-        screens: observation.screens,
-        foreground: observation.foreground,
+        ...observedFields(sessionOf(exec), observation),
       }
     },
   }))
@@ -771,16 +867,18 @@ export function applyComputerUse(
         properties: {
           path: { type: 'string', required: true },
           revealOnly: { type: 'boolean', required: true },
+          ...COORDINATE_FIELDS,
           screens: SCREENS_FIELD,
           foreground: FOREGROUND_FIELD,
         },
       },
       render: (_args, value) => resultBlocks(
         value.revealOnly
-          ? `Revealed ${value.path} in Finder. Coordinates remain 0–1000.`
-          : `Opened ${value.path}. Coordinates remain 0–1000.`,
+          ? `Revealed ${value.path} in Finder. ${coordinatesRemain(value)}`
+          : `Opened ${value.path}. ${coordinatesRemain(value)}`,
         value.screens,
         value.foreground,
+        value,
       ),
     },
     isConcurrencySafe: () => false,
@@ -795,12 +893,11 @@ export function applyComputerUse(
       const info = await stat(target.path)
       const revealOnly = target.revealOnly && info.isFile()
       await backend.openInFinder({ path: target.path, revealOnly }, exec.signal)
-      const observation = await recapture(ctx, backend, exec.signal, config.postActionWaitMs)
+      const observation = await recapture(ctx, backend, exec, config.postActionWaitMs)
       return {
         path: target.path,
         revealOnly,
-        screens: observation.screens,
-        foreground: observation.foreground,
+        ...observedFields(sessionOf(exec), observation),
       }
     },
   }))
@@ -817,16 +914,18 @@ export function applyComputerUse(
         additionalProperties: false,
         properties: {
           apps: { type: 'array', required: true, items: { type: 'string' } },
+          ...COORDINATE_FIELDS,
           screens: SCREENS_FIELD,
           foreground: FOREGROUND_FIELD,
         },
       },
       render: (_args, value) => resultBlocks(
         value.apps.length === 0
-          ? 'No running regular applications. Coordinates remain 0–1000.'
-          : `Running apps: ${value.apps.join(', ')}. Coordinates remain 0–1000.`,
+          ? `No running regular applications. ${coordinatesRemain(value)}`
+          : `Running apps: ${value.apps.join(', ')}. ${coordinatesRemain(value)}`,
         value.screens,
         value.foreground,
+        value,
       ),
     },
     isConcurrencySafe: () => false,
@@ -834,11 +933,10 @@ export function applyComputerUse(
     async execute(_args, exec) {
       await assertImageCapableRoute(ctx, exec)
       const apps = await backend.listApps(exec.signal)
-      const observation = await recapture(ctx, backend, exec.signal)
+      const observation = await recapture(ctx, backend, exec)
       return {
         apps: [...apps],
-        screens: observation.screens,
-        foreground: observation.foreground,
+        ...observedFields(sessionOf(exec), observation),
       }
     },
   }))
@@ -864,16 +962,18 @@ export function applyComputerUse(
           ok: { type: 'boolean', required: true },
           action: { type: 'string', enum: ['activated', 'launched'] },
           error: { type: 'string' },
+          ...COORDINATE_FIELDS,
           screens: SCREENS_FIELD,
           foreground: FOREGROUND_FIELD,
         },
       },
       render: (_args, value) => resultBlocks(
         value.ok
-          ? `Opened ${value.name} (${value.action ?? 'activated'}). Coordinates remain 0–1000.`
-          : `Could not open ${value.name}: ${value.error ?? 'unknown error'}. Coordinates remain 0–1000.`,
+          ? `Opened ${value.name} (${value.action ?? 'activated'}). ${coordinatesRemain(value)}`
+          : `Could not open ${value.name}: ${value.error ?? 'unknown error'}. ${coordinatesRemain(value)}`,
         value.screens,
         value.foreground,
+        value,
       ),
     },
     isConcurrencySafe: () => false,
@@ -894,14 +994,13 @@ export function applyComputerUse(
           if (exec.signal.aborted || (caught instanceof Error && caught.name === 'AbortError')) throw caught
           error = caught instanceof Error ? caught.message : String(caught)
         }
-        const observation = await recapture(ctx, backend, exec.signal, settleMs)
+        const observation = await recapture(ctx, backend, exec, settleMs)
         return {
           name,
           ok: error === undefined,
           ...action === undefined ? {} : { action },
           ...error === undefined ? {} : { error },
-          screens: observation.screens,
-          foreground: observation.foreground,
+          ...observedFields(sessionOf(exec), observation),
         }
       })
     },
@@ -917,13 +1016,15 @@ export function applyComputerUse(
     if (!messages.some(message => message.source.kind === 'user')) return decision
     if (!await routeAcceptsImages(ctx, agent, signal)) return decision
     signal.throwIfAborted()
-    const observation = await observeDesktop(ctx, backend, signal)
+    const mode = coordinateModeOf(agent.session)
+    const observation = await observeDesktop(ctx, backend, signal, { coordinateMode: mode })
+    rememberObservation(agent.session, observation.screens)
     signal.throwIfAborted()
     const notice = createUserMessage({
       content: [
         {
           type: 'text',
-          text: 'Current frontmost window. Coordinates are 0–1000 fractions of this screenshot ([0, 0] top-left, [1000, 1000] bottom-right). Center x is 500, not a pixel x.',
+          text: firstFrameNotice(mode),
         },
         ...observation.blocks,
       ],

@@ -21,6 +21,7 @@ const READY: OrbSettingsState = {
   overlay: { provider: 'deepseek-official', model: 'deepseek-flash' },
   background: { provider: 'deepseek-official', model: 'deepseek-chat' },
   selectionEnabled: true,
+  millifractionEnabled: true,
   catalog: {
     groups: [{
       id: 'deepseek-official',
@@ -50,6 +51,7 @@ function mount(state: Partial<OrbSettingsState> = {}) {
     setOverlayModel: vi.fn(() => Promise.resolve()),
     setBackgroundModel: vi.fn(() => Promise.resolve()),
     setSelectionEnabled: vi.fn(() => Promise.resolve()),
+    setMillifractionEnabled: vi.fn(() => Promise.resolve()),
   }
   render(<OrbSettingsSection {...({
     ...actions,
@@ -80,6 +82,7 @@ describe('OrbSettingsSection', () => {
     fireEvent.mouseEnter(backgroundFlash.parentElement as HTMLElement)
     fireEvent.click(screen.getByRole('menuitem', { name: 'High' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Enable the selection toolbar' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'Use millifraction coordinates' }))
     expect(actions.pickAvatar).toHaveBeenCalledTimes(1)
     expect(actions.restoreAvatar).toHaveBeenCalledTimes(1)
     expect(actions.setOverlayModel).toHaveBeenNthCalledWith(1, {
@@ -92,6 +95,9 @@ describe('OrbSettingsSection', () => {
       provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'high',
     })
     expect(actions.setSelectionEnabled).toHaveBeenCalledWith(false)
+    expect(actions.setMillifractionEnabled).toHaveBeenCalledWith(false)
+    expect(screen.getByRole('switch', { name: 'Use millifraction coordinates' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Choose image' }).disabled).toBe(false)
   })
 
   it('shows the macOS-only banner and disables controls on Windows', () => {
@@ -100,6 +106,7 @@ describe('OrbSettingsSection', () => {
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Choose image' }).disabled).toBe(true)
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Floating-ball Agent' }).disabled).toBe(true)
     expect(screen.getByRole<HTMLButtonElement>('switch', { name: 'Enable the selection toolbar' }).disabled).toBe(true)
+    expect(screen.getByRole<HTMLButtonElement>('switch', { name: 'Use millifraction coordinates' }).disabled).toBe(true)
     cleanup()
     mount({ busy: true })
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Choose image' }).disabled).toBe(true)

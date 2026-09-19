@@ -9,6 +9,7 @@ import type { ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attach
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { CapturedScreen, DesktopBackend, DesktopForeground, ScreenInfo } from './backend.ts'
 import { FOCUS_FALLBACK_FOREGROUND } from './backend.ts'
+import type { CoordinateMode } from './coordinate-mode.ts'
 import { delay } from './wait.ts'
 
 /** Canonical image metadata stored beside one captured screen. */
@@ -122,12 +123,22 @@ export function compactForeground(foreground: DesktopForeground): DesktopForegro
 }
 
 /**
- * Format one screen as model-facing envelope text. Paths and pixel sizes are omitted
- * so the model uses the 0–1000 space of the attached screenshot, not capture rasters.
+ * Format one screen as model-facing envelope text.
+ * Millifraction names only the 0–1000 space. Pixel mode names that attachment's WxH,
+ * which is the same pair execute divides by. Paths and other pixel sizes stay omitted.
  * @param screen - captured display and attached image.
- * @returns envelope text naming index and the 0–1000 space.
+ * @param mode - session click encoding; millifraction when omitted.
+ * @returns envelope text naming index and the click space.
  */
-export function formatScreenEnvelope(screen: ObservedScreen): string {
+export function formatScreenEnvelope(
+  screen: ObservedScreen,
+  mode: CoordinateMode = 'millifraction',
+): string {
+  if (mode === 'pixel') {
+    return `<screen_index>${String(screen.screenIndex)}</screen_index>
+<coordinate_space>pixels</coordinate_space>
+<attached_size>${String(screen.image.width)}x${String(screen.image.height)}</attached_size>`
+  }
   return `<screen_index>${String(screen.screenIndex)}</screen_index>
 <coordinate_space>0-1000</coordinate_space>`
 }
@@ -135,12 +146,16 @@ export function formatScreenEnvelope(screen: ObservedScreen): string {
 /**
  * Project captured screens into alternating envelope text and image blocks.
  * @param screens - captured displays in index order.
+ * @param mode - session click encoding; millifraction when omitted.
  * @returns model-facing content with no filesystem path.
  */
-export function observationBlocks(screens: readonly ObservedScreen[]): ContentBlock[] {
+export function observationBlocks(
+  screens: readonly ObservedScreen[],
+  mode: CoordinateMode = 'millifraction',
+): ContentBlock[] {
   const blocks: ContentBlock[] = []
   for (const screen of screens) {
-    blocks.push({ type: 'text', text: formatScreenEnvelope(screen) })
+    blocks.push({ type: 'text', text: formatScreenEnvelope(screen, mode) })
     blocks.push({ type: 'image', attachment: imageRefFromObserved(screen.image) })
   }
   return blocks
@@ -150,15 +165,17 @@ export function observationBlocks(screens: readonly ObservedScreen[]): ContentBl
  * Observation content: one foreground block, then per-screen envelopes and images.
  * @param screens - captured displays in index order.
  * @param foreground - OS metadata from {@link DesktopBackend.inspectForeground}.
+ * @param mode - session click encoding; millifraction when omitted.
  * @returns model-facing content with no screenshot filesystem path.
  */
 export function observationContent(
   screens: readonly ObservedScreen[],
   foreground: DesktopForeground,
+  mode: CoordinateMode = 'millifraction',
 ): ContentBlock[] {
   return [
     { type: 'text', text: formatForegroundEnvelope(foreground) },
-    ...observationBlocks(screens),
+    ...observationBlocks(screens, mode),
   ]
 }
 
@@ -168,14 +185,14 @@ export function observationContent(
  * @param ctx - plugin context with `attachments`.
  * @param backend - desktop capture implementation.
  * @param signal - cooperative cancellation.
- * @param options - optional settle wait applied before inspect and capture so open menus are listed.
+ * @param options - optional settle wait and the session click encoding for envelopes.
  * @returns canonical screens, foreground metadata, and model-facing blocks.
  */
 export async function observeDesktop(
   ctx: Context,
   backend: DesktopBackend,
   signal: AbortSignal,
-  options: { settleMs?: number } = {},
+  options: { settleMs?: number; coordinateMode?: CoordinateMode } = {},
 ): Promise<DesktopObservation> {
   signal.throwIfAborted()
   const settleMs = options.settleMs ?? 0
@@ -217,7 +234,7 @@ export async function observeDesktop(
   return {
     screens,
     foreground,
-    blocks: observationContent(screens, foreground),
+    blocks: observationContent(screens, foreground, options.coordinateMode ?? 'millifraction'),
     captures,
   }
 }

@@ -344,6 +344,16 @@ export class DesktopHostProcess {
   }
 
   /**
+   * Push the overlay Computer Use click encoding into the Host child.
+   * @param mode - millifraction 0–1000 or attached-raster pixels.
+   */
+  setOrbCoordinateMode(mode: 'millifraction' | 'pixel'): void {
+    const child = this.child
+    if (child === undefined || !child.connected) return
+    this.send({ type: 'orb-coordinate-mode', mode })
+  }
+
+  /**
    * Push the overlay Access preset into the Host child.
    * @param preset - stored overlay Access value.
    * @param sessionId - overlay session to pin now; omitted, only later creates use `preset`.

@@ -52,6 +52,9 @@
     - id: computer-use-orb-code-agent-model
       name: '../lib/computer-use-orb-code-agent-model.js'
 
+    - id: computer-use-orb-coordinate-mode
+      name: '../lib/computer-use-orb-coordinate-mode.js'
+
 - id: agent-presets
   inject: [computerUsePresetRoot]
   config:

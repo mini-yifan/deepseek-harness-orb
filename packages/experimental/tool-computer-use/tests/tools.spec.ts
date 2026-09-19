@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId, LlmAdapter, LlmRuntime } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, LlmModelInfo, LlmResolvedModelInfo, StreamChunk } from '@deepseek-ai/dsh-llm'
+import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import { assembleContextFor, type Agent } from '@deepseek-ai/dsh-agent'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
@@ -14,11 +16,12 @@ import { createFakeDesktopBackend } from '../src/fake.ts'
 import { applyComputerUse } from '../src/plugin.ts'
 import { apply, Config, inject, name } from '../src/index.ts'
 import * as ComputerUse from '../src/index.ts'
-import { POLICY } from '../src/policy.ts'
+import { POLICY, policyFor } from '../src/policy.ts'
 import { formatScreenEnvelope } from '../src/observe.ts'
 import { UNSUPPORTED_DESKTOP_MESSAGE } from '../src/unsupported.ts'
 import * as waitModule from '../src/wait.ts'
 import * as screenshotModule from '../src/screenshot.ts'
+import type {} from '../src/coordinate-mode.ts'
 
 const SIGNAL = new AbortController().signal
 
@@ -42,24 +45,32 @@ class CatalogAdapter extends LlmAdapter {
   }
 }
 
-function agentOn(model: string | undefined, provider = 'visual'): object {
+function agentOn(model: string | undefined, provider = 'visual', session?: Session): object {
   return {
-    options: {},
-    session: {
+    options: model === undefined ? {} : { provider, model },
+    session: session ?? {
       requestHeader: () => (model === undefined ? undefined : { config: { provider, model } }),
     },
   }
 }
 
 let call = 0
-function execute(ctx: Context, tool: string, args: unknown, model = 'vision-model') {
+function execute(ctx: Context, tool: string, args: unknown, model = 'vision-model', session?: Session) {
   return ctx.tools.execute({
     signal: SIGNAL,
     callId: ToolCallId(`cu-${++call}`),
     name: tool,
     arguments: args,
-    agent: agentOn(model) as never,
+    agent: agentOn(model, 'visual', session) as never,
   })
+}
+
+function promptAgent(session: Session): Agent {
+  return {
+    id: session.id,
+    session,
+    options: { provider: 'visual', model: 'vision-model' },
+  } as Agent
 }
 
 function text(result: { content: { type: string; text?: string }[] }): string {
@@ -748,6 +759,27 @@ describe('screen envelopes', () => {
     expect(envelope).not.toContain('<path>')
   })
 
+  it('names attached WxH only in pixel mode', () => {
+    const screen = {
+      screenIndex: 1,
+      logicalWidth: 1440,
+      logicalHeight: 900,
+      scale: 2,
+      image: {
+        attachmentId: 'sha256:x',
+        mediaType: 'image/png' as const,
+        bytes: 12,
+        width: 720,
+        height: 450,
+        originalDimensions: { width: 1440, height: 900 },
+      },
+    }
+    expect(formatScreenEnvelope(screen, 'pixel')).toBe(
+      '<screen_index>1</screen_index>\n<coordinate_space>pixels</coordinate_space>\n<attached_size>720x450</attached_size>',
+    )
+    expect(formatScreenEnvelope(screen, 'millifraction')).not.toContain('<attached_size>')
+  })
+
   it('names Finder folder and focus fallback on GUI results', async () => {
     const { ctx: finderCtx } = await setup({
       foreground: { appName: 'Finder', finderFolder: '/Users/test/Documents' },
@@ -774,6 +806,68 @@ describe('screen envelopes', () => {
         screen: { bounds: { x: 100, y: 200, width: 400, height: 300 } },
         position: [0, 0],
       },
+    })
+  })
+})
+
+describe('computer-use session coordinate modes', () => {
+  it('assembles millifraction and pixel POLICY and position copy for two sessions in one process', async () => {
+    const { ctx } = await setup()
+    const milli = Session.create(SessionId('cu-milli-assemble'))
+    const pixel = Session.create(SessionId('cu-pixel-assemble'))
+    pixel.append('computer-use/coordinate-mode', { mode: 'pixel' })
+    const milliAssembly = await ctx.systemPrompt.assemble(assembleContextFor(promptAgent(milli)))
+    const pixelAssembly = await ctx.systemPrompt.assemble(assembleContextFor(promptAgent(pixel)))
+    expect(milliAssembly.sections.find(section => section.name === 'tool:computer-use')?.text).toBe(POLICY)
+    expect(pixelAssembly.sections.find(section => section.name === 'tool:computer-use')?.text)
+      .toBe(policyFor('pixel'))
+    expect(policyFor('pixel')).toContain('pixel columns and rows')
+    expect(policyFor('pixel')).toContain('Do not send 0–1000 fractions')
+    expect(policyFor('pixel')).not.toContain('center x is 500')
+    const milliClick = milliAssembly.tools.find(tool => tool.name === 'click')
+    const pixelClick = pixelAssembly.tools.find(tool => tool.name === 'click')
+    const pixelDrag = pixelAssembly.tools.find(tool => tool.name === 'drag')
+    expect(JSON.stringify(milliClick)).toContain('0–1000 fraction of that screenshot, not pixels')
+    expect(JSON.stringify(pixelClick)).toContain('pixel columns and rows of the attached screenshot')
+    expect(JSON.stringify(pixelClick)).not.toContain('0–1000 fraction of that screenshot, not pixels')
+    expect(JSON.stringify(pixelDrag)).toContain('start as pixel columns')
+    expect(JSON.stringify(pixelDrag)).toContain('end as pixel columns')
+  })
+
+  it('maps pixel clicks through attached raster size and keeps drag ends in the same encoding', async () => {
+    const { ctx, backend } = await setup({
+      screens: [{ index: 0, bounds: { x: 10, y: 20, width: 400, height: 200 }, scale: 1, windowId: 3 }],
+    })
+    const session = Session.create(SessionId('cu-pixel-click'))
+    session.append('computer-use/coordinate-mode', { mode: 'pixel' })
+    const missing = await execute(ctx, 'click', { screen_index: 0, position: [0, 0] }, 'vision-model', session)
+    expect(missing.isError).toBe(true)
+    expect(text(missing)).toContain('attached screenshot raster')
+    const shot = await execute(ctx, 'screenshot', {}, 'vision-model', session)
+    expect(shot.isError).toBe(false)
+    expect(text(shot)).toContain('<coordinate_space>pixels</coordinate_space>')
+    expect(text(shot)).toContain('<attached_size>1x1</attached_size>')
+    const result = await execute(ctx, 'click', { screen_index: 0, position: [1, 1] }, 'vision-model', session)
+    expect(result.isError).toBe(false)
+    expect(backend.actions.at(-1)).toMatchObject({
+      type: 'click',
+      input: { position: [1000, 1000] },
+    })
+    expect(text(result)).toContain('Clicked screen 0 at [1, 1]')
+    expect(text(result)).toContain('Coordinates remain pixels of the attached 1x1 screenshot.')
+    const oob = await execute(ctx, 'click', { screen_index: 0, position: [2, 0] }, 'vision-model', session)
+    expect(oob.isError).toBe(true)
+    expect(text(oob)).toContain('1x1')
+    const drag = await execute(ctx, 'drag', {
+      start_screen_index: 0,
+      start_position: [0, 0],
+      end_screen_index: 0,
+      end_position: [1, 1],
+    }, 'vision-model', session)
+    expect(drag.isError).toBe(false)
+    expect(backend.actions.at(-1)).toMatchObject({
+      type: 'drag',
+      input: { startPosition: [0, 0], endPosition: [1000, 1000] },
     })
   })
 })

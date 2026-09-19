@@ -20,6 +20,7 @@ export const DESKTOP_HOST_RUNTIME_FILES = [
   'lib/computer-use-overlay-guard.js',
   'lib/computer-use-orb-permission.js',
   'lib/computer-use-orb-code-agent-model.js',
+  'lib/computer-use-orb-coordinate-mode.js',
   'config/desktop.cordis.patch.yml',
 ] as const
 

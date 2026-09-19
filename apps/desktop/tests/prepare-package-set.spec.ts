@@ -68,6 +68,7 @@ describe('desktop package-set selection', () => {
       'package/lib/computer-use-overlay-guard.js',
       'package/lib/computer-use-orb-permission.js',
       'package/lib/computer-use-orb-code-agent-model.js',
+      'package/lib/computer-use-orb-coordinate-mode.js',
       'package/config/desktop.cordis.patch.yml',
     ]
     expect(() => {

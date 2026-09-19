@@ -398,6 +398,24 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 来源：[`packages/compaction/compaction/src/types.ts:34`](../packages/compaction/compaction/src/types.ts)
 
+### `computer-use/*`
+
+<a id="computer-usecoordinate-mode--log-only"></a>
+
+#### `computer-use/coordinate-mode` — log-only
+
+```ts persistence-catalog
+/**
+ * Click encoding for this Computer Use session: millifraction 0–1000 or
+ * attached-raster pixels. Whole-value replace; the last event wins. A log
+ * with none folds to millifraction. Not ignorable: a reader that skipped
+ * it would mis-map stored `position` arrays.
+ */
+'computer-use/coordinate-mode': { mode: CoordinateMode }
+```
+
+来源：[`packages/experimental/tool-computer-use/src/coordinate-mode.ts:41`](../packages/experimental/tool-computer-use/src/coordinate-mode.ts)
+
 ### `deliverables/*`
 
 <a id="deliverablespresented--log-only"></a>

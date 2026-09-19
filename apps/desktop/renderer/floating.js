@@ -994,6 +994,14 @@ async function main() {
     await setExpanded(true, true)
     prompt.focus()
   })
+  api.floating.onCreateSession(async () => {
+    prompt.value = ''
+    setHistoryOpen(false)
+    setPermissionOpen(false)
+    setRunning(false)
+    await createOrbSession()
+    await refreshOverlay()
+  })
   api.floating.onOverlayModel(selection => {
     if (sessionId === undefined) return
     void selectOverlayModel(sessionId, selection)

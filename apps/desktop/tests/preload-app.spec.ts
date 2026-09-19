@@ -26,6 +26,7 @@ it('exposes floating-ball Settings controls to application documents', async () 
   await api.orb.setOverlayModel({ provider: 'deepseek-official', model: 'deepseek-flash' })
   await api.orb.setBackgroundModel({ provider: 'deepseek-official', model: 'deepseek-chat' })
   await api.orb.setSelectionEnabled(false)
+  await api.orb.setMillifractionEnabled(false)
   expect(electron.ipcRenderer.invoke.mock.calls).toEqual([
     [DESKTOP_IPC.orbSupported],
     [DESKTOP_IPC.orbSnapshot],
@@ -34,6 +35,7 @@ it('exposes floating-ball Settings controls to application documents', async () 
     [DESKTOP_IPC.orbSetOverlayModel, { provider: 'deepseek-official', model: 'deepseek-flash' }],
     [DESKTOP_IPC.orbSetBackgroundModel, { provider: 'deepseek-official', model: 'deepseek-chat' }],
     [DESKTOP_IPC.orbSetSelectionEnabled, false],
+    [DESKTOP_IPC.orbSetMillifractionEnabled, false],
   ])
   expect(api).not.toHaveProperty('plugins')
   expect(api).not.toHaveProperty('floating')

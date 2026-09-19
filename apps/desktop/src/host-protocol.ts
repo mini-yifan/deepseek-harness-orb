@@ -58,6 +58,9 @@ export type DesktopHostCommand = {
   readonly model: string
   readonly reasoningEffort?: string
 } | {
+  readonly type: 'orb-coordinate-mode'
+  readonly mode: 'millifraction' | 'pixel'
+} | {
   readonly type: 'orb-permission'
   readonly preset: 'read-only' | 'workspace-write' | 'danger-full-access'
   readonly sessionId?: string

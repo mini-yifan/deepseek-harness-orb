@@ -38,13 +38,14 @@ export interface FloatingAgentMenuSource {
 
 /**
  * Overlay right-click items: cut/copy/paste when the target is editable, then Open Main,
- * Agent model menus, selection toolbar, and Quit.
+ * Agent model menus, selection toolbar, millifraction coordinates, and Quit.
  * @param params - Electron context-menu editability.
  * @param messages - locale dictionary for the overlay actions.
  * @param onOpenMain - show the Desktop main window.
  * @param onQuit - quit the application.
  * @param selection - optional selection-toolbar toggle.
  * @param agents - optional catalog-driven overlay and background model menus.
+ * @param millifraction - optional millifraction-coordinates default toggle.
  * @returns Electron menu template.
  */
 export function floatingContextMenuTemplate(
@@ -59,11 +60,14 @@ export function floatingContextMenuTemplate(
     | 'floatingQuit'
     | 'selectionToolbarEnable'
     | 'selectionToolbarDisable'
+    | 'millifractionEnable'
+    | 'millifractionDisable'
   >,
   onOpenMain: () => void,
   onQuit: () => void,
   selection?: { readonly enabled: boolean; readonly onToggle: () => void },
   agents?: FloatingAgentMenuState,
+  millifraction?: { readonly enabled: boolean; readonly onToggle: () => void },
 ): MenuItemConstructorOptions[] {
   const labels = { empty: messages.floatingNoModels, defaultEffort: messages.floatingEffortDefault }
   const actions: MenuItemConstructorOptions[] = [
@@ -92,12 +96,23 @@ export function floatingContextMenuTemplate(
     ]),
     { label: messages.floatingQuit, click: onQuit },
   ]
-  if (selection !== undefined) {
+  if (selection !== undefined || millifraction !== undefined) {
+    const extras: MenuItemConstructorOptions[] = []
+    if (selection !== undefined) {
+      extras.push({
+        label: selection.enabled ? messages.selectionToolbarDisable : messages.selectionToolbarEnable,
+        click: selection.onToggle,
+      })
+    }
+    if (millifraction !== undefined) {
+      extras.push({
+        label: millifraction.enabled ? messages.millifractionDisable : messages.millifractionEnable,
+        click: millifraction.onToggle,
+      })
+    }
+    extras.push({ type: 'separator' })
     const quitIndex = actions.findIndex(item => item.label === messages.floatingQuit)
-    actions.splice(quitIndex, 0, {
-      label: selection.enabled ? messages.selectionToolbarDisable : messages.selectionToolbarEnable,
-      click: selection.onToggle,
-    }, { type: 'separator' })
+    actions.splice(quitIndex, 0, ...extras)
   }
   if (!params.isEditable) return actions
   return [
@@ -313,6 +328,7 @@ function currentBallOrigin(window: BrowserWindow, workArea: OverlayRect): { x: n
  * @param onQuit - quit the application.
  * @param selection - optional selection-toolbar toggle on the overlay menu.
  * @param agents - optional catalog-driven overlay and background model menus.
+ * @param millifraction - optional millifraction-coordinates default toggle.
  * @returns the overlay window.
  */
 export function createFloatingWindow(
@@ -322,6 +338,7 @@ export function createFloatingWindow(
   onQuit: () => void,
   selection?: { readonly enabled: () => boolean; readonly toggle: () => void },
   agents?: FloatingAgentMenuSource,
+  millifraction?: { readonly enabled: () => boolean; readonly toggle: () => void },
 ): BrowserWindow {
   const bounds = collapsedWindowBounds(defaultFloatingBallOrigin(screen.getPrimaryDisplay().workArea))
   const window = new BrowserWindow({
@@ -351,7 +368,16 @@ export function createFloatingWindow(
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('context-menu', (_event, params) => {
-    void popupFloatingContextMenu(window, params, messages, onOpenMain, onQuit, selection, agents)
+    void popupFloatingContextMenu(
+      window,
+      params,
+      messages,
+      onOpenMain,
+      onQuit,
+      selection,
+      agents,
+      millifraction,
+    )
   })
   return window
 }
@@ -364,6 +390,7 @@ async function popupFloatingContextMenu(
   onQuit: () => void,
   selection: { readonly enabled: () => boolean; readonly toggle: () => void } | undefined,
   agents: FloatingAgentMenuSource | undefined,
+  millifraction: { readonly enabled: () => boolean; readonly toggle: () => void } | undefined,
 ): Promise<void> {
   const catalog = agents === undefined ? undefined : await agents.loadCatalog().catch(() => undefined)
   if (window.isDestroyed()) return
@@ -380,6 +407,9 @@ async function popupFloatingContextMenu(
       onSelectOverlay: agents.onSelectOverlay,
       onSelectBackground: agents.onSelectBackground,
     },
+    millifraction === undefined
+      ? undefined
+      : { enabled: millifraction.enabled(), onToggle: millifraction.toggle },
   )).popup({ window })
 }
 

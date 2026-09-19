@@ -39,6 +39,8 @@ const messages = {
   floatingQuit: 'Quit DeepSeek Harness',
   selectionToolbarEnable: 'Enable Selection Toolbar',
   selectionToolbarDisable: 'Disable Selection Toolbar',
+  millifractionEnable: 'Enable millifraction coordinates',
+  millifractionDisable: 'Disable millifraction coordinates',
 }
 
 describe('floating window expand geometry', () => {
@@ -214,10 +216,33 @@ describe('floating window context menu', () => {
     ])
   })
 
+  it('places millifraction coordinates below the selection toolbar and above Quit', () => {
+    const onToggle = vi.fn()
+    const onMillifraction = vi.fn()
+    const template = floatingContextMenuTemplate(
+      { isEditable: false, editFlags: { canCut: false, canCopy: false, canPaste: false } },
+      messages,
+      onOpenMain,
+      onQuit,
+      { enabled: true, onToggle },
+      undefined,
+      { enabled: false, onToggle: onMillifraction },
+    )
+    expect(template).toEqual([
+      { label: 'Open Main Window', click: onOpenMain },
+      { type: 'separator' },
+      { label: 'Disable Selection Toolbar', click: onToggle },
+      { label: 'Enable millifraction coordinates', click: onMillifraction },
+      { type: 'separator' },
+      { label: 'Quit DeepSeek Harness', click: onQuit },
+    ])
+  })
+
   it('inserts overlay and background model submenus before the selection toolbar', () => {
     const onSelectOverlay = vi.fn()
     const onSelectBackground = vi.fn()
     const onToggle = vi.fn()
+    const onMillifraction = vi.fn()
     const template = floatingContextMenuTemplate(
       { isEditable: false, editFlags: { canCut: false, canCopy: false, canPaste: false } },
       messages,
@@ -251,6 +276,7 @@ describe('floating window context menu', () => {
         onSelectOverlay,
         onSelectBackground,
       },
+      { enabled: true, onToggle: onMillifraction },
     )
     expect(template.map(item => item.label ?? item.type)).toEqual([
       'Open Main Window',
@@ -259,6 +285,7 @@ describe('floating window context menu', () => {
       'Background Agent Settings',
       'separator',
       'Enable Selection Toolbar',
+      'Disable millifraction coordinates',
       'separator',
       'Quit DeepSeek Harness',
     ])
