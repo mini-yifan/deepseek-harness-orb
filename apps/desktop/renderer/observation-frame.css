@@ -8,7 +8,7 @@ body {
 }
 
 body {
-  padding: 12px;
+  padding: var(--glow-top, 12px) var(--glow-right, 12px) var(--glow-bottom, 12px) var(--glow-left, 12px);
 }
 
 #frame {
@@ -16,7 +16,7 @@ body {
   width: 100%;
   height: 100%;
   border-radius: 14px;
-  padding: 4px;
+  padding: var(--stroke-top, 4px) var(--stroke-right, 4px) var(--stroke-bottom, 4px) var(--stroke-left, 4px);
   pointer-events: none;
   background: linear-gradient(
     135deg,

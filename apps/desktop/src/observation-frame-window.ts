@@ -2,10 +2,10 @@
 
 import { BrowserWindow, screen } from 'electron'
 
-/** Stroke width painted on `#frame`; keep in sync with renderer CSS `#frame` padding. */
+/** Stroke width painted on `#frame`; keep in sync with renderer CSS `#frame` padding fallback. */
 export const OBSERVATION_FRAME_STROKE_PX = 4
 
-/** Gutter around the stroke so `filter: drop-shadow` is not clipped by the window. Keep in sync with `body` padding. */
+/** Gutter around the stroke so `filter: drop-shadow` is not clipped by the window. Keep in sync with `body` padding fallback. */
 export const OBSERVATION_FRAME_GLOW_PX = 12
 
 /** Logical points the frame window extends past each edge of the observation rectangle. */
@@ -27,6 +27,23 @@ interface OverlayRect {
   readonly height: number
 }
 
+/** Per-edge CSS padding in logical pixels (top, right, bottom, left). */
+export interface ObservationFrameEdgePadding {
+  readonly top: number
+  readonly right: number
+  readonly bottom: number
+  readonly left: number
+}
+
+/**
+ * Electron content rectangle plus the body glow and `#frame` stroke that keep the inner hole on the observation rectangle.
+ */
+export interface ObservationFramePlacement {
+  readonly bounds: OverlayRect
+  readonly glow: ObservationFrameEdgePadding
+  readonly stroke: ObservationFrameEdgePadding
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), Math.max(min, max))
 }
@@ -38,38 +55,135 @@ function workAreaOf(point: { readonly x: number; readonly y: number }): OverlayR
   }).workArea
 }
 
+function intersectRects(area: OverlayRect, clip: OverlayRect): OverlayRect {
+  const x = Math.max(area.x, clip.x)
+  const y = Math.max(area.y, clip.y)
+  const right = Math.min(area.x + area.width, clip.x + clip.width)
+  const bottom = Math.min(area.y + area.height, clip.y + clip.height)
+  const width = right - x
+  const height = bottom - y
+  if (width >= 1 && height >= 1) return { x, y, width, height }
+  return {
+    x: clamp(area.x, clip.x, clip.x + clip.width - 1),
+    y: clamp(area.y, clip.y, clip.y + clip.height - 1),
+    width: 1,
+    height: 1,
+  }
+}
+
+function edgePadding(inset: number): { readonly glow: number; readonly stroke: number } {
+  const leftover = Math.max(0, Math.round(inset))
+  return {
+    glow: Math.max(0, leftover - OBSERVATION_FRAME_STROKE_PX),
+    stroke: OBSERVATION_FRAME_STROKE_PX,
+  }
+}
+
 /**
- * Inflate the observation union so the stroke and glow sit just outside it, then clamp to the display work area.
+ * Body glow and `#frame` stroke padding so the inner hole stays on `region`.
+ * A flush edge (no leftover outset) uses a 4px stroke just inside that edge.
+ * @param region - Computer Use `ScreenInfo.bounds` in global logical points.
+ * @param bounds - Electron content rectangle after work-area / WindowServer clip.
+ * @returns per-edge glow (body) and stroke (`#frame`) padding in CSS pixels.
+ */
+export function observationFramePadding(
+  region: OverlayRect,
+  bounds: OverlayRect,
+): { readonly glow: ObservationFrameEdgePadding; readonly stroke: ObservationFrameEdgePadding } {
+  const left = edgePadding(region.x - bounds.x)
+  const top = edgePadding(region.y - bounds.y)
+  const right = edgePadding(bounds.x + bounds.width - (region.x + region.width))
+  const bottom = edgePadding(bounds.y + bounds.height - (region.y + region.height))
+  return {
+    glow: { top: top.glow, right: right.glow, bottom: bottom.glow, left: left.glow },
+    stroke: { top: top.stroke, right: right.stroke, bottom: bottom.stroke, left: left.stroke },
+  }
+}
+
+/**
+ * Inflate the observation union so the stroke and glow sit just outside it, then intersect the display work area.
+ * Intersection clips an edge that would leave the work area; it does not translate the overlay and keep its size.
  * @param region - Computer Use `ScreenInfo.bounds` in global logical points.
  * @param workArea - containing display work area.
- * @returns Electron window bounds.
+ * @returns Electron content bounds and per-edge CSS padding.
  */
-export function observationFrameBounds(
+export function observationFramePlacement(
   region: OverlayRect,
   workArea: OverlayRect = workAreaOf({
     x: region.x + region.width / 2,
     y: region.y + region.height / 2,
   }),
-): OverlayRect {
+): ObservationFramePlacement {
   const inflated = {
     x: Math.round(region.x - OBSERVATION_FRAME_OUTSET),
     y: Math.round(region.y - OBSERVATION_FRAME_OUTSET),
     width: Math.max(1, Math.round(region.width + OBSERVATION_FRAME_OUTSET * 2)),
     height: Math.max(1, Math.round(region.height + OBSERVATION_FRAME_OUTSET * 2)),
   }
-  const x = clamp(inflated.x, workArea.x, workArea.x + workArea.width - 1)
-  const y = clamp(inflated.y, workArea.y, workArea.y + workArea.height - 1)
-  return {
-    x,
-    y,
-    width: Math.max(1, Math.min(inflated.width, workArea.x + workArea.width - x)),
-    height: Math.max(1, Math.min(inflated.height, workArea.y + workArea.height - y)),
+  const bounds = intersectRects(inflated, workArea)
+  const padding = observationFramePadding(region, bounds)
+  return { bounds, glow: padding.glow, stroke: padding.stroke }
+}
+
+function observationFrameCssScript(
+  glow: ObservationFrameEdgePadding,
+  stroke: ObservationFrameEdgePadding,
+): string {
+  const vars: ReadonlyArray<readonly [string, number]> = [
+    ['--glow-top', glow.top],
+    ['--glow-right', glow.right],
+    ['--glow-bottom', glow.bottom],
+    ['--glow-left', glow.left],
+    ['--stroke-top', stroke.top],
+    ['--stroke-right', stroke.right],
+    ['--stroke-bottom', stroke.bottom],
+    ['--stroke-left', stroke.left],
+  ]
+  const assignments = vars.map(([name, value]) =>
+    `root.setProperty(${JSON.stringify(name)}, ${JSON.stringify(`${String(value)}px`)});`,
+  ).join('')
+  return `(() => { const root = document.documentElement.style; ${assignments} })()`
+}
+
+const pendingFrameCss = new WeakMap<BrowserWindow, {
+  readonly glow: ObservationFrameEdgePadding
+  readonly stroke: ObservationFrameEdgePadding
+}>()
+
+const waitingForFrameLoad = new WeakSet<BrowserWindow>()
+
+function applyObservationFrameCss(
+  window: BrowserWindow,
+  glow: ObservationFrameEdgePadding,
+  stroke: ObservationFrameEdgePadding,
+): void {
+  pendingFrameCss.set(window, { glow, stroke })
+  const applyLatest = (): void => {
+    waitingForFrameLoad.delete(window)
+    if (window.isDestroyed()) return
+    const latest = pendingFrameCss.get(window)
+    if (latest === undefined) return
+    void window.webContents.executeJavaScript(observationFrameCssScript(latest.glow, latest.stroke)).catch(() => {
+      // executeJavaScript rejects when the document is not yet observation-frame.html; retry once after load.
+      if (window.isDestroyed() || waitingForFrameLoad.has(window)) return
+      waitingForFrameLoad.add(window)
+      window.webContents.once('did-finish-load', applyLatest)
+    })
   }
+  if (window.webContents.isLoading()) {
+    if (!waitingForFrameLoad.has(window)) {
+      waitingForFrameLoad.add(window)
+      window.webContents.once('did-finish-load', applyLatest)
+    }
+    return
+  }
+  applyLatest()
 }
 
 /**
  * Construct the hollow observation-frame panel. The caller loads `dsh-app://shell/observation-frame.html`.
  * Always click-through: Computer Use HID must hit the target app, not this chrome.
+ * `roundedCorners: false` keeps a work-area-flush stroke from being round-clipped at the screen corners.
  * @returns a hidden, non-activating overlay.
  */
 export function createObservationFrameWindow(): BrowserWindow {
@@ -88,6 +202,7 @@ export function createObservationFrameWindow(): BrowserWindow {
     fullscreenable: false,
     minimizable: false,
     maximizable: false,
+    roundedCorners: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -104,15 +219,20 @@ export function createObservationFrameWindow(): BrowserWindow {
 
 /**
  * Place the ribbon around the observation rectangle without activating Desktop.
+ * Sets content bounds and shows the panel, then CSS padding from the actual content
+ * rectangle so WindowServer clips cannot shift the inner hole.
  * @param window - observation frame.
  * @param region - Computer Use observation bounds.
  */
 export function showObservationFrame(window: BrowserWindow, region: OverlayRect): void {
   if (window.isDestroyed()) return
-  window.setBounds(observationFrameBounds(region))
+  const placement = observationFramePlacement(region)
+  window.setContentBounds(placement.bounds)
   window.setIgnoreMouseEvents(true, { forward: true })
   window.showInactive()
   window.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, OBSERVATION_FRAME_ALWAYS_ON_TOP_RELATIVE)
+  const padding = observationFramePadding(region, window.getContentBounds())
+  applyObservationFrameCss(window, padding.glow, padding.stroke)
 }
 
 /**

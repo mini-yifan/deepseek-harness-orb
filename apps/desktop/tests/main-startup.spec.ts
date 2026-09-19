@@ -42,6 +42,7 @@ const harness = await vi.hoisted(async () => {
       setWindowOpenHandler: vi.fn(),
       openDevTools: vi.fn(),
       getURL: () => this.urls.at(-1) ?? '',
+      isLoading: () => false,
       executeJavaScript: vi.fn(async () => undefined),
       send: vi.fn((channel: string, state: { phase?: string }) => {
         if (channel === 'dsh-desktop:backend-state' && state.phase === 'error') errorPublished.resolve()
@@ -97,8 +98,10 @@ const harness = await vi.hoisted(async () => {
     }
     setPosition(x: number, y: number) { this.bounds.x = x; this.bounds.y = y }
     getBounds() { return { ...this.bounds } }
+    getContentBounds() { return { ...this.bounds } }
     setSize(width: number, height: number) { this.bounds.width = width; this.bounds.height = height }
     setBounds(next: { x: number; y: number; width: number; height: number }) { this.bounds = { ...next } }
+    setContentBounds(next: { x: number; y: number; width: number; height: number }) { this.bounds = { ...next } }
     static getAllWindows() { return windows.filter(window => !window.destroyed) }
     static fromWebContents(contents: unknown) {
       return windows.find(window => window.webContents === contents) ?? null
@@ -647,7 +650,11 @@ describe('desktop floating overlay', () => {
       x: 20 - FLOATING_CHROME_INSET,
       y: 30 - FLOATING_CHROME_INSET,
     })
+    const frameScript = frame?.webContents.executeJavaScript as ReturnType<typeof vi.fn>
+    expect(frameScript).toHaveBeenCalled()
+    expect(frameScript.mock.calls[0]?.[0]).toContain('--glow-top')
     for (const window of harness.windows) {
+      if (window === frame) continue
       expect(window.webContents.executeJavaScript).not.toHaveBeenCalled()
     }
   })
