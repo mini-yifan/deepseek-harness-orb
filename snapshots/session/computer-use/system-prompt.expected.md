@@ -25,7 +25,7 @@ See: trust only the attached screenshot of the frontmost application on this dis
 
 Coordinates: the attached screenshot uses a 0–1000 space of that window. [0, 0] is the top-left of that image and [1000, 1000] is the bottom-right. x and y scale independently; do not treat the space as a square overlay. Pass position as [x, y] in that space together with screen_index 0. Encode x and y as fractions of this screenshot × 1000 (center x is 500, not a pixel x). Ignore pixel widths and any other image-handle dimensions. Do not send raw pixel coordinates.
 
-Step: take exactly one GUI action per tool call. After the call, the new screenshot is in the tool result; use that image for the next action.
+Step: you may emit several GUI tool calls in one step when every target is already visible in the latest screenshot and later calls do not need UI that earlier calls create. The host runs those calls in order. Each result includes its own post-action screenshot; after the step, use the last image for any action that depends on what changed. Do not batch a click, type, or hotkey whose target appears only after an earlier action in the same step (menu, dialog, new page, loader).
 
 Do not click or type into a target you cannot see. Do not OCR file paths from the screenshot. When a file or folder path is known, call open_in_finder with that path; do not click Desktop icons to open it. When <frontmost_folder> is present, copy that path; otherwise use bash with real paths. When <focus_note> is present, call open_app to bring the target application forward if the next step needs a window. Do not click chrome that is not in the image.
 

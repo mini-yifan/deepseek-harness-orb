@@ -243,28 +243,28 @@ const PIXEL_TOOLS: Readonly<Record<string, { description: string; parameters: Re
   click: {
     description:
       'Click at a pixel position on the attached frontmost-window screenshot, then return the post-action screenshot. '
-      + 'Use left (default) or right button; count 2 is a double-click. Exclusive: do not combine with other GUI tools in the same step.',
+      + 'Use left (default) or right button; count 2 is a double-click.',
     parameters: { position: PIXEL_POSITION },
   },
   input_text: {
     description:
-      'Click to focus a pixel position on the attached frontmost-window screenshot, type text, optionally replace existing content and press Enter, then return the post-action screenshot. Exclusive.',
+      'Click to focus a pixel position on the attached frontmost-window screenshot, type text, optionally replace existing content and press Enter, then return the post-action screenshot.',
     parameters: { position: PIXEL_FOCUS_POSITION },
   },
   scroll: {
     description:
-      'Scroll up or down at a pixel position on the attached frontmost-window screenshot, then return the post-action screenshot. scroll_level is 1–10. Exclusive.',
+      'Scroll up or down at a pixel position on the attached frontmost-window screenshot, then return the post-action screenshot. scroll_level is 1–10.',
     parameters: { position: PIXEL_POSITION },
   },
   long_press: {
     description:
       'Press and hold the left button at a pixel position on the attached frontmost-window screenshot, then return the post-action screenshot. '
-      + 'duration_seconds defaults to 3 and must be 1–10. Exclusive.',
+      + 'duration_seconds defaults to 3 and must be 1–10.',
     parameters: { position: PIXEL_POSITION },
   },
   drag: {
     description:
-      'Drag from a start pixel position to an end pixel position on the attached frontmost-window screenshot, then return the post-action screenshot. Exclusive.',
+      'Drag from a start pixel position to an end pixel position on the attached frontmost-window screenshot, then return the post-action screenshot.',
     parameters: {
       start_position: PIXEL_START_POSITION,
       end_position: PIXEL_END_POSITION,

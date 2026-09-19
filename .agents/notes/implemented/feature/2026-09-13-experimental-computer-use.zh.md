@@ -18,7 +18,7 @@ Status: implemented
 
 Web overlay 只插入 `computer-use-preset-root`，由它提供本包旁的额外 `trust: system` agent-presets 根目录。overlay 在 `agent-presets` 行上加上 `inject: [computerUsePresetRoot]`，因此 Loader 插值 `!!js ctx.computerUsePresetRoot` 会等到该服务就绪。GUI 工具注册在该 preset 的常驻作用域里。Host 目录与随附的 `standard` preset 都不会收到它们。Computer Use preset 还会注册 `code_agent`，它通过 `session.create` / `session.prompt` 创建或续写一等 standard 会话，以便桌面侧栏显示委派工作。接受之后，调用方拥有的监视会把插件通知停到两边都空闲再投递；[Computer Use 把 Code agent 完成通知停到空闲再投递](2026-09-15-computer-use-code-agent-completion.zh.md) 拥有这条投递路径。[Overlay Computer Use 后台调度](2026-09-17-orb-code-agent-dispatch.zh.md) 拥有新建 cwd、调用方登记表、`code_agent_status` / `code_agent_stop`，以及 Code agent 上的无人值守应答。
 
-接地文案是 `systemPrompt.section`。坐标默认是可见截图上的 0–1000 比例；[Computer Use 0–1000 比例坐标](../bug-fix/2026-09-15-computer-use-fraction-coordinates.zh.md) 拥有该编码。Overlay 会话可打上像素模式；[Overlay 会话上的 Computer Use 千分比与像素坐标模式](2026-09-19-computer-use-session-coordinate-modes.zh.md) 拥有该分叉。系统截屏组合键（Cmd/Win+Shift+3/4/5）会被拒绝。
+接地文案是 `systemPrompt.section`。坐标默认是可见截图上的 0–1000 比例；[Computer Use 0–1000 比例坐标](../bug-fix/2026-09-15-computer-use-fraction-coordinates.zh.md) 拥有该编码。Overlay 会话可打上像素模式；[Overlay 会话上的 Computer Use 千分比与像素坐标模式](2026-09-19-computer-use-session-coordinate-modes.zh.md) 拥有该分叉。系统截屏组合键（Cmd/Win+Shift+3/4/5）会被拒绝。Step 文案允许模型在目标已出现在最新截图上时于同一步发出多个 GUI 调用；[Computer Use 同一步 GUI 调用](2026-09-19-computer-use-same-step-gui-calls.zh.md) 拥有该政策。每次调用仍会重新截屏。
 
 ## 考虑过的替代方案
 
