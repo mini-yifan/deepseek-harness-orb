@@ -3,10 +3,10 @@
 import { BrowserWindow, screen } from 'electron'
 
 /** Stroke width painted on `#frame`; keep in sync with renderer CSS `#frame` padding fallback. */
-export const OBSERVATION_FRAME_STROKE_PX = 4
+export const OBSERVATION_FRAME_STROKE_PX = 8
 
 /** Gutter around the stroke so `filter: drop-shadow` is not clipped by the window. Keep in sync with `body` padding fallback. */
-export const OBSERVATION_FRAME_GLOW_PX = 12
+export const OBSERVATION_FRAME_GLOW_PX = 28
 
 /** Logical points the frame window extends past each edge of the observation rectangle. */
 export const OBSERVATION_FRAME_OUTSET = OBSERVATION_FRAME_STROKE_PX + OBSERVATION_FRAME_GLOW_PX
@@ -81,7 +81,7 @@ function edgePadding(inset: number): { readonly glow: number; readonly stroke: n
 
 /**
  * Body glow and `#frame` stroke padding so the inner hole stays on `region`.
- * A flush edge (no leftover outset) uses a 4px stroke just inside that edge.
+ * A flush edge (no leftover outset) uses the stroke just inside that edge.
  * @param region - Computer Use `ScreenInfo.bounds` in global logical points.
  * @param bounds - Electron content rectangle after work-area / WindowServer clip.
  * @returns per-edge glow (body) and stroke (`#frame`) padding in CSS pixels.

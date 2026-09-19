@@ -148,7 +148,7 @@ describe('observation frame geometry', () => {
     })
   })
 
-  it('keeps the inner hole 4px inside a work-area-filling observation', () => {
+  it('keeps the inner hole one stroke inside a work-area-filling observation', () => {
     const placement = observationFramePlacement(workArea, workArea)
     expect(placement.bounds).toEqual(workArea)
     expect(placement.glow).toEqual({ top: 0, right: 0, bottom: 0, left: 0 })
@@ -246,10 +246,10 @@ describe('observation frame geometry', () => {
     showObservationFrame(window as never, region)
     expect(window.contentBounds).toEqual(placement.bounds)
     expect(window.webContents.executeJavaScript).toHaveBeenCalledWith(
-      expect.stringContaining('"--glow-top", "12px"'),
+      expect.stringContaining(`"--glow-top", "${String(OBSERVATION_FRAME_GLOW_PX)}px"`),
     )
     expect(window.webContents.executeJavaScript).toHaveBeenCalledWith(
-      expect.stringContaining('"--stroke-left", "4px"'),
+      expect.stringContaining(`"--stroke-left", "${String(OBSERVATION_FRAME_STROKE_PX)}px"`),
     )
   })
 
@@ -263,7 +263,7 @@ describe('observation frame geometry', () => {
       expect.stringContaining('"--glow-top", "0px"'),
     )
     expect(window.webContents.executeJavaScript).toHaveBeenCalledWith(
-      expect.stringContaining('"--stroke-top", "4px"'),
+      expect.stringContaining(`"--stroke-top", "${String(OBSERVATION_FRAME_STROKE_PX)}px"`),
     )
   })
 
