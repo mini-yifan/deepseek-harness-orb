@@ -104,6 +104,11 @@ function rpcResponse(rpcId: string, value: unknown) {
   }
 }
 
+function setPromptText(prompt: HTMLElement, text: string) {
+  prompt.textContent = text
+  prompt.classList.toggle('prompt-empty', text.trim() === '')
+}
+
 it('creates a Computer Use session on dsh_orb and sends from the overlay', async () => {
   const dom = new JSDOM(readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8'), {
     runScripts: 'outside-only',
@@ -261,9 +266,9 @@ it('creates a Computer Use session on dsh_orb and sends from the overlay', async
       .toEqual([['workspace-write', 'session-orb']])
     expect(calls.some(call => call.method === 'commands/execute')).toBe(false)
     expect(document.querySelector('#permission-label')?.textContent).toBe('Workspace Write')
-    const prompt = document.querySelector<HTMLInputElement>('#prompt')
+    const prompt = document.querySelector<HTMLElement>('#prompt')
     if (prompt === null) throw new Error('missing prompt')
-    prompt.value = 'Write a Word document'
+    setPromptText(prompt, 'Write a Word document')
     document.querySelector<HTMLFormElement>('#composer')?.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }))
     await expect.poll(() => calls.some(call => call.method === 'session/prompt')).toBe(true)
     expect((api.floating.setOverlayPermission as ReturnType<typeof vi.fn>).mock.calls).toEqual([
@@ -594,8 +599,8 @@ it('places the selection chip on the transcript side of the input pill', () => {
   expect(html).toContain('id="selection-chip"')
   expect(html).toContain('id="selection-chip-text"')
   expect(html).toContain('id="selection-chip-dismiss"')
-  expect(css).toMatch(/body\.expand-up #selection-chip \{\s*bottom: var\(--ball\)/u)
-  expect(css).toMatch(/body\.expand-down #selection-chip \{\s*top: var\(--ball\)/u)
+  expect(css).toMatch(/body\.expand-up #selection-chip \{\s*bottom: var\(--composer-height\)/u)
+  expect(css).toMatch(/body\.expand-down #selection-chip \{\s*top: var\(--composer-height\)/u)
   expect(css).toMatch(/#selection-chip-text \{[^}]*text-overflow: ellipsis/u)
   expect(css).toMatch(/#selection-chip-text \{[^}]*white-space: nowrap/u)
 })
@@ -605,6 +610,162 @@ it('forbids selecting overlay chrome except the composer and question fields', (
   expect(css).toMatch(/html,\s*body \{[^}]*user-select: none/u)
   expect(css).toMatch(/#prompt \{[^}]*user-select: text/u)
   expect(css).toMatch(/#question-custom \{[^}]*user-select: text/u)
+})
+
+it('grows the overlay composer around the ball with a height cap', () => {
+  const html = readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8')
+  const css = readFileSync(new URL('../renderer/floating.css', import.meta.url), 'utf8')
+  expect(html).toMatch(/id="prompt"[^>]*contenteditable="true"/u)
+  expect(html).toMatch(/id="prompt"[^>]*aria-multiline="true"/u)
+  expect(css).toMatch(/--composer-max: calc\(var\(--ball\) \+ var\(--prompt-line\) \* 3\)/u)
+  expect(css).toMatch(/#panel::after \{[^}]*height: var\(--composer-height\)/u)
+  expect(css).toMatch(/#composer \{[^}]*height: var\(--composer-height\)/u)
+  expect(css).toMatch(/--prompt-pad: 12px/u)
+  expect(css).toMatch(/#prompt \{[^}]*padding: var\(--prompt-pad\) 8px/u)
+  expect(css).toMatch(/#prompt::before \{[^}]*height: var\(--composer-height\)/u)
+  expect(css).toMatch(/#prompt::before \{[^}]*margin-top: calc\(0px - var\(--prompt-pad\)\)/u)
+  expect(css).toMatch(/body\.expand-left #prompt::before \{\s*float: right/u)
+  expect(css).toMatch(/body\.expand-right #prompt::before \{\s*float: left/u)
+  expect(css).toMatch(/body\.expand-up #prompt::before \{\s*shape-outside: circle\(36px at 50% calc\(100% - 36px\)\)/u)
+  expect(css).toMatch(/body\.expand-down #prompt::before \{\s*shape-outside: circle\(36px at 50% 36px\)/u)
+  expect(css).toMatch(/body\.composer-capped\.expand-left #prompt \{\s*padding-right: var\(--ball\)/u)
+  expect(css).toMatch(/#prompt \{[^}]*white-space: pre-wrap/u)
+})
+
+async function mountComposerOverlay() {
+  const dom = new JSDOM(readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8'), {
+    runScripts: 'outside-only',
+    url: 'dsh-app://shell/floating.html',
+  })
+  const calls: { method: string; payload: unknown }[] = []
+  const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+    if (isRemoteStream(_input)) return hangingStreamResponse(init?.signal)
+    const body = JSON.parse(String(init?.body)) as {
+      rpcId: string
+      method: string
+      payload: { args: Record<string, unknown> }
+    }
+    calls.push({ method: body.method, payload: body.payload.args })
+    let value: unknown = {}
+    if (body.method === 'workspace/create') value = { workspace: { workspaceId: 'ws-orb' }, created: true }
+    if (body.method === 'session/create') value = { sessionId: 'session-orb', agentPreset: 'computer-use' }
+    if (body.method === 'session/modelCatalog') value = { groups: [] }
+    if (body.method === 'session/page') value = { records: [] }
+    if (body.method === 'session/list') {
+      value = { items: [{ sessionId: 'session-orb', running: false, projections: { asOfSeq: 0 } }] }
+    }
+    if (body.method === 'session/prompt') value = { accepted: true }
+    return {
+      ok: true,
+      json: async () => ({
+        type: 'server-response',
+        rpcId: body.rpcId,
+        result: { ok: true, value },
+      }),
+    }
+  })
+  Object.defineProperty(dom.window, 'fetch', { value: fetchMock })
+  Object.defineProperty(dom.window, 'crypto', { value: globalThis.crypto })
+  const setSessionId = vi.fn()
+  Object.defineProperty(dom.window, 'dshDesktop', {
+    value: {
+      locale: async () => resolveDesktopLocale('en'),
+      backend: { status: async () => ({ phase: 'ready' }), subscribe: vi.fn() },
+      floating: {
+        sessionId: async () => undefined,
+        setSessionId,
+        move: vi.fn(),
+        clamp: vi.fn(),
+        setExpanded: vi.fn(async (expanded: boolean) => ({
+          expanded, horizontal: 'left', vertical: 'up',
+        })),
+        orbWorkspacePath: async () => '/tmp/dsh_orb',
+        setSessionRunning: vi.fn(),
+        overlayModel: async () => ({
+          provider: 'deepseek-official',
+          model: 'deepseek-flash',
+          reasoningEffort: 'max',
+        }),
+        overlayPermission: async () => 'danger-full-access',
+        setOverlayPermission: vi.fn(),
+        onOverlayModel: () => () => {},
+        onSelectionPrompt: () => () => {},
+        onSelectionAttach: () => () => {},
+        onCreateSession: () => () => {},
+      },
+    },
+  })
+  runInContext(readFileSync(new URL('../renderer/floating.js', import.meta.url), 'utf8'), dom.getInternalVMContext())
+  await expect.poll(() => setSessionId.mock.calls).toEqual([['session-orb']])
+  const prompt = dom.window.document.querySelector<HTMLElement>('#prompt')
+  if (prompt === null) throw new Error('missing prompt')
+  return { dom, prompt, calls }
+}
+
+it('sends the overlay composer on Enter and keeps Shift+Enter and composing Enter local', async () => {
+  const overlay = await mountComposerOverlay()
+  try {
+    setPromptText(overlay.prompt, 'Open Pages')
+    overlay.prompt.dispatchEvent(new overlay.dom.window.KeyboardEvent('keydown', {
+      key: 'Enter', shiftKey: true, bubbles: true, cancelable: true,
+    }))
+    overlay.prompt.dispatchEvent(new overlay.dom.window.KeyboardEvent('keydown', {
+      key: 'Enter', isComposing: true, bubbles: true, cancelable: true,
+    }))
+    const imeEnter = new overlay.dom.window.KeyboardEvent('keydown', {
+      key: 'Enter', bubbles: true, cancelable: true,
+    })
+    Object.defineProperty(imeEnter, 'keyCode', { value: 229 })
+    overlay.prompt.dispatchEvent(imeEnter)
+    expect(overlay.calls.some(call => call.method === 'session/prompt')).toBe(false)
+    overlay.prompt.dispatchEvent(new overlay.dom.window.KeyboardEvent('keydown', {
+      key: 'Enter', bubbles: true, cancelable: true,
+    }))
+    await expect.poll(() => overlay.calls.some(call => call.method === 'session/prompt')).toBe(true)
+    expect(overlay.calls.find(call => call.method === 'session/prompt')?.payload).toMatchObject({
+      request: {
+        sessionId: 'session-orb',
+        mode: 'queue',
+        content: [{ type: 'text', text: 'Open Pages' }],
+      },
+    })
+    expect(overlay.prompt.textContent).toBe('')
+  } finally {
+    overlay.dom.window.close()
+  }
+})
+
+it('pastes plain text into the overlay composer and drops HTML', async () => {
+  const overlay = await mountComposerOverlay()
+  try {
+    const event = new overlay.dom.window.Event('paste', { bubbles: true, cancelable: true })
+    Object.defineProperty(event, 'clipboardData', {
+      value: {
+        getData: (type: string) => type === 'text/plain' ? 'plain draft' : '<b>html</b>',
+      },
+    })
+    overlay.prompt.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+    expect(overlay.prompt.textContent).toBe('plain draft')
+    expect(overlay.prompt.innerHTML).not.toContain('<b>')
+  } finally {
+    overlay.dom.window.close()
+  }
+})
+
+it('keeps a short overlay draft on the 72px pill and grows one line at a time', async () => {
+  const js = readFileSync(new URL('../renderer/floating.js', import.meta.url), 'utf8')
+  expect(js).not.toMatch(/setProperty\('--composer-height', `\$\{COMPOSER_MAX_PX\}px`\)/u)
+  expect(js).toMatch(/height \+ COMPOSER_LINE_PX/u)
+  const overlay = await mountComposerOverlay()
+  try {
+    setPromptText(overlay.prompt, '你给我')
+    overlay.prompt.dispatchEvent(new overlay.dom.window.Event('input', { bubbles: true }))
+    expect(overlay.dom.window.document.body.style.getPropertyValue('--composer-height')).toBe('72px')
+    expect(overlay.dom.window.document.body.classList.contains('composer-capped')).toBe(false)
+  } finally {
+    overlay.dom.window.close()
+  }
 })
 
 it('places Stop at the opposite pill end from the ball', () => {
@@ -639,7 +800,7 @@ it('places History, Access, and New on the transcript edge opposite the input pi
     /body\.expand-down #history,\s*body\.expand-down #new-conversation,\s*body\.expand-down #permission \{\s*top: auto;\s*bottom: 12px/u,
   )
   expect(css).toMatch(
-    /body\.expand-down #panel \{\s*padding-top: calc\(var\(--ball\) \+ 10px\);\s*padding-bottom: 20px/u,
+    /body\.expand-down #panel \{\s*padding-top: calc\(var\(--composer-height\) \+ 10px\);\s*padding-bottom: 20px/u,
   )
   expect(css).toMatch(
     /body\.expand-down #transcript,\s*body\.expand-down #history-list,\s*body\.expand-down #question \{/u,
@@ -832,9 +993,9 @@ it('lists orb Computer Use chats and reopens the selected session', async () => 
         workspaceId: 'ws-orb',
       },
     })
-    const prompt = document.querySelector<HTMLInputElement>('#prompt')
+    const prompt = document.querySelector<HTMLElement>('#prompt')
     if (prompt === null) throw new Error('missing prompt')
-    prompt.value = 'Scroll down'
+    setPromptText(prompt, 'Scroll down')
     document.querySelector<HTMLFormElement>('#composer')?.dispatchEvent(
       new dom.window.Event('submit', { bubbles: true, cancelable: true }),
     )
@@ -1384,7 +1545,7 @@ it('attaches selected text to the composer until the first send or dismiss', asy
     runInContext(readFileSync(new URL('../renderer/floating.js', import.meta.url), 'utf8'), dom.getInternalVMContext())
     const document = dom.window.document
     await expect.poll(() => setSessionId.mock.calls).toEqual([['session-orb']])
-    const prompt = document.querySelector<HTMLInputElement>('#prompt')
+    const prompt = document.querySelector<HTMLElement>('#prompt')
     const chip = document.querySelector<HTMLElement>('#selection-chip')
     const chipText = document.querySelector('#selection-chip-text')
     const dismiss = document.querySelector<HTMLButtonElement>('#selection-chip-dismiss')
@@ -1403,7 +1564,7 @@ it('attaches selected text to the composer until the first send or dismiss', asy
     document.querySelector<HTMLButtonElement>('#new-conversation')?.click()
     await expect.poll(() => setSessionId.mock.calls).toEqual([['session-orb'], ['session-new']])
     expect(chip.hidden).toBe(false)
-    prompt.value = 'Explain this'
+    setPromptText(prompt, 'Explain this')
     document.querySelector<HTMLFormElement>('#composer')?.dispatchEvent(
       new dom.window.Event('submit', { bubbles: true, cancelable: true }),
     )
@@ -1417,7 +1578,7 @@ it('attaches selected text to the composer until the first send or dismiss', asy
     })
     expect(chip.hidden).toBe(true)
     expect(document.body.classList.contains('has-selection-chip')).toBe(false)
-    prompt.value = 'Follow up'
+    setPromptText(prompt, 'Follow up')
     document.querySelector<HTMLFormElement>('#composer')?.dispatchEvent(
       new dom.window.Event('submit', { bubbles: true, cancelable: true }),
     )
@@ -1733,9 +1894,9 @@ it('sends from the overlay when Access IPC is missing', async () => {
   try {
     runInContext(readFileSync(new URL('../renderer/floating.js', import.meta.url), 'utf8'), dom.getInternalVMContext())
     await expect.poll(() => setSessionId.mock.calls).toEqual([['session-orb']])
-    const prompt = dom.window.document.querySelector<HTMLInputElement>('#prompt')
+    const prompt = dom.window.document.querySelector<HTMLElement>('#prompt')
     if (prompt === null) throw new Error('missing prompt')
-    prompt.value = 'Open WeChat'
+    setPromptText(prompt, 'Open WeChat')
     dom.window.document.querySelector<HTMLFormElement>('#composer')?.dispatchEvent(
       new dom.window.Event('submit', { bubbles: true, cancelable: true }),
     )
