@@ -10,6 +10,7 @@ const workflow = yaml.load(readFileSync(resolve(import.meta.dirname, '../.github
   env: Record<string, string>
   jobs: Record<'preview', {
     'runs-on': string
+    if?: string
     steps: Array<{ name?: string; uses?: string; run?: string; with?: Record<string, unknown>; env?: Record<string, string> }>
   }>
 }
@@ -19,6 +20,7 @@ describe('PR preview workflow', () => {
   it('keeps every PR author on the selected GitHub-hosted runner', () => {
     expect(Object.keys(workflow.jobs)).toEqual(['preview'])
     expect(preview['runs-on']).toBe('ubuntu-24.04')
+    expect(preview.if).toBe("github.repository == 'deepseek-harness/deepseek-harness'")
     expect(workflow.on).toEqual({ pull_request: { types: ['opened', 'synchronize', 'reopened'] } })
     expect(workflow.permissions).toEqual({ contents: 'read', 'pull-requests': 'write' })
     expect(preview.steps.find(step => step.uses === 'actions/checkout@v6')?.with).toEqual({ 'persist-credentials': false })

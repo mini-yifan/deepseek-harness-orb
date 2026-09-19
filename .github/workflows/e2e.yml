@@ -8,14 +8,18 @@ name: E2E (real DeepSeek API)
 #
 # pull_request IS a trigger, but GitHub withholds repo secrets from BOTH forked
 # PRs and Dependabot PRs (the latter are same-repo, fork==false, but still
-# keyless). The job-level `if:` below skips the whole job for those untrusted
-# PRs. The Dependabot test keys on the PR AUTHOR (pull_request.user.login), not
-# github.actor (the run trigger) — a maintainer reopening a Dependabot PR would
-# make github.actor human while the PR is still keyless. When the job runs, the
-# secret is expected, so the preflight hard-fails if it's missing (a missing
-# secret would otherwise make the self-skipping suite report a false green). A
-# job skipped by a job-level `if:` reports as a SUCCESSFUL check, so this
-# workflow is safe to use as a required status check if desired.
+# keyless). Independent copies that are not GitHub forks also lack the
+# canonical org secret. The job-level `if:` below requires
+# github.repository == 'deepseek-harness/deepseek-harness' and then skips those
+# untrusted PRs. The Dependabot test keys on the PR AUTHOR
+# (pull_request.user.login), not github.actor (the run trigger) — a maintainer
+# reopening a Dependabot PR would make github.actor human while the PR is still
+# keyless. When the job runs, the secret is expected, so the preflight
+# hard-fails if it's missing (a missing secret would otherwise make the
+# self-skipping suite report a false green). A job skipped by a job-level `if:`
+# reports as a SUCCESSFUL check, so this workflow is safe to use as a required
+# status check if desired. Canonical-repository identity is recorded in
+# .agents/notes/implemented/process/2026-09-19-canonical-repository-org-only-workflows.md.
 #
 # SECURITY — NEVER change this trigger to `pull_request_target`. `pull_request`
 # checks out and runs the PR's HEAD code WITHOUT secrets for forks, which is what
@@ -55,11 +59,13 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
     name: e2e
-    # Run on every trusted event. Skip untrusted PRs (forks + Dependabot) where
-    # the secret is withheld — they would otherwise hard-fail the preflight.
+    # Run on the canonical repository's trusted events. Skip independent copies,
+    # then skip untrusted PRs (forks + Dependabot) where the secret is withheld
+    # — they would otherwise hard-fail the preflight.
     if: >-
-      github.event_name != 'pull_request'
-      || !(github.event.pull_request.head.repo.fork || github.event.pull_request.user.login == 'dependabot[bot]')
+      github.repository == 'deepseek-harness/deepseek-harness'
+      && (github.event_name != 'pull_request'
+      || !(github.event.pull_request.head.repo.fork || github.event.pull_request.user.login == 'dependabot[bot]'))
     # Profile e2e files can each own several complete dsh subprocess trees, so
     # four file workers preserve process/PTY headroom. Tests retain 120s/test
     # and retry 2; 45m still bounds retry storms against a slow API.
