@@ -49,6 +49,7 @@ export interface OrbSettingsState {
   overlay: OrbAgentModelSelection
   background: OrbAgentModelSelection
   selectionEnabled: boolean
+  millifractionEnabled: boolean
   catalog: OrbModelCatalog | undefined
   busy: boolean
 }
@@ -62,6 +63,7 @@ const IDLE: OrbSettingsState = {
   overlay: { provider: '', model: '' },
   background: { provider: '', model: '' },
   selectionEnabled: true,
+  millifractionEnabled: true,
   catalog: undefined,
   busy: false,
 }
@@ -86,6 +88,8 @@ export interface OrbSettingsSectionInjected {
   setBackgroundModel: (selection: OrbAgentModelSelection) => Promise<void>
   /** Persist selection-toolbar enablement. */
   setSelectionEnabled: (enabled: boolean) => Promise<void>
+  /** Confirm, then persist millifraction-coordinates enablement and create a new overlay chat. */
+  setMillifractionEnabled: (enabled: boolean) => Promise<void>
 }
 
 /** Loads Desktop orb preferences and the Host model catalog. */
@@ -211,6 +215,32 @@ export class OrbSettingsController {
     }
   }
 
+  /**
+   * Persist millifraction-coordinates enablement only after native confirm.
+   * Does not set busy or flip the switch until Electron returns a non-cancelled snapshot.
+   * @param enabled - whether new overlay chats should use 0–1000 millifraction.
+   * @returns after Desktop confirms or cancels.
+   */
+  async setMillifractionEnabled(enabled: boolean): Promise<void> {
+    const api = this.requireApi()
+    if (api === undefined) return
+    try {
+      const result = await api.orb.setMillifractionEnabled(enabled)
+      if (result.cancelled) return
+      this.store.set({
+        ...this.store.getSnapshot(),
+        millifractionEnabled: result.snapshot.millifractionEnabled,
+      })
+    } catch (error) {
+      this.store.set({
+        ...this.store.getSnapshot(),
+        status: 'error',
+        error: errorMessage(error),
+        busy: false,
+      })
+    }
+  }
+
   private requireApi(): DshDesktopAppApi | undefined {
     const api = readDesktopAppApi()
     if (api === undefined) {
@@ -232,6 +262,7 @@ export class OrbSettingsController {
       overlay: snapshot.overlay,
       background: snapshot.background,
       selectionEnabled: snapshot.selectionEnabled,
+      millifractionEnabled: snapshot.millifractionEnabled,
     })
   }
 
@@ -249,6 +280,7 @@ export class OrbSettingsController {
       overlay: snapshot.overlay,
       background: snapshot.background,
       selectionEnabled: snapshot.selectionEnabled,
+      millifractionEnabled: snapshot.millifractionEnabled,
       catalog,
       busy: false,
     })

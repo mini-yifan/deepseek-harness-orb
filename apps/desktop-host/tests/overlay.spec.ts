@@ -32,6 +32,8 @@ describe('desktop Computer Use overlay', () => {
     expect(overlay).toContain("name: '../lib/computer-use-orb-permission.js'")
     expect(overlay).toContain('id: computer-use-orb-code-agent-model')
     expect(overlay).toContain("name: '../lib/computer-use-orb-code-agent-model.js'")
+    expect(overlay).toContain('id: computer-use-orb-coordinate-mode')
+    expect(overlay).toContain("name: '../lib/computer-use-orb-coordinate-mode.js'")
     expect(overlay).toContain('inject: [computerUsePresetRoot]')
     expect(overlay).toContain('id: webserver')
     expect(overlay).toContain('listen: false')

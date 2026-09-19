@@ -84,6 +84,13 @@ export const en = {
   selectionToolbarLanguage: 'Translate language',
   selectionToolbarEnable: 'Enable Selection Toolbar',
   selectionToolbarDisable: 'Disable Selection Toolbar',
+  millifractionEnable: 'Enable millifraction coordinates',
+  millifractionDisable: 'Disable millifraction coordinates',
+  millifractionConfirmTitle: 'Change coordinate encoding',
+  millifractionConfirmMessage: 'The new encoding takes effect in a new conversation.',
+  millifractionConfirmDetail: 'The current conversation stays unchanged and remains in History. Cancel leaves the default and this chat as they are.',
+  millifractionConfirmOk: 'Create new conversation',
+  millifractionConfirmCancel: 'Cancel',
 } as const
 
 /** Every Desktop locale supplies the complete English key set. */
@@ -173,6 +180,13 @@ export const zh = {
   selectionToolbarLanguage: '选择翻译语言',
   selectionToolbarEnable: '开启划词',
   selectionToolbarDisable: '关闭划词',
+  millifractionEnable: '打开千分比坐标',
+  millifractionDisable: '关闭千分比坐标',
+  millifractionConfirmTitle: '更改坐标编码',
+  millifractionConfirmMessage: '新编码只在新对话中生效。',
+  millifractionConfirmDetail: '当前对话不变，仍可从历史记录打开。取消不写入、不新建。',
+  millifractionConfirmOk: '新建对话',
+  millifractionConfirmCancel: '取消',
 } as const satisfies DesktopMessages
 
 /** Locale payload exposed to the Desktop-owned renderer. */

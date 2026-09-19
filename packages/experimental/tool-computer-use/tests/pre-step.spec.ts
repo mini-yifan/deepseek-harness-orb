@@ -16,6 +16,8 @@ import { createFakeDesktopBackend } from '../src/fake.ts'
 import { applyComputerUse, PLUGIN_NAME } from '../src/plugin.ts'
 import { DESKTOP_SELECTION_PREAMBLE } from '../src/selection-turn.ts'
 
+import type {} from '../src/coordinate-mode.ts'
+
 class CatalogAdapter extends LlmAdapter {
   constructor(private readonly image: boolean) {
     super()
@@ -102,6 +104,38 @@ describe('computer-use first-frame pre-step', () => {
       block.type === 'text' && 'text' in block
       && block.text.includes('Center x is 500, not a pixel x'),
     )).toBe(true)
+  })
+
+  it('names pixel columns on a pixel-mode session', async () => {
+    const ctx = await setup(true)
+    const session = Session.create(SessionId('cu-pre-pixel'))
+    session.append('computer-use/coordinate-mode', { mode: 'pixel' })
+    const owner = {
+      id: session.id,
+      session,
+      options: { provider: 'visual', model: 'vision' },
+    } as Agent
+    const decision = await agentEvents(ctx, owner).waterfall(
+      'agent/pre-step',
+      { messages: [user], turn: 1, step: 1, signal: new AbortController().signal },
+      () => Promise.resolve({ kind: 'enter' as const, messages: [user] }),
+    )
+    expect(decision.kind).toBe('enter')
+    if (decision.kind !== 'enter') return
+    const notice = decision.messages[1]
+    expect(notice?.content.some(block =>
+      block.type === 'text' && 'text' in block
+      && block.text.includes('pixel columns and rows of this screenshot'),
+    )).toBe(true)
+    expect(notice?.content.some(block =>
+      block.type === 'text' && 'text' in block && block.text.includes('<coordinate_space>pixels</coordinate_space>'),
+    )).toBe(true)
+    expect(notice?.content.some(block =>
+      block.type === 'text' && 'text' in block && block.text.includes('<attached_size>1x1</attached_size>'),
+    )).toBe(true)
+    expect(notice?.content.some(block =>
+      block.type === 'text' && 'text' in block && block.text.includes('Center x is 500'),
+    )).toBe(false)
   })
 
   it('skips first-frame attachment for rejects, empty batches, plugin injects, and text-only routes', async () => {

@@ -24,6 +24,9 @@ export type OrbSettingsKey =
   | 'selectionTitle'
   | 'selectionDescription'
   | 'selectionToggle'
+  | 'millifractionTitle'
+  | 'millifractionDescription'
+  | 'millifractionToggle'
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh: Record<OrbSettingsKey, string> = {
@@ -49,6 +52,9 @@ export const zh: Record<OrbSettingsKey, string> = {
   selectionTitle: '划词工具栏',
   selectionDescription: '在其他应用中划选文字后显示搜索、翻译和发给 Agent。',
   selectionToggle: '启用划词工具栏',
+  millifractionTitle: '千分比坐标',
+  millifractionDescription: '新建 overlay 对话使用截图的 0–1000 比例。关闭后使用已附加图片的像素。更改此项会新建对话。',
+  millifractionToggle: '使用千分比坐标',
 }
 
 /** English dictionary, checked complete against the zh key set. */
@@ -75,4 +81,7 @@ export const en: Record<OrbSettingsKey, string> = {
   selectionTitle: 'Selection toolbar',
   selectionDescription: 'After a drag-select in another app, offer Search, Translate, and Send to Agent.',
   selectionToggle: 'Enable the selection toolbar',
+  millifractionTitle: 'Millifraction coordinates',
+  millifractionDescription: 'New overlay chats use 0–1000 fractions of the screenshot. Turn off to use pixels of the attached image. Changing this creates a new conversation.',
+  millifractionToggle: 'Use millifraction coordinates',
 }

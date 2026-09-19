@@ -458,6 +458,36 @@ function onRequestFrame(frame) {
     }
   })
 
+  it('pushes the overlay Computer Use click encoding over Host IPC', async () => {
+    const runtime = projectWithHost(`
+let lastMode = null
+process.on('message', message => {
+  if (message.type === 'orb-coordinate-mode') lastMode = message
+})
+process.send({ type: 'ready', protocolVersion: ${String(DESKTOP_HOST_PROTOCOL_VERSION)}, dshVersion: 'orb-coord' })
+function onRequestFrame(frame) {
+  if (frame.type !== 1) return
+  responseStart(frame.streamId, { headers: [['content-type', 'application/json']] })
+  responseData(frame.streamId, JSON.stringify(lastMode))
+  responseEnd(frame.streamId)
+}
+`)
+    const host = new DesktopHostProcess(process.execPath, runtime, runtime)
+    try {
+      await host.start()
+      host.setOrbCoordinateMode('pixel')
+      await expect.poll(async () => {
+        const response = await host.fetch(new Request('dsh-app://app/orb-coord'))
+        return await response.json() as unknown
+      }).toEqual({
+        type: 'orb-coordinate-mode',
+        mode: 'pixel',
+      })
+    } finally {
+      await host.stop()
+    }
+  })
+
   it('forwards plugin-run IPC to Electron and acknowledges plugin-run-done', async () => {
     const runtime = projectWithHost(`
 let last = null

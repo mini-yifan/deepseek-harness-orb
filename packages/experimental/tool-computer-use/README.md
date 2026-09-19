@@ -66,7 +66,7 @@ There is no `observe` tool. The first user turn already includes the current fro
 
 | Tool | Arguments | After the action |
 |---|---|---|
-| `click` | `screen_index` (0), `position: [x,y]` (0–1000), optional `button` (`left`/`right`), optional `count` (1 or 2) | click, wait, recapture |
+| `click` | `screen_index` (0), `position: [x,y]` (0–1000 millifraction by default; overlay pixel sessions use attached WxH), optional `button` (`left`/`right`), optional `count` (1 or 2) | click, wait, recapture |
 | `input_text` | `screen_index`, `position`, `text`, optional `replace`, optional `submit` | click-focus, type, optional Enter, wait, recapture |
 | `scroll` | `screen_index`, `position`, `direction` (`up`/`down`), `scroll_level` 1–10 | scroll, wait, recapture |
 | `hotkey` | `keys: string[]` | key combo; system screenshot chords are rejected; wait, recapture |
@@ -83,7 +83,7 @@ There is no `observe` tool. The first user turn already includes the current fro
 | `code_agent_status` | none | list this Computer Use chat's background sessions (count, latest task, cwd, running or idle) |
 | `code_agent_stop` | `session_id` | cancel that session's running turn and queued follow-ups; the session stays idle and continuable |
 
-The thirteen GUI tools run exclusive. `presentCall` is generic. Each observation starts with `<frontmost_app>` (plus `<frontmost_window>` when the window has a title, `<frontmost_folder>` when Finder or 访达 is frontmost, or `<focus_note>` when no remaining window remains after skipping the overlay). The optional screen envelope then names index 0 and the 0–1000 space of that window. They never include pixel sizes, downscale multipliers, or a screenshot filesystem path. When no operable window remains, the observation is those tags only — there is no desktop panorama.
+The thirteen GUI tools run exclusive. `presentCall` is generic. Each observation starts with `<frontmost_app>` (plus `<frontmost_window>` when the window has a title, `<frontmost_folder>` when Finder or 访达 is frontmost, or `<focus_note>` when no remaining window remains after skipping the overlay). The optional screen envelope then names index 0 and that session's click space: millifraction 0–1000 with no pixel sizes, or pixels plus that attachment's WxH. Image-handle dimensions are still not a click space. When no operable window remains, the observation is those tags only — there is no desktop panorama.
 
 Tests inject a fake desktop through `applyComputerUse(ctx, backend, config)` rather than a Config `driver` hook.
 
@@ -105,7 +105,7 @@ The plugin is one experimental package on purpose. The existing agent-loop alrea
 
 First-frame attachment uses `agent/pre-step`: the listener always awaits `next()`, then appends a plugin `user` notice with `form: 'notice'` when the claimed batch contains a `source.kind === 'user'` message and the route declares image input, except when that user text starts with `Desktop selection. Answer in this chat only. Do not call GUI tools or code_agent.` `agent.inject()` would land only on the next step.
 
-Desktop `code_agent` create reads optional `ctx.get('orbCodeAgentModel')` after `session.create` and before `session.prompt`, passing `saveAsDefault: false`. Continue-by-`session_id` does not. This package does not import Desktop Host.
+Desktop `code_agent` create reads optional `ctx.get('orbCodeAgentModel')` after `session.create` and before `session.prompt`, passing `saveAsDefault: false`. Continue-by-`session_id` does not. Blank overlay Computer Use creates read optional `ctx.get('orbCoordinateMode')` at `agent/created` and append `'computer-use/coordinate-mode'`; a log with `session/end-seed` or an existing encoding event is left unchanged. Headless/Web omit that service and stay millifraction. This package does not import Desktop Host.
 
 ### Source map
 
@@ -125,8 +125,9 @@ Desktop `code_agent` create reads optional `ctx.get('orbCodeAgentModel')` after 
 | [`src/wait-args.ts`](src/wait-args.ts) | Fixed 1s `wait` and `long_wait` 10/30/60/120 buckets |
 | [`src/screenshot.ts`](src/screenshot.ts) | Desktop filenames and unique-path write for `screenshot` |
 | [`src/overlay-guard.ts`](src/overlay-guard.ts) | Optional Desktop overlay cloak: `wrapDesktopBackend` around listScreens, capture, inspect, HID, `open_app`, and `withGuiTurn`; `list_apps` / `open_in_browser` / `open_in_finder` / `copyImageToClipboard` stay unwrapped |
+| [`src/coordinate-mode.ts`](src/coordinate-mode.ts) | Per-session millifraction/pixel stamp, projection, observation raster cache, and pixel tool-schema rewrite |
 | [`presets/computer-use/`](presets/computer-use/) | Computer Use agent preset: Shell, web, GUI tools, `code_agent` family, `ask_user_question`, compaction |
-| — | No runtime invariant companion is published because this plugin introduces no new session events; observations ride existing `user/message` and `tool/result`. |
+| — | No runtime invariant companion is published: assemble, execute, and envelopes all read this session's log; independent observations cannot diverge. |
 
 </details>
 
@@ -149,7 +150,8 @@ Desktop `code_agent` create reads optional `ctx.get('orbCodeAgentModel')` after 
 - [Computer Use app-window observation](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-app-window-observation.md) — frontmost-app family window union and always-region capture.
 - [Computer Use transient window observation](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-transient-window-observation.md) — region helper for that union rectangle.
 - [Computer Use context-menu observation](../../../.agents/notes/implemented/bug-fix/2026-09-16-computer-use-context-menu-observation.md) — settle-before-inspect and overlay input cloak through recapture.
-- [Computer Use 0–1000 fraction coordinates](../../../.agents/notes/implemented/bug-fix/2026-09-15-computer-use-fraction-coordinates.md) — model-facing 0–1000 is a fraction of the visible screenshot, not capture pixels.
+- [Computer Use 0–1000 fraction coordinates](../../../.agents/notes/implemented/bug-fix/2026-09-15-computer-use-fraction-coordinates.md) — default millifraction encoding: model-facing 0–1000 is a fraction of the visible screenshot, not capture pixels.
+- [Overlay Computer Use millifraction and pixel coordinate modes](../../../.agents/notes/implemented/feature/2026-09-19-computer-use-session-coordinate-modes.md) — per-session click encoding, Desktop confirm-then-create, and pixel attached WxH.
 - [Image handle omits request-preview pixels](../../../.agents/notes/implemented/bug-fix/2026-09-15-omit-request-preview-handle-dimensions.md) — the shared image handle names identity, not request-preview width and height.
 - [Desktop floating orb](../../../.agents/notes/implemented/feature/2026-09-14-desktop-floating-orb.md) — macOS overlay, runtime extra, and first-class `code_agent` sessions.
 - [Floating-ball Agent model menus](../../../.agents/notes/implemented/feature/2026-09-17-orb-agent-model-menus.md) — overlay and background model persistence, `saveAsDefault: false`, create-only `code_agent` apply.
@@ -165,7 +167,7 @@ Desktop `code_agent` create reads optional `ctx.get('orbCodeAgentModel')` after 
 
 #### What the model sees
 
-One stable `tool:computer-use` section is assembled on every request while the plugin is mounted. The text below is the exact policy.
+One stable `tool:computer-use` section is assembled on every request while the plugin is mounted. Overlay pixel sessions substitute a pixel Coordinates paragraph; the millifraction text below is the Headless/Web default.
 
 ##### Computer Use policy
 
@@ -249,7 +251,7 @@ These limits are current package constraints. The plugin drives the real unsandb
 - **No per-click approval** — installing or patching the plugin is the consent gate; a visual loop cannot ask on every action.
 - **Host chrome is omitted from the shot when it is not the frontmost window** — Web windows appear only when that window is frontmost. Desktop's main window stays capturable when it is next after overlay skip. The macOS overlay is omitted from Computer Use screenshots by ScreenCaptureKit exclude-id checks (display exclude plus crop) and is click-through for HID bursts, `open_app`, and their recapture via ack'd overlay-guard IPC. Foreground inspect and `listScreens` skip those overlay window ids, so the main window can appear as `<frontmost_app>`.
 - **Typing uses the string clipboard** — `input_text` pastes with Cmd+V and restores the previous string clipboard afterwards. Other clipboard types are not restored. `screenshot` replaces the pasteboard with the captured image and does not restore the previous clipboard.
-- **Retina vs attached size** — backing scale and request rasters can differ from the capture; pass 0–1000 fractions of the visible screenshot.
+- **Retina vs attached size** — backing scale and request rasters can differ from the capture; millifraction sessions pass 0–1000 fractions of the visible screenshot. Overlay pixel sessions divide by that observation's attached WxH named on the Computer Use envelope.
 - **Fixed settle wait** — post-action delay is `postActionWaitMs` before inspect and capture pixels; there is no pixel-diff stall.
 - **No lasso or `manage_files`** — GUI coverage is click, type, scroll, hotkey, wait, long_wait, screenshot, long-press, drag, open-in-browser, open-in-finder, list-apps, and open-app. Switch apps with `open_app`; do not click the Dock. Background documents and code go through `code_agent`.
 - **`code_agent` notice needs live Agents** — execute still returns after queue accept. A missing live Code agent, a disposed Computer Use caller, or a Code session that never returns to idle drops the notice. `code_agent_stop` aborts the watch for that interval. Background Code agents auto-allow approval and auto-answer ask-user prompts; Computer Use itself still shows questions on the ball. Policy cannot stop a model that still calls `wait` or `long_wait`.

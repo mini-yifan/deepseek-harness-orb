@@ -22,7 +22,7 @@ import { DesktopHostProcess } from './host-process.ts'
 import { runDesktopPluginArgs } from './plugin-run.ts'
 import { linkDevelopmentPluginStore } from './development-plugin-store.ts'
 import { DesktopBackendController, type DesktopBackendState } from './backend-controller.ts'
-import { DESKTOP_IPC, type DesktopUpdateState, type OrbSettingsSnapshot } from './ipc.ts'
+import { DESKTOP_IPC, type DesktopUpdateState, type OrbMillifractionWriteResult, type OrbSettingsSnapshot } from './ipc.ts'
 import { formatDesktopMessage, resolveDesktopLocale } from './locale.ts'
 import { claimDesktopSingleInstance } from './single-instance.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
@@ -68,6 +68,12 @@ import {
 } from './orb-permission.ts'
 import { createSelectionToolbarWindow, hideSelectionToolbar } from './selection-toolbar-window.ts'
 import { SelectionToolbarController } from './selection-toolbar-controller.ts'
+import { applyMillifractionCoordinates } from './millifraction-coordinates-apply.ts'
+import {
+  orbCoordinateModeFor,
+  readMillifractionCoordinates,
+  writeMillifractionCoordinates,
+} from './millifraction-coordinates.ts'
 
 const SCHEME = 'dsh-app'
 let focusPrimaryWindow = (): void => {}
@@ -320,6 +326,12 @@ async function main(): Promise<void> {
       background: () => readOrbAgentModels(activeProject).background,
       onSelectOverlay: persistOverlayModel,
       onSelectBackground: persistBackgroundModel,
+    }, {
+      enabled: () => readMillifractionCoordinates(activeProject).enabled,
+      toggle: () => {
+        const current = readMillifractionCoordinates(activeProject).enabled
+        void confirmMillifractionEnabled(!current, floatingWindow)
+      },
     })
     app.setActivationPolicy('regular')
     app.dock?.show()
@@ -333,6 +345,75 @@ async function main(): Promise<void> {
     }
     selection.start()
   }
+
+  let millifractionApplying: Promise<OrbMillifractionWriteResult> | undefined
+
+  function requestOverlayNewSession(): void {
+    ensureFloating()
+    const window = floatingWindow
+    if (window === undefined || window.isDestroyed()) return
+    const send = (): void => {
+      if (!window.isDestroyed()) window.webContents.send(DESKTOP_IPC.floatingCreateSession)
+    }
+    if (window.webContents.isLoading()) {
+      window.webContents.once('did-finish-load', send)
+      return
+    }
+    send()
+  }
+
+  async function confirmMillifractionEnabled(
+    enabled: boolean,
+    parent?: BrowserWindow,
+  ): Promise<OrbMillifractionWriteResult> {
+    if (millifractionApplying !== undefined) return millifractionApplying
+    const run = (async (): Promise<OrbMillifractionWriteResult> => {
+      const result = await applyMillifractionCoordinates({
+        requestedEnabled: enabled,
+        currentEnabled: readMillifractionCoordinates(activeProject).enabled,
+        messages,
+        dialog: {
+          async show(options) {
+            const box = {
+              type: 'question' as const,
+              title: options.title,
+              message: options.message,
+              detail: options.detail,
+              buttons: [options.confirm, options.cancel],
+              defaultId: 0,
+              cancelId: 1,
+            }
+            const response = parent === undefined
+              ? await dialog.showMessageBox(box)
+              : await dialog.showMessageBox(parent, box)
+            return response.response === 0
+          },
+        },
+        persist: (next) => { writeMillifractionCoordinates(activeProject, { enabled: next }) },
+        pushHost: (mode) => { backend.host?.setOrbCoordinateMode(mode) },
+        createOverlaySession: requestOverlayNewSession,
+      })
+      if (!result.applied) return { cancelled: true }
+      return {
+        cancelled: false,
+        snapshot: {
+          supported: orbSettingsSupported(process.platform),
+          avatarUrl: orbAvatarUrl('app', orbAvatarCacheToken(activeProject)),
+          overlay: readOrbAgentModels(activeProject).overlay,
+          background: readOrbAgentModels(activeProject).background,
+          selectionEnabled: selection?.enabled() ?? true,
+          millifractionEnabled: result.enabled,
+        },
+      }
+    })()
+    millifractionApplying = run
+    try {
+      return await run
+    } finally {
+      millifractionApplying = undefined
+    }
+  }
+
   const requireFloatingWindow = (event: IpcMainInvokeEvent): BrowserWindow => {
     assertDesktopSender(event, ['shell'])
     const window = BrowserWindow.fromWebContents(event.sender)
@@ -396,6 +477,7 @@ async function main(): Promise<void> {
       },
       fetch: (request: Request) => host.fetch(request),
       setOrbCodeAgentModel: (selection: OrbAgentModelSelection) => { host.setOrbCodeAgentModel(selection) },
+      setOrbCoordinateMode: (mode: 'millifraction' | 'pixel') => { host.setOrbCoordinateMode(mode) },
       setOrbPermissionPreset: (preset: OrbPermissionPreset, sessionId?: string) => {
         if (sessionId === undefined) host.setOrbPermissionPreset(preset)
         else host.setOrbPermissionPreset(preset, sessionId)
@@ -407,6 +489,7 @@ async function main(): Promise<void> {
     if (state.phase === 'ready') {
       pushBackgroundModel()
       pushOrbPermission()
+      pushCoordinateMode()
       ensureFloating()
     }
     if (state.phase === 'error') void navigateMain(startupUrl).catch((error: unknown) => { console.error(error) })
@@ -418,6 +501,12 @@ async function main(): Promise<void> {
 
   function pushOrbPermission(): void {
     backend.host?.setOrbPermissionPreset(readOrbPermission(activeProject))
+  }
+
+  function pushCoordinateMode(): void {
+    backend.host?.setOrbCoordinateMode(
+      orbCoordinateModeFor(readMillifractionCoordinates(activeProject).enabled),
+    )
   }
 
   async function loadFloatingModelCatalog(): Promise<{
@@ -507,6 +596,7 @@ async function main(): Promise<void> {
       overlay: models.overlay,
       background: models.background,
       selectionEnabled: selection?.enabled() ?? true,
+      millifractionEnabled: readMillifractionCoordinates(activeProject).enabled,
     }
   }
 
@@ -815,6 +905,15 @@ async function main(): Promise<void> {
     if (typeof enabled !== 'boolean') throw new Error('dsh desktop: selection enablement requires a boolean')
     if (selection === undefined) throw new Error('dsh desktop: selection toolbar is unavailable')
     selection.setEnabled(enabled)
+  })
+  ipcMain.handle(DESKTOP_IPC.orbSetMillifractionEnabled, async (event, enabled: unknown) => {
+    requireAppSender(event)
+    assertOrbSettingsWritable(process.platform)
+    if (typeof enabled !== 'boolean') {
+      throw new Error('dsh desktop: millifraction enablement requires a boolean')
+    }
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    return confirmMillifractionEnabled(enabled, parent === null ? undefined : parent)
   })
   ipcMain.handle(DESKTOP_IPC.selectionSearch, (event) => {
     noteOverlayOwnedActivation()

@@ -3,8 +3,12 @@ import {
   assertAllowedHotkey,
   COORDINATE_SPACE,
   isForbiddenScreenshotHotkey,
+  mapFractionToGlobal,
   mapNormalizedToGlobal,
+  mapPixelToGlobal,
+  modelPositionToHid,
   requireNormalizedPosition,
+  requirePixelPosition,
 } from '../src/coordinates.ts'
 import type { ScreenInfo } from '../src/backend.ts'
 
@@ -21,6 +25,12 @@ describe('normalized coordinates', () => {
     expect(mapNormalizedToGlobal([500, 250], screen)).toEqual({ x: 600, y: 175 })
   })
 
+  it('maps fractions through mapFractionToGlobal', () => {
+    expect(mapFractionToGlobal([0, 0], screen)).toEqual({ x: 100, y: 50 })
+    expect(mapFractionToGlobal([1, 1], screen)).toEqual({ x: 1100, y: 550 })
+    expect(mapFractionToGlobal([0.5, 0.5], screen)).toEqual({ x: 600, y: 300 })
+  })
+
   it('rejects positions that are not two finite 0–1000 numbers', () => {
     expect(() => requireNormalizedPosition([0])).toThrow(/exactly two coordinates/u)
     expect(() => requireNormalizedPosition([0, 1, 2])).toThrow(/exactly two coordinates/u)
@@ -28,6 +38,37 @@ describe('normalized coordinates', () => {
     expect(() => requireNormalizedPosition([-1, 0])).toThrow(/0–1000/u)
     expect(() => requireNormalizedPosition([0, 1001])).toThrow(/0–1000/u)
     expect(requireNormalizedPosition([0, 1000])).toEqual([0, 1000])
+  })
+})
+
+describe('pixel coordinates', () => {
+  const attached = { width: 1470, height: 800 }
+
+  it('maps attached pixels onto the same window fraction as millifraction', () => {
+    expect(mapPixelToGlobal([0, 0], attached, screen)).toEqual({ x: 100, y: 50 })
+    expect(mapPixelToGlobal([1470, 800], attached, screen)).toEqual({ x: 1100, y: 550 })
+    expect(mapPixelToGlobal([754, 155], attached, screen)).toEqual({
+      x: 100 + (754 / 1470) * 1000,
+      y: 50 + (155 / 800) * 500,
+    })
+  })
+
+  it('converts pixels to HID millifraction by attached size', () => {
+    expect(modelPositionToHid([754, 155], 'pixel', attached)).toEqual([
+      (754 / 1470) * COORDINATE_SPACE,
+      (155 / 800) * COORDINATE_SPACE,
+    ])
+    expect(modelPositionToHid([500, 250], 'millifraction', undefined)).toEqual([500, 250])
+  })
+
+  it('rejects pixel positions outside the attached raster and fails without a raster', () => {
+    expect(() => requirePixelPosition([0], attached)).toThrow(/1470x800/u)
+    expect(() => requirePixelPosition([-1, 0], attached)).toThrow(/1470x800/u)
+    expect(() => requirePixelPosition([1471, 0], attached)).toThrow(/1470x800/u)
+    expect(() => requirePixelPosition([0, 801], attached)).toThrow(/1470x800/u)
+    expect(requirePixelPosition([1470, 800], attached)).toEqual([1470, 800])
+    expect(() => modelPositionToHid([0, 0], 'pixel', undefined))
+      .toThrow(/attached screenshot raster/u)
   })
 })
 

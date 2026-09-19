@@ -14,7 +14,7 @@ Desktop Host composition inserts `@deepseek-ai/dsh-client-ui-settings-orb` as `s
 
 The main window is `dsh-app://app`. [`preload-app.ts`](../../../../apps/desktop/src/preload-app.ts) exposes `dshDesktop.orb` to that hostname and keeps the startup bridge on `shell`. New IPC uses `assertDesktopSender(..., ['app'])`. Non-darwin writes throw `dsh desktop: floating ball settings require macOS`.
 
-Custom images copy into the profile as `orb-avatar` plus `orb-avatar.json` (GIF/PNG/WebP, 2 MB cap). `dsh-app://app/orb-avatar` and `dsh-app://shell/orb-avatar` serve that file or `deepseek-avatar-square.gif`. Overlay and background models still write `orb-agent-models.json`; the selection switch calls `SelectionToolbarController.setEnabled`. Access, Open Main Window, and Quit stay on the native menu. Catalog reads stay on Host `session/modelCatalog`.
+Custom images copy into the profile as `orb-avatar` plus `orb-avatar.json` (GIF/PNG/WebP, 2 MB cap). `dsh-app://app/orb-avatar` and `dsh-app://shell/orb-avatar` serve that file or `deepseek-avatar-square.gif`. Overlay and background models still write `orb-agent-models.json`; the selection switch calls `SelectionToolbarController.setEnabled`. The millifraction-coordinates card confirms in Electron main and is owned by [Overlay Computer Use millifraction and pixel coordinate modes](2026-09-19-computer-use-session-coordinate-modes.md). Access, Open Main Window, and Quit stay on the native menu. Catalog reads stay on Host `session/modelCatalog`.
 
 ## Alternatives considered
 

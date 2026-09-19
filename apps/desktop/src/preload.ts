@@ -81,6 +81,13 @@ const api: DshDesktopApi = {
       ipcRenderer.on(DESKTOP_IPC.selectionAttach, handle)
       return () => { ipcRenderer.off(DESKTOP_IPC.selectionAttach, handle) }
     },
+    onCreateSession(listener) {
+      const handle = (): void => {
+        listener()
+      }
+      ipcRenderer.on(DESKTOP_IPC.floatingCreateSession, handle)
+      return () => { ipcRenderer.off(DESKTOP_IPC.floatingCreateSession, handle) }
+    },
   },
   selection: {
     search: () => ipcRenderer.invoke(DESKTOP_IPC.selectionSearch) as Promise<void>,

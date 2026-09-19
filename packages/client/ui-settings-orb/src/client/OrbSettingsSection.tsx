@@ -1,6 +1,7 @@
 /**
  * Desktop floating-ball Settings section: avatar, overlay and background
- * Agent models, and the selection toolbar. Writes apply immediately.
+ * Agent models, the selection toolbar, and millifraction coordinates. Writes
+ * apply immediately except millifraction, which confirms then creates a new chat.
  */
 
 import { useEffect, type ReactNode } from 'react'
@@ -134,6 +135,20 @@ export function OrbSettingsSection(props: OrbSettingsSectionProps): ReactNode {
               label={t('selectionToggle')}
               disabled={disabled}
               onChange={(enabled) => { void props.setSelectionEnabled(enabled) }}
+            />
+          </div>
+        </section>
+        <section className={css.card}>
+          <div className={css.toggleRow}>
+            <div className={css.toggleCopy}>
+              <h3 className={css.cardTitle}>{t('millifractionTitle')}</h3>
+              <p className={css.cardDescription}>{t('millifractionDescription')}</p>
+            </div>
+            <Switch
+              checked={state.millifractionEnabled}
+              label={t('millifractionToggle')}
+              disabled={disabled}
+              onChange={(enabled) => { void props.setMillifractionEnabled(enabled) }}
             />
           </div>
         </section>

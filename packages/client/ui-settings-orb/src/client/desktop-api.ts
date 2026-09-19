@@ -14,7 +14,13 @@ export interface OrbSettingsSnapshot {
   readonly overlay: OrbAgentModelSelection
   readonly background: OrbAgentModelSelection
   readonly selectionEnabled: boolean
+  readonly millifractionEnabled: boolean
 }
+
+/** Result of confirming a millifraction-coordinates default change. */
+export type OrbMillifractionWriteResult =
+  | { readonly cancelled: true }
+  | { readonly cancelled: false; readonly snapshot: OrbSettingsSnapshot }
 
 /** Why a custom ball image was not installed. */
 export type OrbAvatarWriteError = 'cancelled' | 'too-large' | 'invalid-type'
@@ -35,6 +41,7 @@ export interface DshDesktopAppApi {
     setOverlayModel(selection: OrbAgentModelSelection): Promise<void>
     setBackgroundModel(selection: OrbAgentModelSelection): Promise<void>
     setSelectionEnabled(enabled: boolean): Promise<void>
+    setMillifractionEnabled(enabled: boolean): Promise<OrbMillifractionWriteResult>
   }
 }
 

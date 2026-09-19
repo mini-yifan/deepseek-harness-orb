@@ -25,6 +25,7 @@ it('exposes overlay expand, clamp, dsh_orb workspace, and selection IPC', async 
     setOverlayPermission: expect.any(Function),
     onSelectionPrompt: expect.any(Function),
     onSelectionAttach: expect.any(Function),
+    onCreateSession: expect.any(Function),
   })
   expect(api.selection).toMatchObject({
     search: expect.any(Function),

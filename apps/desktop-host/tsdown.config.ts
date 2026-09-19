@@ -18,6 +18,7 @@ export default defineConfig([
       index: 'lib/types/index.js',
       'computer-use-overlay-guard': 'lib/types/computer-use-overlay-guard.js',
       'computer-use-orb-code-agent-model': 'lib/types/computer-use-orb-code-agent-model.js',
+      'computer-use-orb-coordinate-mode': 'lib/types/computer-use-orb-coordinate-mode.js',
     },
     ...nodeBundle,
   },

@@ -1,6 +1,6 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-settings-orb",
-  "description": "Desktop Settings page for the floating ball: avatar, overlay and background Agent models, and the selection toolbar",
+  "description": "Desktop Settings page for the floating ball: avatar, overlay and background Agent models, the selection toolbar, and millifraction coordinates",
   "version": "0.1.5-rc.2",
   "publishConfig": {
     "access": "public"

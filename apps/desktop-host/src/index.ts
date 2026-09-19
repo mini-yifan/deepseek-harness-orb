@@ -45,6 +45,7 @@ import {
   type OverlayGuardIpcEvent,
 } from './computer-use-overlay-guard.ts'
 import { setOrbCodeAgentModelSelection } from './computer-use-orb-code-agent-model.ts'
+import { isOrbCoordinateMode, setOrbCoordinateMode } from './computer-use-orb-coordinate-mode.ts'
 import { isOrbPermissionPreset, setOrbPermissionPreset } from './computer-use-orb-permission.ts'
 import {
   clearDesktopPluginTransport,
@@ -82,6 +83,9 @@ export type DesktopHostCommand = {
   readonly provider: string
   readonly model: string
   readonly reasoningEffort?: string
+} | {
+  readonly type: 'orb-coordinate-mode'
+  readonly mode: 'millifraction' | 'pixel'
 } | {
   readonly type: 'orb-permission'
   readonly preset: 'read-only' | 'workspace-write' | 'danger-full-access'
@@ -154,6 +158,8 @@ function isDesktopHostCommand(message: unknown): message is DesktopHostCommand {
         && typeof candidate.model === 'string' && candidate.model !== ''
         && (candidate.reasoningEffort === undefined
           || (typeof candidate.reasoningEffort === 'string' && candidate.reasoningEffort !== ''))
+    case 'orb-coordinate-mode':
+      return isOrbCoordinateMode(candidate.mode)
     case 'orb-permission':
       return isOrbPermissionPreset(candidate.preset)
         && (candidate.sessionId === undefined
@@ -703,6 +709,9 @@ async function main(): Promise<void> {
         return
       case 'orb-code-agent-model':
         setOrbCodeAgentModelSelection(message)
+        return
+      case 'orb-coordinate-mode':
+        setOrbCoordinateMode(message.mode)
         return
       case 'orb-permission':
         setOrbPermissionPreset(message.preset, message.sessionId)

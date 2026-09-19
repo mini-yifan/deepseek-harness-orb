@@ -14,7 +14,7 @@ Computer Use 把 `click` / `input_text` / `scroll` 的 `position` 按每屏逻�
 
 `formatScreenEnvelope` 只发出 `<screen_index>` 和 `<coordinate_space>0-1000</coordinate_space>`。它省略 `<logical_size>`、`<attached_size>`、`<content>` 像素/字节行，以及所有 `multiply coordinates` / `downscaled from` 说明。`originalDimensions` 仍留在已存储的附件引用上；观察里不对模型可见。
 
-POLICY、首帧通知和 `position` 参数描述写明：`[0, 0]` 是可见截图左上角，`[1000, 1000]` 是右下角，x 与 y 按该截图比例 × 1000 独立缩放（水平中心是 500，不是像素 x），并且必须忽略像素宽度和其他图片句柄尺寸。`mapNormalizedToGlobal` 把这些比例乘以当前观察面的逻辑边框。[Computer Use 焦点窗口观察](../feature/2026-09-16-computer-use-focused-window-observation.zh.md) 提供窗口边框，而不是 `NSScreen.frame`。[图片句柄省略请求预览像素](2026-09-15-omit-request-preview-handle-dimensions.zh.md) 拥有共用句柄。
+POLICY、首帧通知和 `position` 参数描述写明：`[0, 0]` 是可见截图左上角，`[1000, 1000]` 是右下角，x 与 y 按该截图比例 × 1000 独立缩放（水平中心是 500，不是像素 x），并且必须忽略像素宽度和其他图片句柄尺寸。`mapNormalizedToGlobal` 把这些比例乘以当前观察面的逻辑边框。[Computer Use 焦点窗口观察](../feature/2026-09-16-computer-use-focused-window-observation.zh.md) 提供窗口边框，而不是 `NSScreen.frame`。[图片句柄省略请求预览像素](2026-09-15-omit-request-preview-handle-dimensions.zh.md) 拥有共用句柄。这是默认编码。Overlay Computer Use 可在新建会话上打上像素模式；[Overlay 会话上的 Computer Use 千分比与像素坐标模式](../feature/2026-09-19-computer-use-session-coordinate-modes.zh.md) 拥有该分叉。
 
 ## 考虑过的替代方案
 

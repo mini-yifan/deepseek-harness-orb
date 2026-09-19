@@ -47,6 +47,8 @@ export const DESKTOP_IPC = {
   orbSetOverlayModel: 'dsh-desktop:orb-set-overlay-model',
   orbSetBackgroundModel: 'dsh-desktop:orb-set-background-model',
   orbSetSelectionEnabled: 'dsh-desktop:orb-set-selection-enabled',
+  orbSetMillifractionEnabled: 'dsh-desktop:orb-set-millifraction-enabled',
+  floatingCreateSession: 'dsh-desktop:floating-create-session',
   selectionPrompt: 'dsh-desktop:selection-prompt',
   selectionAttach: 'dsh-desktop:selection-attach',
   selectionSearch: 'dsh-desktop:selection-search',
@@ -119,6 +121,7 @@ export interface DshDesktopApi {
     onAvatar(listener: (url: string) => void): () => void
     onSelectionPrompt(listener: (payload: SelectionPromptPayload) => void): () => void
     onSelectionAttach(listener: (payload: SelectionAttachPayload) => void): () => void
+    onCreateSession(listener: () => void): () => void
   }
   readonly selection: {
     search(): Promise<void>
@@ -138,7 +141,13 @@ export interface OrbSettingsSnapshot {
   readonly overlay: OrbAgentModelSelection
   readonly background: OrbAgentModelSelection
   readonly selectionEnabled: boolean
+  readonly millifractionEnabled: boolean
 }
+
+/** Result of confirming a millifraction-coordinates default change. */
+export type OrbMillifractionWriteResult =
+  | { readonly cancelled: true }
+  | { readonly cancelled: false; readonly snapshot: OrbSettingsSnapshot }
 
 /** Why a custom ball image was not installed. */
 export type OrbAvatarWriteError = 'cancelled' | 'too-large' | 'invalid-type'
@@ -159,6 +168,7 @@ export interface DshDesktopAppApi {
     setOverlayModel(selection: OrbAgentModelSelection): Promise<void>
     setBackgroundModel(selection: OrbAgentModelSelection): Promise<void>
     setSelectionEnabled(enabled: boolean): Promise<void>
+    setMillifractionEnabled(enabled: boolean): Promise<OrbMillifractionWriteResult>
   }
 }
 
