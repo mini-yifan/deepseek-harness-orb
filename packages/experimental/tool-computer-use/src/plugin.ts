@@ -39,11 +39,13 @@ import {
 } from './open.ts'
 import {
   compactForeground,
+  formatForegroundEnvelope,
   observationContent,
   observeDesktop,
   requireScreen,
   type ObservedScreen,
 } from './observe.ts'
+import { isUsableObservationRaster } from './raster.ts'
 import { policyFor } from './policy.ts'
 import { assertImageCapableRoute, routeAcceptsImages } from './route.ts'
 import { isDesktopSelectionTurn } from './selection-turn.ts'
@@ -647,7 +649,8 @@ export function applyComputerUse(
     name: 'screenshot',
     description:
       'Save the current frontmost-window screenshot to the user Desktop and copy it to the clipboard. '
-      + 'Returns the saved file path. Do not use this to see the screen — the first user turn and every GUI result already attach the frontmost window. '
+      + 'Returns the saved file path. After bash, search, or web_fetch, call this to refresh the frontmost window. '
+      + 'After click, type, wait, or open, do not call it again — those results already attach a window. '
       + 'Use when the user asked for a screenshot file or needs the image on the clipboard to paste.',
     parameters: {},
     output: {
@@ -673,7 +676,21 @@ export function applyComputerUse(
     presentCall: () => genericExecute('Screenshot', {}),
     async execute(_args, exec) {
       await assertImageCapableRoute(ctx, exec)
-      const observation = await recapture(ctx, backend, exec)
+      const session = sessionOf(exec)
+      const observation = await observeDesktop(ctx, backend, exec.signal, {
+        coordinateMode: coordinateModeOf(session),
+        persistCapture: captured => isUsableObservationRaster(captured.data),
+      })
+      const foreground = compactForeground(observation.foreground)
+      if (observation.screens.length === 0) {
+        if (observation.captures.length > 0) {
+          throw new Error(
+            `computer-use: screenshot capture was unusable. Retry screenshot, wait, or open_app.\n${formatForegroundEnvelope(foreground)}`,
+          )
+        }
+        throw new Error('computer-use: screenshot produced no files')
+      }
+      rememberObservation(session, observation.screens)
       const files = pairScreenshotFiles(observation.captures, observation.screens)
       const paths = await writeDesktopScreenshots(files, { home: homedir() })
       const first = files[0]
@@ -688,7 +705,7 @@ export function applyComputerUse(
       return {
         paths: [...paths],
         clipboard: true,
-        ...observedFields(sessionOf(exec), observation),
+        ...observedFields(session, { screens: [...observation.screens], foreground }),
       }
     },
   }))

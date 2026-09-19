@@ -12,7 +12,7 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
 import { FOCUS_FALLBACK_FOREGROUND, type DesktopForeground, type ScreenInfo } from '../src/backend.ts'
 import { resolveComputerUseConfig } from '../src/config.ts'
-import { createFakeDesktopBackend } from '../src/fake.ts'
+import { createFakeDesktopBackend, FAKE_WINDOW_PNG } from '../src/fake.ts'
 import { applyComputerUse } from '../src/plugin.ts'
 import { apply, Config, inject, name } from '../src/index.ts'
 import * as ComputerUse from '../src/index.ts'
@@ -98,6 +98,7 @@ async function setup(options: {
   screens?: readonly ScreenInfo[]
   apps?: readonly string[]
   postActionWaitMs?: number
+  png?: Uint8Array
 } = {}) {
   const home = await mkdtemp(join(tmpdir(), 'dsh-cu-'))
   homes.push(home)
@@ -120,6 +121,7 @@ async function setup(options: {
     ...options.foreground === undefined ? {} : { foreground: options.foreground },
     ...options.screens === undefined ? {} : { screens: options.screens },
     ...options.apps === undefined ? {} : { apps: options.apps },
+    ...options.png === undefined ? {} : { png: options.png },
   })
   applyComputerUse(ctx, backend, resolveComputerUseConfig({
     postActionWaitMs: options.postActionWaitMs ?? 0,
@@ -356,7 +358,7 @@ describe('computer-use tools', () => {
       }),
     )
     try {
-      const { ctx, backend } = await setup()
+      const { ctx, backend } = await setup({ png: FAKE_WINDOW_PNG })
       const result = await execute(ctx, 'screenshot', {})
       expect(result.isError).toBe(false)
       const saved = join(home, 'Desktop', 'Screenshot 2026-09-15 at 20.10.00.png')
@@ -371,6 +373,23 @@ describe('computer-use tools', () => {
       const textRoute = await execute(ctx, 'screenshot', {}, 'text-model')
       expect(textRoute.isError).toBe(true)
       expect(text(textRoute)).toContain('does not declare image input')
+    } finally {
+      write.mockRestore()
+    }
+  })
+
+  it('skips Desktop, clipboard, and image blocks when the capture is smaller than 2×2', async () => {
+    const write = vi.spyOn(screenshotModule, 'writeDesktopScreenshots')
+    try {
+      const { ctx, backend } = await setup()
+      const result = await execute(ctx, 'screenshot', {})
+      expect(result.isError).toBe(true)
+      expect(text(result)).toContain('screenshot capture was unusable')
+      expect(text(result)).toContain('Retry screenshot, wait, or open_app')
+      expect(text(result)).toContain('<frontmost_app>Pages</frontmost_app>')
+      expect(result.content.some(block => block.type === 'image')).toBe(false)
+      expect(write).not.toHaveBeenCalled()
+      expect(backend.actions.some(action => action.type === 'copyImageToClipboard')).toBe(false)
     } finally {
       write.mockRestore()
     }
@@ -492,10 +511,28 @@ describe('computer-use tools', () => {
   it('fails loud when screenshot writing returns no paths', async () => {
     const write = vi.spyOn(screenshotModule, 'writeDesktopScreenshots').mockResolvedValue([])
     try {
-      const { ctx } = await setup()
+      const { ctx } = await setup({ png: FAKE_WINDOW_PNG })
       const result = await execute(ctx, 'screenshot', {})
       expect(result.isError).toBe(true)
       expect(text(result)).toContain('produced no files')
+    } finally {
+      write.mockRestore()
+    }
+  })
+
+  it('fails loud when screenshot has no window to capture', async () => {
+    const write = vi.spyOn(screenshotModule, 'writeDesktopScreenshots')
+    try {
+      const { ctx, backend } = await setup({
+        screens: [],
+        foreground: FOCUS_FALLBACK_FOREGROUND,
+      })
+      const result = await execute(ctx, 'screenshot', {})
+      expect(result.isError).toBe(true)
+      expect(text(result)).toContain('produced no files')
+      expect(result.content.some(block => block.type === 'image')).toBe(false)
+      expect(write).not.toHaveBeenCalled()
+      expect(backend.actions.some(action => action.type === 'copyImageToClipboard')).toBe(false)
     } finally {
       write.mockRestore()
     }
@@ -692,7 +729,8 @@ describe('computer-use tools', () => {
     expect(POLICY).toContain('call wait')
     expect(POLICY).toContain('call long_wait with the smallest of 10, 30, 60, or 120')
     expect(POLICY).toContain('Do not use long_wait for ordinary page load')
-    expect(POLICY).toContain('Do not call screenshot merely to see the window')
+    expect(POLICY).toContain('After bash, search, or web_fetch, screenshot may refresh the frontmost window')
+    expect(POLICY).toContain('After click, type, wait, or open, do not call screenshot again')
     expect(POLICY).toContain('Call screenshot when the user asked for a screenshot file')
     expect(POLICY).toContain('Do not call wait, long_wait, or bash sleep')
     expect(POLICY).toContain('today\'s weather')
@@ -909,10 +947,10 @@ describe('computer-use session coordinate modes', () => {
     const missing = await execute(ctx, 'click', { screen_index: 0, position: [0, 0] }, 'vision-model', session)
     expect(missing.isError).toBe(true)
     expect(text(missing)).toContain('attached screenshot raster')
-    const shot = await execute(ctx, 'screenshot', {}, 'vision-model', session)
-    expect(shot.isError).toBe(false)
-    expect(text(shot)).toContain('<coordinate_space>pixels</coordinate_space>')
-    expect(text(shot)).toContain('<attached_size>1x1</attached_size>')
+    const waited = await execute(ctx, 'wait', {}, 'vision-model', session)
+    expect(waited.isError).toBe(false)
+    expect(text(waited)).toContain('<coordinate_space>pixels</coordinate_space>')
+    expect(text(waited)).toContain('<attached_size>1x1</attached_size>')
     const result = await execute(ctx, 'click', { screen_index: 0, position: [1, 1] }, 'vision-model', session)
     expect(result.isError).toBe(false)
     expect(backend.actions.at(-1)).toMatchObject({

@@ -2442,7 +2442,7 @@ Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/ex
 
 ### `screenshot`
 
-Save the current frontmost-window screenshot to the user Desktop and copy it to the clipboard. Returns the saved file path. Do not use this to see the screen — the first user turn and every GUI result already attach the frontmost window. Use when the user asked for a screenshot file or needs the image on the clipboard to paste.
+Save the current frontmost-window screenshot to the user Desktop and copy it to the clipboard. Returns the saved file path. After bash, search, or web_fetch, call this to refresh the frontmost window. After click, type, wait, or open, do not call it again — those results already attach a window. Use when the user asked for a screenshot file or needs the image on the clipboard to paste.
 
 ```json
 {
