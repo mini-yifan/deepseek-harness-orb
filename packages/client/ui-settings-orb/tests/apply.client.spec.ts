@@ -15,7 +15,7 @@ import { apply, inject } from '@deepseek-ai/dsh-client-ui-settings-orb/client'
 import { OrbSettingsSection } from '../src/client/OrbSettingsSection.tsx'
 import type { OrbSettingsSectionInjected } from '../src/client/section-store.ts'
 import { apply as hostApply } from '../src/index.ts'
-import { readDesktopAppApi } from '../src/client/desktop-api.ts'
+import { readDesktopAppApi, type OrbMillifractionWriteResult } from '../src/client/desktop-api.ts'
 
 const CATALOG = {
   ok: true as const,
@@ -110,7 +110,7 @@ describe('ui-settings-orb apply', () => {
         setOverlayModel: vi.fn(async () => undefined),
         setBackgroundModel: vi.fn(async () => undefined),
         setSelectionEnabled: vi.fn(async () => undefined),
-        setMillifractionEnabled: vi.fn(async () => ({ cancelled: true })),
+        setMillifractionEnabled: vi.fn(async (): Promise<OrbMillifractionWriteResult> => ({ cancelled: true })),
       },
     }
     vi.stubGlobal('dshDesktop', api)
