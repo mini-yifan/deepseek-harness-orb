@@ -10,9 +10,9 @@ Status: implemented
 
 ## 决策
 
-`screenshot` 是互斥 GUI 导出。它按与观察相同的 overlay-skip 管道捕获当前最前窗口，把该栅格写到用户桌面，文件名采用 macOS 风格的 `Screenshot YYYY-MM-DD at HH.MM.SS`，把它复制到系统剪贴板，并在工具结果文本里返回这些路径，外加常规观察图片。缺写或空写会响亮失败。工具不接受参数。刷新加载仍用 1 秒的 `wait`。
+`screenshot` 是互斥 GUI 导出。它按与观察相同的 overlay-skip 管道捕获当前最前窗口，把该栅格写到用户桌面，文件名采用 macOS 风格的 `Screenshot YYYY-MM-DD at HH.MM.SS`，把它复制到系统剪贴板，并在工具结果文本里返回这些路径，外加常规观察图片。缺写或空写会响亮失败。工具不接受参数。刷新加载仍用 1 秒的 `wait`。[Computer Use 跳过退化截图栅格](../bug-fix/2026-09-19-computer-use-screenshot-degenerate-raster.zh.md) 拥有不足 2 像素的跳过：不可用栅格不写入桌面、剪贴板或附件，也不记成点击栅格。
 
-策略要求模型不要只为看窗口而调用 `screenshot`。`copyImageToClipboard` 不是 HID，overlay-guard 不包它。剪贴板是替换，不是恢复。[Computer Use 焦点窗口观察](2026-09-16-computer-use-focused-window-observation.zh.md) 拥有窗口捕获。
+策略允许模型在 bash、search 或 web_fetch 之后调用 `screenshot` 刷新最前窗口，并禁止在 click、type、wait 或 open 之后再调一次，因为那些结果已经附上窗口。`copyImageToClipboard` 不是 HID，overlay-guard 不包它。剪贴板是替换，不是恢复。[Computer Use 焦点窗口观察](2026-09-16-computer-use-focused-window-observation.zh.md) 拥有窗口捕获。
 
 ## 考虑过的替代方案
 

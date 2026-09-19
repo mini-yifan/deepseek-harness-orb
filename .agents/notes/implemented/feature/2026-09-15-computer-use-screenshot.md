@@ -10,9 +10,9 @@ Users ask Computer Use to take a screenshot they can paste or keep. Observation 
 
 ## Decision
 
-`screenshot` is an exclusive GUI export. It captures the current frontmost window (same overlay-skip pipeline as observation), writes that raster onto the user's Desktop with a macOS-style `Screenshot YYYY-MM-DD at HH.MM.SS` name, copies it onto the system pasteboard, and returns those paths in the tool result text together with the usual observation images. Missing or empty writes fail loud. The tool takes no arguments. 1s `wait` remains how the model refreshes a loader.
+`screenshot` is an exclusive GUI export. It captures the current frontmost window (same overlay-skip pipeline as observation), writes that raster onto the user's Desktop with a macOS-style `Screenshot YYYY-MM-DD at HH.MM.SS` name, copies it onto the system pasteboard, and returns those paths in the tool result text together with the usual observation images. Missing or empty writes fail loud. The tool takes no arguments. 1s `wait` remains how the model refreshes a loader. [Computer Use skips degenerate screenshot rasters](../bug-fix/2026-09-19-computer-use-screenshot-degenerate-raster.md) owns the sub-2px skip: unusable rasters are not written to Desktop, clipboard, or attachments, and are not remembered as the click raster.
 
-Policy tells the model not to call `screenshot` merely to see the window. `copyImageToClipboard` is not HID and stays unwrapped by overlay-guard. The pasteboard is replaced, not restored. [Computer Use focused-window observation](2026-09-16-computer-use-focused-window-observation.md) owns the window capture.
+Policy lets the model call `screenshot` after bash, search, or web_fetch to refresh the frontmost window, and forbids a repeat after click, type, wait, or open because those results already attach a window. `copyImageToClipboard` is not HID and stays unwrapped by overlay-guard. The pasteboard is replaced, not restored. [Computer Use focused-window observation](2026-09-16-computer-use-focused-window-observation.md) owns the window capture.
 
 ## Alternatives considered
 

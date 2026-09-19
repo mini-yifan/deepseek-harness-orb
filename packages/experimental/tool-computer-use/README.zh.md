@@ -116,6 +116,7 @@ Desktop 上新建 `code_agent` 会在 `session.create` 之后、`session.prompt`
 | [`src/plugin.ts`](src/plugin.ts) | 共享的 `applyComputerUse`：策略、十三个 GUI 工具、首帧 pre-step |
 | [`src/selection-turn.ts`](src/selection-turn.ts) | 识别 Desktop 划词用户轮次，从而省略首帧捕获 |
 | [`src/observe.ts`](src/observe.ts) | 最前窗口捕获、跳过 overlay 的前台检查，以及面向模型的信封 |
+| [`src/raster.ts`](src/raster.ts) | PNG IHDR 与 JPEG SOF 像素尺寸，用于可持久化的 `screenshot` 栅格 |
 | [`src/code-agent.ts`](src/code-agent.ts) | 仅 Computer Use 的 `code_agent`、`code_agent_status` 与 `code_agent_stop`：调用方登记表、子目录 cwd、`session.create`、Desktop 新建时可选 `selectModel`、`session.prompt` |
 | [`src/code-agent-completion.ts`](src/code-agent-completion.ts) | Code 会话与 Computer Use 调用方都空闲后投递的插件通知；停止时可中止 |
 | [`src/code-agent-unattended.ts`](src/code-agent-unattended.ts) | 在活的 Code agent 上前置自动允许 `approval/request` 与自动应答 `user-questions/request` |
@@ -144,6 +145,7 @@ Desktop 上新建 `code_agent` 会在 `session.create` 之后、`session.prompt`
 - [Computer Use 单击修饰键](../../../.agents/notes/implemented/feature/2026-09-19-computer-use-click-modifiers.zh.md) — 仅在该次单击期间按住的可选 click 修饰键。
 - [Computer Use 的 wait 与 long_wait](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-wait-and-long-wait.zh.md) — 固定 1 秒的 `wait`、`long_wait` 分档，以及为何 10 秒下限不是 Config。
 - [Computer Use 截图导出](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-screenshot.zh.md) — 桌面文件加剪贴板，不是 observe 工具。
+- [Computer Use 跳过退化截图栅格](../../../.agents/notes/implemented/bug-fix/2026-09-19-computer-use-screenshot-degenerate-raster.zh.md) — `screenshot` 丢弃不足 2 像素的捕获，bash 之后可以刷新。
 - [Computer Use 把 Code agent 完成通知停到空闲再投递](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-code-agent-completion.zh.md) — 两边都空闲后投递的插件通知。
 - [Overlay Computer Use 后台调度](../../../.agents/notes/implemented/feature/2026-09-17-orb-code-agent-dispatch.zh.md) — 子目录 cwd、调用方登记表、status/stop，以及 Code agent 上的无人值守应答。
 - [Computer Use 观察前台元数据](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-observation-foreground.zh.md) — overlay 窗口排除、Finder 文件夹，以及现有 `user/message` / `tool/result` 上的焦点 fallback。
@@ -186,7 +188,7 @@ Do not click or type into a target you cannot see. Do not OCR file paths from th
 
 If <frontmost_app> or the screenshot is not the application the user asked for, call list_apps or open_app. Do not click the Dock; it is not in the screenshot.
 
-Observation is not a tool. Do not call screenshot merely to see the window — the first user turn and every GUI result already attach the frontmost window. Call screenshot when the user asked for a screenshot file or needs the image on the clipboard to paste.
+Observation is not a tool. After bash, search, or web_fetch, screenshot may refresh the frontmost window. After click, type, wait, or open, do not call screenshot again — those results already attach a window. Call screenshot when the user asked for a screenshot file or needs the image on the clipboard to paste.
 
 This session drives the real unsandboxed desktop. Use bash only for short commands inside a GUI loop. Do not use bash to write long reports or a whole project — send that work to code_agent. Do not use bash open as a substitute for open_in_finder, open_in_browser, or open_app.
 

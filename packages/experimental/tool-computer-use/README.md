@@ -116,6 +116,7 @@ Desktop `code_agent` create reads optional `ctx.get('orbCodeAgentModel')` after 
 | [`src/plugin.ts`](src/plugin.ts) | Shared `applyComputerUse`: policy, thirteen GUI tools, first-frame pre-step |
 | [`src/selection-turn.ts`](src/selection-turn.ts) | Detect Desktop selection-toolbar user turns so first-frame capture is omitted |
 | [`src/observe.ts`](src/observe.ts) | Frontmost-window capture, overlay-skip foreground inspect, and model-facing envelopes |
+| [`src/raster.ts`](src/raster.ts) | PNG IHDR and JPEG SOF pixel size for persistable `screenshot` rasters |
 | [`src/code-agent.ts`](src/code-agent.ts) | Computer Use-only `code_agent`, `code_agent_status`, and `code_agent_stop`: caller-owned registry, subdirectory cwd, `session.create`, optional Desktop `selectModel` on create, `session.prompt` |
 | [`src/code-agent-completion.ts`](src/code-agent-completion.ts) | Parked plugin notice after the Code session and the Computer Use caller are idle; abortable on stop |
 | [`src/code-agent-unattended.ts`](src/code-agent-unattended.ts) | Prepended auto-allow for `approval/request` and auto-answer for `user-questions/request` on the live Code agent |
@@ -144,6 +145,7 @@ Desktop `code_agent` create reads optional `ctx.get('orbCodeAgentModel')` after 
 - [Computer Use click modifiers](../../../.agents/notes/implemented/feature/2026-09-19-computer-use-click-modifiers.md) — optional click modifiers held only for that click.
 - [Computer Use wait and long_wait](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-wait-and-long-wait.md) — fixed 1s `wait`, `long_wait` buckets, and why the 10s floor is not Config.
 - [Computer Use screenshot export](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-screenshot.md) — Desktop file plus clipboard, not an observe tool.
+- [Computer Use skips degenerate screenshot rasters](../../../.agents/notes/implemented/bug-fix/2026-09-19-computer-use-screenshot-degenerate-raster.md) — `screenshot` drops sub-2px captures and may refresh after bash.
 - [Computer Use parks Code agent completion](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-code-agent-completion.md) — parked plugin notice after both sessions are idle.
 - [Overlay Computer Use background dispatch](../../../.agents/notes/implemented/feature/2026-09-17-orb-code-agent-dispatch.md) — subdirectory cwd, caller-owned registry, status/stop, and unattended Code-agent answerers.
 - [Computer Use observation foreground](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-observation-foreground.md) — overlay-window skip, Finder folder, and focus fallback on existing `user/message` / `tool/result`.
@@ -186,7 +188,7 @@ Do not click or type into a target you cannot see. Do not OCR file paths from th
 
 If <frontmost_app> or the screenshot is not the application the user asked for, call list_apps or open_app. Do not click the Dock; it is not in the screenshot.
 
-Observation is not a tool. Do not call screenshot merely to see the window — the first user turn and every GUI result already attach the frontmost window. Call screenshot when the user asked for a screenshot file or needs the image on the clipboard to paste.
+Observation is not a tool. After bash, search, or web_fetch, screenshot may refresh the frontmost window. After click, type, wait, or open, do not call screenshot again — those results already attach a window. Call screenshot when the user asked for a screenshot file or needs the image on the clipboard to paste.
 
 This session drives the real unsandboxed desktop. Use bash only for short commands inside a GUI loop. Do not use bash to write long reports or a whole project — send that work to code_agent. Do not use bash open as a substitute for open_in_finder, open_in_browser, or open_app.
 

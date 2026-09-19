@@ -27,6 +27,12 @@ export const FAKE_DESKTOP_PNG = Buffer.from(
   'base64',
 )
 
+/** 3×3 PNG used when tests need a persistable `screenshot` raster. */
+export const FAKE_WINDOW_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAMAAAADCAIAAADZSiLoAAAAEElEQVR4nGP4z8AAQQxYWACPjgj4kWPEuQAAAABJRU5ErkJggg==',
+  'base64',
+)
+
 /** Recorded fake-desktop action for assertions. */
 export type FakeDesktopAction =
   | { readonly type: 'click'; readonly input: ClickInput }

@@ -179,20 +179,35 @@ export function observationContent(
   ]
 }
 
+/** Options for {@link observeDesktop}. */
+export interface ObserveDesktopOptions {
+  /** Milliseconds to wait before list/inspect/capture. Default: 0. */
+  readonly settleMs?: number
+  /** Session click encoding for screen envelopes. Default: millifraction. */
+  readonly coordinateMode?: CoordinateMode
+  /**
+   * Whether to persist one capture to the attachment store.
+   * Default persists every capture. Returning false keeps bytes on {@link DesktopObservation.captures} only.
+   * @param captured - encoded screen bytes from {@link DesktopBackend.capture}.
+   * @returns false to skip `saveImage` for this capture.
+   */
+  readonly persistCapture?: (captured: CapturedScreen) => boolean
+}
+
 /**
  * Capture the overlay-skipped frontmost window, persist the image, and build content blocks.
  * When no operable window remains, returns focus tags with no screenshot.
  * @param ctx - plugin context with `attachments`.
  * @param backend - desktop capture implementation.
  * @param signal - cooperative cancellation.
- * @param options - optional settle wait and the session click encoding for envelopes.
+ * @param options - optional settle wait, session click encoding, and persist filter.
  * @returns canonical screens, foreground metadata, and model-facing blocks.
  */
 export async function observeDesktop(
   ctx: Context,
   backend: DesktopBackend,
   signal: AbortSignal,
-  options: { settleMs?: number; coordinateMode?: CoordinateMode } = {},
+  options: ObserveDesktopOptions = {},
 ): Promise<DesktopObservation> {
   signal.throwIfAborted()
   const settleMs = options.settleMs ?? 0
@@ -207,10 +222,12 @@ export async function observeDesktop(
   }
   const screens: ObservedScreen[] = []
   const captures: CapturedScreen[] = []
+  const persistCapture = options.persistCapture
   for (const screen of selected) {
     signal.throwIfAborted()
     const captured = await backend.capture(screen, signal)
     captures.push(captured)
+    if (persistCapture !== undefined && !persistCapture(captured)) continue
     const saved = await ctx.attachments.saveImage({
       data: captured.data,
       mediaType: captured.mediaType,

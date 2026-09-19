@@ -119,6 +119,21 @@ describe('observeDesktop', () => {
     expect(order).toEqual(['delay', 'listScreens', 'inspect', 'capture'])
   })
 
+  it('keeps captures when persistCapture returns false and does not saveImage', async () => {
+    home = await mkdtemp(join(tmpdir(), 'dsh-cu-obs-skip-'))
+    const ctx = new Context()
+    context = ctx
+    await ctx.plugin(LocalAttachmentStore, { dshHome: home })
+    const save = vi.spyOn(ctx.attachments, 'saveImage')
+    const observation = await observeDesktop(ctx, createFakeDesktopBackend(), SIGNAL, {
+      persistCapture: () => false,
+    })
+    expect(observation.captures).toHaveLength(1)
+    expect(observation.screens).toEqual([])
+    expect(observation.blocks.some(block => block.type === 'image')).toBe(false)
+    expect(save).not.toHaveBeenCalled()
+  })
+
   it('returns focus tags without a panorama when no window remains', async () => {
     home = await mkdtemp(join(tmpdir(), 'dsh-cu-obs-empty-'))
     const ctx = new Context()
