@@ -580,6 +580,14 @@ describe('CI workflow', () => {
 })
 
 describe('DeepSeek e2e workflow', () => {
+  it('runs only on the canonical repository and skips untrusted pull requests', () => {
+    const workflow = loadWorkflow('.github/workflows/e2e.yml')
+    const e2e = workflowJob(workflow, 'e2e')
+    expect(e2e.if).toBe(
+      "github.repository == 'deepseek-harness/deepseek-harness' && (github.event_name != 'pull_request' || !(github.event.pull_request.head.repo.fork || github.event.pull_request.user.login == 'dependabot[bot]'))",
+    )
+  })
+
   it('prepares bubblewrap from the pinned payload without a package transaction', () => {
     const workflow = loadWorkflow('.github/workflows/e2e.yml')
     const e2e = workflowJob(workflow, 'e2e')
@@ -940,13 +948,14 @@ describe('Issue lifecycle workflow', () => {
     const lifecycleJob = workflowJob(lifecycle, 'lifecycle')
     if (!Array.isArray(lifecycleJob.steps)) throw new TypeError('Issue lifecycle job must define steps')
 
-    // The job has no job-level `if`, so it is listed on every pull_request /
-    // pull_request_review event and reports success instead of a gray skip. The
+    // Restricts the job to the canonical repository. Within that repository
+    // there is no event-type skip, so every pull_request / pull_request_review
+    // event lists the check as success rather than a gray skip. The
     // write-capable steps are gated at step level so approved/commented reviews
     // never mint a Project/Issue App token nor touch the board.
     expect(lifecycle.on).toHaveProperty('pull_request')
     expect(lifecycle.on).toHaveProperty('pull_request_review')
-    expect(lifecycleJob.if).toBeUndefined()
+    expect(lifecycleJob.if).toBe("github.repository == 'deepseek-harness/deepseek-harness'")
     // Keep the subscription-type gates: issue-lifecycle does not re-subscribe
     // ready_for_review (issue-policy owns that) and only reacts to submitted
     // review events.
@@ -978,6 +987,7 @@ describe('Issue lifecycle workflow', () => {
     const humanPullRequest =
       "${{ github.event.pull_request.user.type != 'Bot' && github.event.pull_request.user.type != 'App' }}"
 
+    expect(policyJob.if).toBe("github.repository == 'deepseek-harness/deepseek-harness'")
     expect(tokenStep).toMatchObject({
       id: 'app-token',
       if: humanPullRequest,

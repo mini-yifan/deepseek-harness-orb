@@ -34,6 +34,9 @@ jobs:
   preview:
     runs-on: ubuntu-24.04
     name: cloudflare pages preview
+    # Cloudflare Pages project, Access tokens, and account secrets exist only
+    # on the canonical repository.
+    if: github.repository == 'deepseek-harness/deepseek-harness'
     steps:
       - uses: actions/checkout@v6
         with:
