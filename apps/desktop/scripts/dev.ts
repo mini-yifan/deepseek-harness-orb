@@ -107,6 +107,12 @@ async function buildSkipBuildArtifacts(): Promise<void> {
   await buildPackage(join(REPOSITORY_ROOT, 'packages', 'client', 'modules'))
   await buildPackage(join(REPOSITORY_ROOT, 'apps', 'desktop-host'))
   await runPackageScript('build', APP_ROOT)
+  // Computer Use stamps overlay session events such as
+  // `computer-use/coordinate-mode`. Persistence admits a type only when
+  // `KNOWN_SESSION_EVENT_TYPES` in `@deepseek-ai/dsh-session` `lib/index.js`
+  // contains it; skip-build must rebuild that catalog with the extra or a
+  // cold read refuses the log just written.
+  await buildPackage(join(REPOSITORY_ROOT, 'packages', 'core', 'session'))
   await buildComputerUseRuntimeExtra()
   for (const path of [
     join(REPOSITORY_ROOT, 'packages', 'api', 'session-controller'),
