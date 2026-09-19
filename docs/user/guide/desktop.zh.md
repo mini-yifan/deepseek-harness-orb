@@ -71,7 +71,7 @@ Host 就绪后才会创建球，出现在主显示器右沿、垂直方向中间
 
 ## 限制
 
-悬浮球只做 Mac。Windows 仍在设置里列出「悬浮球」页，但全部控件禁用。没有语音、圈选或逐次点击批准。Computer Use 通过 ScreenCaptureKit 窗口排除，只在那一次截屏里省略球、展开面板和划词工具条，只在那一次 HID 期间让整扇 overlay 点击穿透并隐藏工具条；主窗口始终可被截到、可被点到。Computer Use 包是签名 runtime extra，不是 Desktop Host 的 npm 依赖。
+悬浮球只做 Mac。Windows 仍在设置里列出「悬浮球」页，但全部控件禁用。没有语音、圈选或逐次点击批准。Computer Use 通过 ScreenCaptureKit 窗口排除，只在那一次截屏里省略球、展开面板、划词工具条和观察框彩带，只在那一次 HID 期间让整扇 overlay 点击穿透并隐藏工具条；主窗口始终可被截到、可被点到。Computer Use 包是签名 runtime extra，不是 Desktop Host 的 npm 依赖。
 
 ## 继续阅读
 

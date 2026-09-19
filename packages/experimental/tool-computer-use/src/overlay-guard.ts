@@ -14,6 +14,14 @@ export interface OverlayCaptureSession {
   readonly excludeWindowIds: readonly number[]
 }
 
+/** Logical global rectangle for the Computer Use observation-frame overlay. */
+export interface ObservationFrameBounds {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
+
 /**
  * Cloak host chrome for the duration of one capture or HID call.
  * Desktop Host provides this; Web and CLI compositions omit it.
@@ -21,6 +29,8 @@ export interface OverlayCaptureSession {
 export interface ComputerUseOverlayGuard {
   /**
    * Exclude host overlay chrome from screen capture while `run` executes, then restore it.
+   * Nested `withCapture` inside `withInput` still sends capture IPC so exclude ids refresh
+   * after the observation frame appears.
    * @param run - capture implementation; receives overlay window ids from the begin ack.
    * @param signal - cooperative cancellation for the cloak handshake.
    * @returns the value `run` resolves to.
@@ -36,6 +46,13 @@ export interface ComputerUseOverlayGuard {
    * @returns the value `run` resolves to.
    */
   withInput<T>(run: () => Promise<T>, signal?: AbortSignal): Promise<T>
+  /**
+   * Show or hide the Desktop observation-frame ribbon around the current capture rectangle.
+   * Pass-through hosts resolve immediately. Acks before returning so the next capture omits the frame.
+   * @param bounds - observation union in global logical points, or `null` to hide.
+   * @param signal - cooperative cancellation for the ack wait.
+   */
+  setObservationFrame(bounds: ObservationFrameBounds | null, signal?: AbortSignal): Promise<void>
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -57,6 +74,7 @@ function captureExcludeIds(session: OverlayCaptureSession | undefined): readonly
 
 /**
  * Wrap a desktop backend so capture, foreground inspect, listScreens, HID, openApp, and withGuiTurn run inside overlay-guard intervals.
+ * After `listScreens`, the wrapper waits for `setObservationFrame` so the next capture exclude list includes the ribbon.
  * `openApp` and `withGuiTurn` use `withInput` so the overlay yields key status before activate and stays click-through through recapture.
  * Desktop Host refcounts nested cloak calls so one turn sends one input begin/end.
  * `listApps`, `openInBrowser`, `openInFinder`, and `copyImageToClipboard` are unwrapped because
@@ -74,7 +92,11 @@ export function wrapDesktopBackend(
     listScreens: signal => guard.withCapture(
       session => runWithCaptureExcludeWindowIds(
         captureExcludeIds(session),
-        () => inner.listScreens(signal),
+        async () => {
+          const screens = await inner.listScreens(signal)
+          await guard.setObservationFrame(screens[0]?.bounds ?? null, signal)
+          return screens
+        },
       ),
       signal,
     ),

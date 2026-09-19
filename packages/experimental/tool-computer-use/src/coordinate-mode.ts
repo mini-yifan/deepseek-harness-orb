@@ -243,7 +243,8 @@ const PIXEL_TOOLS: Readonly<Record<string, { description: string; parameters: Re
   click: {
     description:
       'Click at a pixel position on the attached frontmost-window screenshot, then return the post-action screenshot. '
-      + 'Use left (default) or right button; count 2 is a double-click.',
+      + 'Use left (default) or right button; count 2 is a double-click. '
+      + 'Optional modifiers (shift, cmd, option, control) are held only for this click.',
     parameters: { position: PIXEL_POSITION },
   },
   input_text: {

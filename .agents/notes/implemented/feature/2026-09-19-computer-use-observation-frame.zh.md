@@ -1,0 +1,35 @@
+# Agent Note: Computer Use 观察框彩带
+
+Status: implemented
+
+[English](2026-09-19-computer-use-observation-frame.md) | 中文
+
+## 问题
+
+Computer Use 用真实指针驱动跳过 overlay 后最前应用的屏幕窗口并集。看着这台 Mac 的人没有 chrome 标明 Agent 能看见、能点击的矩形。把描边画进截图会进入模型图像并改变瞄准。捕获期间隐藏 Desktop chrome 已经会让悬浮球闪一下。
+
+## 决策
+
+Desktop 在当前 `ScreenInfo.bounds`（捕获裁切与 0–1000 点击映射的同一并集矩形）四边画一条静态、点击穿透的空心彩带。彩带只给人看：只要它可见，ScreenCaptureKit 省略列表就带上它的 CGWindowID，与悬浮球相同。它从不出现在面向模型的图像里。CLI 与 Web 组合没有 Electron overlay，也不显示它。
+
+`wrapDesktopBackend` 在每次 `listScreens` 之后等待 `ComputerUseOverlayGuard.setObservationFrame`（第一块屏幕的 bounds，列表为空则为 `null`）。Desktop Host 协议 7 在 overlay-guard 传输上增加带确认的 `observation-frame` / `observation-frame-ack`。Electron 复用一扇 `BrowserWindow`（`dsh-app://shell/observation-frame.html`），把 bounds 外扩 16pt，让 4px 静态青到紫描边与 drop-shadow 光晕贴在区域外侧，始终 `setIgnoreMouseEvents(true, { forward: true })`，并 `showInactive`。彩带使用 `setAlwaysOnTop(true, 'floating', 0)`；悬浮 overlay 与划词工具条使用相对层级 `1`，每次显示彩带后对 overlay 调用 `moveTop`，球保持在彩带之上。`applyComputerUse` 在 `session/event` `turn/end` 时隐藏。Host 停止也会隐藏。`withInput` 内的嵌套 `withCapture` 仍发送 capture begin/end，好让新出现的 frame id 进入下一次 exclude 列表，且不切换 HID 点击穿透；[桌面 overlay-guard IPC](../architecture/2026-09-14-desktop-overlay-guard.zh.md) 拥有该遮蔽。
+
+## 考虑过的替代方案
+
+**把彩带画进截图。** 模型会看见并非可点控件的 chrome，而坐标假定观察并集拥有每一个像素。
+
+**Host → Electron 的 bounds 发送后不等待确认。** 下一次 overlay-guard begin 会与窗口显示竞态，并把彩带拍进图。
+
+**捕获期间隐藏彩带。** 用户会看见它闪灭，与隐藏悬浮球是同一失败。
+
+**辅助功能 overlay 或画进目标应用。** 那需要额外 TCC，不能按 Desktop 窗口 id 从 ScreenCaptureKit 排除，并且画进 Computer Use 并不拥有的应用。
+
+**只跟随 owner 窗口，不跟随家族并集。** Agent 可以点击并集内任何位置，包括同应用面板，彩带会标出比点击空间更小的区域。
+
+## 影响
+
+已经铺满工作区的最大化观察会在该边裁掉描边。与并集重叠的其他应用落在彩带内侧；这与截图一致。并发 Computer Use 会话共用一扇 frame 窗（最后一次 bounds 生效）。空的首帧保持隐藏，直到 `listScreens` 返回矩形。
+
+## 测试
+
+插件测试钉住 `wrapDesktopBackend` 对 bounds 与 `null` 调用 `setObservationFrame`、没有 sender 时直通，以及 `turn/end` 清除。Host 测试钉住 observation-frame 的发送/确认/超时/中止、没有 sender 时直通，以及 `withInput` 内嵌套 `withCapture` 刷新 exclude id。Electron 测试钉住外扩与夹紧、始终点击穿透、可见 frame id 进入 `overlayWindowExcludeIds`、隐藏时省略、CSS 无 `animation`、4px 描边加 drop-shadow、悬浮 overlay 在彩带之上、协议 7 不匹配，以及 Host 停止时隐藏。

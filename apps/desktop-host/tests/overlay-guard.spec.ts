@@ -3,16 +3,27 @@ import { Context } from '@deepseek-ai/cordis'
 import {
   apply,
   clearOverlayGuardTransport,
+  completeObservationFrameAck,
   completeOverlayGuardAck,
   createComputerUseOverlayGuard,
   setOverlayGuardTransport,
   type ComputerUseOverlayGuard,
   type OverlayGuardIpcEvent,
+  type OverlayGuardTransportEvent,
 } from '../src/computer-use-overlay-guard.ts'
 
 afterEach(() => {
   clearOverlayGuardTransport(new Error('dsh desktop: overlay-guard test reset'))
 })
+
+function overlayEvents(events: readonly OverlayGuardTransportEvent[]): OverlayGuardIpcEvent[] {
+  return events.filter((event): event is OverlayGuardIpcEvent => event.type === 'overlay-guard')
+}
+
+function ack(event: OverlayGuardTransportEvent, excludeWindowIds: readonly number[] = []): void {
+  if (event.type === 'observation-frame') completeObservationFrameAck(event.requestId)
+  else completeOverlayGuardAck(event.requestId, excludeWindowIds)
+}
 
 describe('computer-use overlay guard', () => {
   it('passes through when no sender is installed', async () => {
@@ -24,18 +35,20 @@ describe('computer-use overlay guard', () => {
       return 'shot'
     })).resolves.toBe('shot')
     await expect(guard.withInput(async () => 'click')).resolves.toBe('click')
+    await expect(guard.setObservationFrame(null)).resolves.toBeUndefined()
   })
 
   it('passes through createComputerUseOverlayGuard without a sender', async () => {
     const guard = createComputerUseOverlayGuard()
     await expect(guard.withCapture(async () => 1)).resolves.toBe(1)
+    await expect(guard.setObservationFrame({ x: 1, y: 2, width: 3, height: 4 })).resolves.toBeUndefined()
   })
 
   it('sends begin then end and waits for each ack', async () => {
-    const events: OverlayGuardIpcEvent[] = []
+    const events: OverlayGuardTransportEvent[] = []
     const guard = createComputerUseOverlayGuard((event) => {
       events.push(event)
-      queueMicrotask(() => { completeOverlayGuardAck(event.requestId, event.mode === 'capture' ? [9] : []) })
+      queueMicrotask(() => { ack(event, event.type === 'overlay-guard' && event.mode === 'capture' ? [9] : []) })
     })
     const order: string[] = []
     await expect(guard.withCapture(async (session) => {
@@ -44,20 +57,20 @@ describe('computer-use overlay guard', () => {
       return 'ok'
     })).resolves.toBe('ok')
     expect(order).toEqual(['run'])
-    expect(events.map(event => `${event.action}:${event.mode}`)).toEqual(['begin:capture', 'end:capture'])
+    expect(overlayEvents(events).map(event => `${event.action}:${event.mode}`)).toEqual(['begin:capture', 'end:capture'])
   })
 
   it('still sends end when the guarded call throws', async () => {
-    const events: OverlayGuardIpcEvent[] = []
+    const events: OverlayGuardTransportEvent[] = []
     const guard = createComputerUseOverlayGuard((event) => {
       events.push(event)
-      queueMicrotask(() => { completeOverlayGuardAck(event.requestId) })
+      queueMicrotask(() => { ack(event) })
     })
     await expect(guard.withInput(async () => {
       throw new Error('hid failed')
     })).rejects.toThrow('hid failed')
-    expect(events.map(event => event.action)).toEqual(['begin', 'end'])
-    expect(events[0]?.mode).toBe('input')
+    expect(overlayEvents(events).map(event => event.action)).toEqual(['begin', 'end'])
+    expect(overlayEvents(events)[0]?.mode).toBe('input')
   })
 
   it('times out when Electron never acks', { timeout: 3_000 }, async () => {
@@ -66,20 +79,22 @@ describe('computer-use overlay guard', () => {
   })
 
   it('still sends end when the begin ack is aborted', async () => {
-    const events: OverlayGuardIpcEvent[] = []
+    const events: OverlayGuardTransportEvent[] = []
     const guard = createComputerUseOverlayGuard((event) => {
       events.push(event)
-      if (event.action === 'end') queueMicrotask(() => { completeOverlayGuardAck(event.requestId) })
+      if (event.type === 'overlay-guard' && event.action === 'end') {
+        queueMicrotask(() => { completeOverlayGuardAck(event.requestId) })
+      }
     })
     const controller = new AbortController()
     const pending = guard.withCapture(async () => 'unused', controller.signal)
     controller.abort()
     await expect(pending).rejects.toThrow(/aborted/u)
-    expect(events.map(event => event.action)).toEqual(['begin', 'end'])
+    expect(overlayEvents(events).map(event => event.action)).toEqual(['begin', 'end'])
   })
 
   it('does not send input end until HID events have drained', async () => {
-    const events: OverlayGuardIpcEvent[] = []
+    const events: OverlayGuardTransportEvent[] = []
     let inRun = false
     let release!: () => void
     const gate = new Promise<void>((resolve) => {
@@ -87,49 +102,67 @@ describe('computer-use overlay guard', () => {
     })
     const guard = createComputerUseOverlayGuard((event) => {
       events.push(event)
-      queueMicrotask(() => { completeOverlayGuardAck(event.requestId) })
+      queueMicrotask(() => { ack(event) })
     })
     const pending = guard.withInput(async () => {
       inRun = true
       await gate
     })
     await expect.poll(() => inRun).toBe(true)
-    expect(events.map(event => event.action)).toEqual(['begin'])
+    expect(overlayEvents(events).map(event => event.action)).toEqual(['begin'])
     release()
     await Promise.resolve()
     await Promise.resolve()
-    expect(events.map(event => event.action)).toEqual(['begin'])
-    await expect.poll(() => events.map(event => event.action)).toEqual(['begin', 'end'])
+    expect(overlayEvents(events).map(event => event.action)).toEqual(['begin'])
+    await expect.poll(() => overlayEvents(events).map(event => event.action)).toEqual(['begin', 'end'])
     await pending
   })
 
-  it('nests withInput and withCapture so one HID turn sends one begin/end', async () => {
-    const events: OverlayGuardIpcEvent[] = []
+  it('refreshes excludeWindowIds on nested withCapture inside withInput', async () => {
+    const events: OverlayGuardTransportEvent[] = []
+    let captureAcks = 0
     const guard = createComputerUseOverlayGuard((event) => {
       events.push(event)
-      queueMicrotask(() => { completeOverlayGuardAck(event.requestId, event.mode === 'input' ? [4] : [9]) })
+      queueMicrotask(() => {
+        if (event.type === 'observation-frame') {
+          completeObservationFrameAck(event.requestId)
+          return
+        }
+        if (event.mode === 'input') {
+          completeOverlayGuardAck(event.requestId, [4])
+          return
+        }
+        captureAcks += 1
+        completeOverlayGuardAck(event.requestId, captureAcks === 1 ? [4] : [4, 88])
+      })
     })
     const seen: number[][] = []
     await guard.withInput(async () => {
       await guard.withInput(async () => undefined)
       await guard.withCapture(async (session) => {
-        seen.push(session.excludeWindowIds)
+        seen.push([...session.excludeWindowIds])
+      })
+      await guard.withCapture(async (session) => {
+        seen.push([...session.excludeWindowIds])
         await guard.withCapture(async (inner) => {
-          seen.push(inner.excludeWindowIds)
-          return inner
+          seen.push([...inner.excludeWindowIds])
         })
-        return session
       })
     })
-    expect(events.map(event => `${event.action}:${event.mode}`)).toEqual(['begin:input', 'end:input'])
-    expect(seen).toEqual([[4], [4]])
+    expect(overlayEvents(events).map(event => `${event.action}:${event.mode}`)).toEqual([
+      'begin:input',
+      'begin:capture', 'end:capture',
+      'begin:capture', 'end:capture',
+      'end:input',
+    ])
+    expect(seen).toEqual([[4], [4, 88], [4, 88]])
   })
 
   it('nests withCapture without extra begin/end', async () => {
-    const events: OverlayGuardIpcEvent[] = []
+    const events: OverlayGuardTransportEvent[] = []
     const guard = createComputerUseOverlayGuard((event) => {
       events.push(event)
-      queueMicrotask(() => { completeOverlayGuardAck(event.requestId, [9]) })
+      queueMicrotask(() => { ack(event, [9]) })
     })
     await guard.withCapture(async (outer) => {
       expect(outer.excludeWindowIds).toEqual([9])
@@ -137,19 +170,49 @@ describe('computer-use overlay guard', () => {
         expect(inner.excludeWindowIds).toEqual([9])
       })
     })
-    expect(events.map(event => `${event.action}:${event.mode}`)).toEqual(['begin:capture', 'end:capture'])
+    expect(overlayEvents(events).map(event => `${event.action}:${event.mode}`)).toEqual(['begin:capture', 'end:capture'])
+  })
+
+  it('sends observation-frame and waits for ack', async () => {
+    const events: OverlayGuardTransportEvent[] = []
+    const guard = createComputerUseOverlayGuard((event) => {
+      events.push(event)
+      queueMicrotask(() => { ack(event) })
+    })
+    const bounds = { x: 10, y: 20, width: 300, height: 200 }
+    await guard.setObservationFrame(bounds)
+    await guard.setObservationFrame(null)
+    expect(events.filter(event => event.type === 'observation-frame')).toEqual([
+      { type: 'observation-frame', requestId: expect.any(Number), bounds },
+      { type: 'observation-frame', requestId: expect.any(Number), bounds: null },
+    ])
+  })
+
+  it('times out when Electron never acks observation-frame', { timeout: 3_000 }, async () => {
+    const guard = createComputerUseOverlayGuard(() => undefined)
+    await expect(guard.setObservationFrame(null)).rejects.toThrow(/observation-frame ack timed out/u)
+  })
+
+  it('rejects observation-frame when the ack wait is aborted', async () => {
+    const guard = createComputerUseOverlayGuard(() => undefined)
+    const controller = new AbortController()
+    const pending = guard.setObservationFrame(null, controller.signal)
+    controller.abort()
+    await expect(pending).rejects.toThrow(/aborted/u)
   })
 
   it('uses the installed transport from apply', async () => {
-    const events: OverlayGuardIpcEvent[] = []
+    const events: OverlayGuardTransportEvent[] = []
     setOverlayGuardTransport((event) => {
       events.push(event)
-      queueMicrotask(() => { completeOverlayGuardAck(event.requestId) })
+      queueMicrotask(() => { ack(event) })
     })
     const ctx = new Context()
     apply(ctx)
     const guard = ctx.get('computerUseOverlayGuard') as ComputerUseOverlayGuard
     await guard.withInput(async () => undefined)
-    expect(events.map(event => `${event.action}:${event.mode}`)).toEqual(['begin:input', 'end:input'])
+    await guard.setObservationFrame(null)
+    expect(overlayEvents(events).map(event => `${event.action}:${event.mode}`)).toEqual(['begin:input', 'end:input'])
+    expect(events.some(event => event.type === 'observation-frame' && event.bounds === null)).toBe(true)
   })
 })

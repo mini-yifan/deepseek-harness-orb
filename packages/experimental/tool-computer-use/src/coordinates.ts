@@ -1,5 +1,5 @@
 /**
- * Screenshot-fraction mapping, millifraction/pixel validation, and screenshot-hotkey rejection.
+ * Screenshot-fraction mapping, millifraction/pixel validation, click-modifier allowlist, and screenshot-hotkey rejection.
  * @module @deepseek-ai/dsh-experimental-tool-computer-use/src/coordinates
  */
 
@@ -12,6 +12,23 @@ export const COORDINATE_SPACE = 1000
 const META_KEYS = new Set(['cmd', 'command', 'meta', 'win', 'windows', 'super'])
 const SHIFT_KEYS = new Set(['shift'])
 const SCREENSHOT_KEYS = new Set(['3', '4', '5'])
+
+/** Canonical modifier family for one click-modifier token. */
+type ClickModifierKind = 'shift' | 'cmd' | 'option' | 'control'
+
+const CLICK_MODIFIER_KIND: Readonly<Record<string, ClickModifierKind>> = {
+  shift: 'shift',
+  cmd: 'cmd',
+  command: 'cmd',
+  meta: 'cmd',
+  win: 'cmd',
+  windows: 'cmd',
+  super: 'cmd',
+  option: 'option',
+  alt: 'option',
+  control: 'control',
+  ctrl: 'control',
+}
 
 /**
  * Normalize one hotkey token for comparison.
@@ -44,6 +61,34 @@ export function assertAllowedHotkey(keys: readonly string[]): void {
   if (isForbiddenScreenshotHotkey(keys)) {
     throw new Error('computer-use: system screenshot shortcuts are forbidden')
   }
+}
+
+/**
+ * Accept omitted or empty `modifiers`, or a list of shift/cmd/option/control tokens.
+ * Duplicate families keep the first token. Unknown keys, including letters and `fn`, are rejected.
+ * @param modifiers - model-supplied click modifier tokens.
+ * @returns normalized tokens to hold for this click, or `undefined` for a plain click.
+ * @throws when a token is not a click modifier.
+ */
+export function requireClickModifiers(
+  modifiers: readonly string[] | undefined,
+): string[] | undefined {
+  if (modifiers === undefined || modifiers.length === 0) return undefined
+  const seen = new Set<ClickModifierKind>()
+  const accepted: string[] = []
+  for (const token of modifiers) {
+    const key = normalizeHotkeyKey(token)
+    const kind = CLICK_MODIFIER_KIND[key]
+    if (kind === undefined) {
+      throw new Error(
+        `computer-use: click modifiers must be shift, cmd, option, or control; got ${JSON.stringify(token)}`,
+      )
+    }
+    if (seen.has(kind)) continue
+    seen.add(kind)
+    accepted.push(key)
+  }
+  return accepted
 }
 
 /**

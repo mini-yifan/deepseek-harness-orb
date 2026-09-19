@@ -616,6 +616,8 @@ function jxa(script: string): readonly string[] {
  * Numeric CGEvent types: JXA exposes kCG* enums as strings.
  * Drag posts LeftMouseDragged (6), not MouseMoved (5): the latter relocates the
  * cursor without delivering mouseDragged: to AppKit and Electron.
+ * Click modifiers hold keys, set the same flags on mouse events, then release
+ * in that script.
  * `input_text` pastes: JXA cannot pass a UniChar buffer to CGEventKeyboardSetUnicodeString,
  * and virtual keycode 0 is the "a" key, so a failed unicode override types "a".
  */
@@ -648,22 +650,40 @@ const KEY_ENTER = 36
 function sleep(ms) {
   $.NSThread.sleepForTimeInterval(ms / 1000)
 }
-function postMouse(type, x, y, button, clickState) {
+function postMouse(type, x, y, button, clickState, flags) {
   const event = $.CGEventCreateMouseEvent(SRC, type, $.CGPointMake(x, y), button)
   if (clickState) $.CGEventSetIntegerValueField(event, CLICK_STATE, clickState)
+  if (flags) $.CGEventSetFlags(event, flags)
   $.CGEventPost(HID, event)
 }
-function clickAt(x, y, button, count) {
+function clickAt(x, y, button, count, flags) {
+  flags = flags || 0
   const down = button === RIGHT ? RIGHT_DOWN : LEFT_DOWN
   const up = button === RIGHT ? RIGHT_UP : LEFT_UP
-  postMouse(MOVE, x, y, button, 0)
+  postMouse(MOVE, x, y, button, 0, flags)
   sleep(80)
   for (var i = 1; i <= count; i++) {
-    postMouse(down, x, y, button, i)
+    postMouse(down, x, y, button, i, flags)
     sleep(50)
-    postMouse(up, x, y, button, i)
+    postMouse(up, x, y, button, i, flags)
     if (i < count) sleep(100)
   }
+}
+function clickWithModifiers(x, y, button, count, codes) {
+  var flags = 0
+  var mods = []
+  for (var i = 0; i < codes.length; i++) {
+    var code = codes[i]
+    if (code === KEY_CMD) { flags |= FLAG_CMD; mods.push(code) }
+    else if (code === KEY_SHIFT) { flags |= FLAG_SHIFT; mods.push(code) }
+    else if (code === KEY_OPTION) { flags |= FLAG_ALT; mods.push(code) }
+    else if (code === KEY_CONTROL) { flags |= FLAG_CTRL; mods.push(code) }
+  }
+  for (var m = 0; m < mods.length; m++) postKey(mods[m], true, flags)
+  sleep(20)
+  clickAt(x, y, button, count, flags)
+  for (var r = mods.length - 1; r >= 0; r--) postKey(mods[r], false, 0)
+  sleep(20)
 }
 function postKey(code, down, flags) {
   const event = $.CGEventCreateKeyboardEvent(SRC, code, down)
@@ -934,8 +954,12 @@ export function createMacosDesktopBackend(run: CommandRunner = runCommand): Desk
     async click(input: ClickInput, signal) {
       const point = roundedPoint(input.position, input.screen)
       const button = input.button === 'right' ? 1 : 0
+      const modifiers = input.modifiers ?? []
+      const body = modifiers.length === 0
+        ? `clickAt(${point.x}, ${point.y}, ${button}, ${input.count})`
+        : `clickWithModifiers(${point.x}, ${point.y}, ${button}, ${input.count}, ${JSON.stringify(modifiers.map(keyCode))})`
       try {
-        await hid(`clickAt(${point.x}, ${point.y}, ${button}, ${input.count})`, signal)
+        await hid(body, signal)
       } catch (error: unknown) {
         throw new Error(
           `computer-use: pointer input failed (Accessibility permission is required): ${errorDetail(error)}`,

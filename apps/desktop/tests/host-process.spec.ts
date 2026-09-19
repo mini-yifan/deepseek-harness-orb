@@ -302,6 +302,50 @@ function onRequestFrame(frame) {
     }
   })
 
+  it('acks observation-frame events without treating them as fatal', async () => {
+    const applied: unknown[] = []
+    const runtime = projectWithHost(`
+let lastAck = { requestId: 0, type: '' }
+process.on('message', message => {
+  if (message.type === 'observation-frame-ack') lastAck = { requestId: message.requestId, type: message.type }
+})
+process.send({ type: 'ready', protocolVersion: ${String(DESKTOP_HOST_PROTOCOL_VERSION)}, dshVersion: 'observation-frame' })
+process.send({ type: 'observation-frame', requestId: 3, bounds: { x: 1, y: 2, width: 30, height: 40 } })
+function onRequestFrame(frame) {
+  if (frame.type !== 1) return
+  responseStart(frame.streamId, { headers: [['content-type', 'application/json']] })
+  responseData(frame.streamId, JSON.stringify(lastAck))
+  responseEnd(frame.streamId)
+}
+`)
+    const host = new DesktopHostProcess(
+      process.execPath,
+      runtime,
+      runtime,
+      undefined,
+      process.env,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (event) => {
+        applied.push(event)
+      },
+    )
+    try {
+      await host.start()
+      await expect.poll(() => applied).toEqual([
+        { type: 'observation-frame', requestId: 3, bounds: { x: 1, y: 2, width: 30, height: 40 } },
+      ])
+      await expect.poll(async () => {
+        const response = await host.fetch(new Request('dsh-app://app/frame'))
+        return await response.json() as { requestId: number; type: string }
+      }).toEqual({ requestId: 3, type: 'observation-frame-ack' })
+    } finally {
+      await host.stop()
+    }
+  })
+
   it('acks overlay-guard only after an async callback resolves', async () => {
     let entered = false
     let release!: () => void
@@ -357,7 +401,9 @@ function onRequestFrame(frame) {
 process.send({ type: 'ready', protocolVersion: 4, dshVersion: 'old' })
 function onRequestFrame() {}
 `), projectWithHost(''))
-    await expect(host.start()).rejects.toThrow(/protocol 4 does not match Electron protocol 6/u)
+    await expect(host.start()).rejects.toThrow(
+      new RegExp(`protocol 4 does not match Electron protocol ${String(DESKTOP_HOST_PROTOCOL_VERSION)}`, 'u'),
+    )
     await host.stop().catch(() => undefined)
   })
 

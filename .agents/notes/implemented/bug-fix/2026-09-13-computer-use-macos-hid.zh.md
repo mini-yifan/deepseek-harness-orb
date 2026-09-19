@@ -14,7 +14,7 @@ JXA 把 CoreGraphics 的 `kCG*` 枚举暴露成字符串，并且无法把 `UniC
 
 每个 HID 动作写入一个 UTF-8 JXA 文件，并对该文件运行 `/usr/bin/osascript -l JavaScript`。脚本保持 HID 系统状态的 `CGEventSource`，使用数值 CGEvent 类型与 `CGPointMake`，并在移动、按下、抬起之间休眠。双击是两次按下/抬起循环，click-state 先为 1 再为 2。
 
-`input_text` 先点击聚焦，可选发送 Cmd+A，通过 `NSPasteboard` 加 Cmd+V 粘贴，可选按 Enter，并恢复先前的字符串剪贴板。JXA 在读取属性时就会调用无参 ObjC 方法，因此剪贴板的 `clearContents` 不能当成 JavaScript 函数来调用。热键按住修饰键，在同一即将发送的事件上设置标志，然后点按非修饰键。滚动先移到该点，再按每个 `scroll_level` 行刻度发送一次 `CGEventCreateScrollWheelEvent2`。`long_press` 通过 `longPressAt` 按 `durationSeconds` 按住左键。`drag` 通过 `dragFromTo` 在映射点之间插值十次 LeftMouseDragged（类型 6）步进。
+`input_text` 先点击聚焦，可选发送 Cmd+A，通过 `NSPasteboard` 加 Cmd+V 粘贴，可选按 Enter，并恢复先前的字符串剪贴板。JXA 在读取属性时就会调用无参 ObjC 方法，因此剪贴板的 `clearContents` 不能当成 JavaScript 函数来调用。热键按住修饰键，在同一即将发送的事件上设置标志，然后点按非修饰键。带修饰键的单击按住这些键，在鼠标事件上设置同样的标志，再通过 `clickWithModifiers` 松开。滚动先移到该点，再按每个 `scroll_level` 行刻度发送一次 `CGEventCreateScrollWheelEvent2`。`long_press` 通过 `longPressAt` 按 `durationSeconds` 按住左键。`drag` 通过 `dragFromTo` 在映射点之间插值十次 LeftMouseDragged（类型 6）步进。
 
 ## 考虑过的替代方案
 
@@ -34,4 +34,4 @@ JXA 把 CoreGraphics 的 `kCG*` 枚举暴露成字符串，并且无法把 `UniC
 
 ## 测试
 
-`packages/experimental/tool-computer-use/tests/macos.spec.ts` 捕获生成的 JXA，并断言 `clickAt`（含右键双击）、`pasteText` / `selectAll` / `pressEnter`、剪贴板 `clearContents` 作为属性而非 JS 调用、Cmd+C 的 `chord([55,8])`、带符号 `scrollAt` 增量的 `CGEventCreateScrollWheelEvent2`、`longPressAt`、`dragFromTo`，以及类型为 6 的 `postMouse(LEFT_DRAGGED`。空 `text` 不调用 `pasteText`。未知热键仍在 osascript 之前抛错。HID 子进程失败仍然点名辅助功能。
+`packages/experimental/tool-computer-use/tests/macos.spec.ts` 捕获生成的 JXA，并断言 `clickAt`（含右键双击）、带标志鼠标事件再抬起的 `clickWithModifiers`、`pasteText` / `selectAll` / `pressEnter`、剪贴板 `clearContents` 作为属性而非 JS 调用、Cmd+C 的 `chord([55,8])`、带符号 `scrollAt` 增量的 `CGEventCreateScrollWheelEvent2`、`longPressAt`、`dragFromTo`，以及类型为 6 的 `postMouse(LEFT_DRAGGED`。空 `text` 不调用 `pasteText`。未知热键仍在 osascript 之前抛错。HID 子进程失败仍然点名辅助功能。

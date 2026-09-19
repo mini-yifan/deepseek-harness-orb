@@ -2085,7 +2085,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 ### `click`
 
-在附加的最前窗口截图的 0–1000 位置点击，然后返回动作后的截屏。使用左键（默认）或右键；count 为 2 表示双击。
+在附加的最前窗口截图的 0–1000 位置点击，然后返回动作后的截屏。使用左键（默认）或右键；count 为 2 表示双击。可选修饰键（shift、cmd、option、control）仅在此次单击期间按住。
 
 ```json
 {
@@ -2119,6 +2119,13 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
         1,
         2
       ]
+    },
+    "modifiers": {
+      "type": "array",
+      "description": "Modifier keys held only for this click, for example [\"shift\"] or [\"cmd\"]. Omit for a plain click.",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "required": [

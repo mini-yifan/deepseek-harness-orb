@@ -2079,7 +2079,7 @@ All nine tools are scoped to implicit Team Leads and durable teammates. The ship
 
 ### `click`
 
-Click at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. Use left (default) or right button; count 2 is a double-click.
+Click at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. Use left (default) or right button; count 2 is a double-click. Optional modifiers (shift, cmd, option, control) are held only for this click.
 
 ```json
 {
@@ -2113,6 +2113,13 @@ Click at a 0–1000 position on the attached frontmost-window screenshot, then r
         1,
         2
       ]
+    },
+    "modifiers": {
+      "type": "array",
+      "description": "Modifier keys held only for this click, for example [\"shift\"] or [\"cmd\"]. Omit for a plain click.",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "required": [

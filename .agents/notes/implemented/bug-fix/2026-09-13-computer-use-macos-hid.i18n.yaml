@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-13-computer-use-macos-hid.md
-2026-09-13-computer-use-macos-hid.md: ddded756a95f26e67a6ee27d4251903a98d8eadd
-2026-09-13-computer-use-macos-hid.zh.md: bf1b72ee1868ca1d83b47179ccf234091017e3d7
+2026-09-13-computer-use-macos-hid.md: 20bf91017a1c53bc28355fdf798868407b9c413a
+2026-09-13-computer-use-macos-hid.zh.md: 0fd14c51a7e924c5b5e1f7368d9391a8aab04d63

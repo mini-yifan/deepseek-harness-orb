@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-14-desktop-overlay-guard.md
-2026-09-14-desktop-overlay-guard.md: 2cbebf93c9c348a3dc68f34d210fddbee9394eec
-2026-09-14-desktop-overlay-guard.zh.md: f53d83ed1e784aa1e8b82430a2bb9e232bcef710
+2026-09-14-desktop-overlay-guard.md: 19a44f46133fd04e8808c35b1474057f0f38a797
+2026-09-14-desktop-overlay-guard.zh.md: e20a7271f1709c5aa1f812fdf9c59bfc7f4dcf49

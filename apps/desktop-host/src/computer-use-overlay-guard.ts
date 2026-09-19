@@ -20,6 +20,24 @@ export interface OverlayGuardIpcEvent {
   readonly mode: OverlayGuardMode
 }
 
+/** Logical global rectangle for the Computer Use observation-frame overlay. */
+export interface ObservationFrameBounds {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
+
+/** Host → Electron observation-frame IPC event. */
+export interface ObservationFrameIpcEvent {
+  readonly type: 'observation-frame'
+  readonly requestId: number
+  readonly bounds: ObservationFrameBounds | null
+}
+
+/** Overlay-guard and observation-frame events sent on the same Host → Electron transport. */
+export type OverlayGuardTransportEvent = OverlayGuardIpcEvent | ObservationFrameIpcEvent
+
 /**
  * Overlay CGWindowIDs to omit from one ScreenCaptureKit display capture.
  * Electron fills this on overlay-guard ack; an empty list means no overlay window.
@@ -36,7 +54,9 @@ export interface OverlayCaptureSession {
 export interface ComputerUseOverlayGuard {
   /**
    * Exclude the overlay from screen capture while `run` executes, then restore it.
-   * Nested calls reuse the outermost exclude ids; a call inside `withInput` sends no capture IPC.
+   * Nested `withCapture` inside `withCapture` reuses the outer exclude ids.
+   * Nested `withCapture` inside `withInput` still sends capture begin/end so exclude ids refresh
+   * after the observation frame appears, without toggling HID click-through.
    * @param run - capture implementation; receives overlay window ids from the begin ack.
    * @param signal - cooperative cancellation for the begin ack wait.
    * @returns the value `run` resolves to.
@@ -53,6 +73,13 @@ export interface ComputerUseOverlayGuard {
    * @returns the value `run` resolves to.
    */
   withInput<T>(run: () => Promise<T>, signal?: AbortSignal): Promise<T>
+  /**
+   * Show or hide the observation-frame ribbon around the current Computer Use capture rectangle.
+   * Pass-through when Electron is not attached. Acks before returning so the next capture exclude list includes the frame.
+   * @param bounds - observation union in global logical points, or `null` to hide.
+   * @param signal - cooperative cancellation for the ack wait.
+   */
+  setObservationFrame(bounds: ObservationFrameBounds | null, signal?: AbortSignal): Promise<void>
 }
 
 /** Milliseconds to wait for Electron's overlay-guard ack before failing the Computer Use call. */
@@ -64,14 +91,20 @@ export const OVERLAY_GUARD_INPUT_DRAIN_MS = 80
 /** Cordis plugin name matching the Desktop overlay YAML id. */
 export const name = 'computer-use-overlay-guard'
 
-interface PendingAck {
+interface PendingExcludeAck {
   readonly resolve: (excludeWindowIds: readonly number[]) => void
   readonly reject: (error: Error) => void
 }
 
+interface PendingFrameAck {
+  readonly resolve: () => void
+  readonly reject: (error: Error) => void
+}
+
 let nextRequestId = 1
-let transportSend: ((event: OverlayGuardIpcEvent) => void) | undefined
-const pending = new Map<number, PendingAck>()
+let transportSend: ((event: OverlayGuardTransportEvent) => void) | undefined
+const pendingExclude = new Map<number, PendingExcludeAck>()
+const pendingFrame = new Map<number, PendingFrameAck>()
 /** Nested withInput / withCapture share one Electron cloak; only depth 0 sends begin/end. */
 let inputDepth = 0
 let captureDepth = 0
@@ -92,7 +125,7 @@ function errorOf(reason: unknown, fallback: string): Error {
  * `main` calls this before Cordis boot so Computer Use can cloak after `ready`.
  * @param send - `process.send` wrapper that already handles a closed IPC channel.
  */
-export function setOverlayGuardTransport(send: (event: OverlayGuardIpcEvent) => void): void {
+export function setOverlayGuardTransport(send: (event: OverlayGuardTransportEvent) => void): void {
   transportSend = send
 }
 
@@ -103,8 +136,10 @@ export function setOverlayGuardTransport(send: (event: OverlayGuardIpcEvent) => 
 export function clearOverlayGuardTransport(error: Error): void {
   transportSend = undefined
   resetOverlayGuardDepths()
-  for (const waiter of pending.values()) waiter.reject(error)
-  pending.clear()
+  for (const waiter of pendingExclude.values()) waiter.reject(error)
+  pendingExclude.clear()
+  for (const waiter of pendingFrame.values()) waiter.reject(error)
+  pendingFrame.clear()
 }
 
 /**
@@ -117,14 +152,27 @@ export function completeOverlayGuardAck(
   requestId: number,
   excludeWindowIds: readonly number[] = [],
 ): boolean {
-  const waiter = pending.get(requestId)
+  const waiter = pendingExclude.get(requestId)
   if (waiter === undefined) return false
-  pending.delete(requestId)
+  pendingExclude.delete(requestId)
   waiter.resolve(excludeWindowIds)
   return true
 }
 
-function waitAck(requestId: number, signal?: AbortSignal): Promise<readonly number[]> {
+/**
+ * Complete one Electron observation-frame acknowledgement.
+ * @param requestId - id from the matching Host `observation-frame` event.
+ * @returns whether a waiter existed.
+ */
+export function completeObservationFrameAck(requestId: number): boolean {
+  const waiter = pendingFrame.get(requestId)
+  if (waiter === undefined) return false
+  pendingFrame.delete(requestId)
+  waiter.resolve()
+  return true
+}
+
+function waitExcludeAck(requestId: number, signal?: AbortSignal): Promise<readonly number[]> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(errorOf(signal.reason, 'dsh desktop: overlay-guard aborted'))
@@ -137,34 +185,61 @@ function waitAck(requestId: number, signal?: AbortSignal): Promise<readonly numb
     const settle = (next: () => void): void => {
       clearTimeout(timer)
       signal?.removeEventListener('abort', onAbort)
-      pending.delete(requestId)
+      pendingExclude.delete(requestId)
       next()
     }
     const onAbort = (): void => {
       settle(() => { reject(errorOf(signal?.reason, 'dsh desktop: overlay-guard aborted')) })
     }
     signal?.addEventListener('abort', onAbort, { once: true })
-    pending.set(requestId, {
+    pendingExclude.set(requestId, {
       resolve: (excludeWindowIds) => { settle(() => { resolve(excludeWindowIds) }) },
       reject: (error) => { settle(() => { reject(error) }) },
     })
   })
 }
 
+function waitFrameAck(requestId: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(errorOf(signal.reason, 'dsh desktop: observation-frame aborted'))
+      return
+    }
+    const timer = setTimeout(() => {
+      settle(() => { reject(new Error('dsh desktop: observation-frame ack timed out')) })
+    }, OVERLAY_GUARD_ACK_TIMEOUT_MS)
+    timer.unref()
+    const settle = (next: () => void): void => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
+      pendingFrame.delete(requestId)
+      next()
+    }
+    const onAbort = (): void => {
+      settle(() => { reject(errorOf(signal?.reason, 'dsh desktop: observation-frame aborted')) })
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+    pendingFrame.set(requestId, {
+      resolve: () => { settle(() => { resolve() }) },
+      reject: (error) => { settle(() => { reject(error) }) },
+    })
+  })
+}
+
 async function withCaptureMode<T>(
-  send: (event: OverlayGuardIpcEvent) => void,
+  send: (event: OverlayGuardTransportEvent) => void,
   run: (session: OverlayCaptureSession) => Promise<T>,
   signal?: AbortSignal,
 ): Promise<T> {
-  const outermost = captureDepth === 0 && inputDepth === 0
+  const sendCaptureIpc = captureDepth === 0
   captureDepth += 1
   let sentBegin = false
   try {
-    if (outermost) {
+    if (sendCaptureIpc) {
       const beginId = nextRequestId++
       send({ type: 'overlay-guard', requestId: beginId, action: 'begin', mode: 'capture' })
       sentBegin = true
-      activeExcludeWindowIds = await waitAck(beginId, signal)
+      activeExcludeWindowIds = await waitExcludeAck(beginId, signal)
     }
     return await run({ excludeWindowIds: activeExcludeWindowIds })
   } finally {
@@ -173,7 +248,7 @@ async function withCaptureMode<T>(
       const endId = nextRequestId++
       send({ type: 'overlay-guard', requestId: endId, action: 'end', mode: 'capture' })
       try {
-        await waitAck(endId)
+        await waitExcludeAck(endId)
       } catch {
         // Electron already gone, ack lost, or Host stopping; Host-exit restore covers the overlay.
       }
@@ -183,7 +258,7 @@ async function withCaptureMode<T>(
 }
 
 async function withInputMode<T>(
-  send: (event: OverlayGuardIpcEvent) => void,
+  send: (event: OverlayGuardTransportEvent) => void,
   run: () => Promise<T>,
   signal?: AbortSignal,
 ): Promise<T> {
@@ -196,7 +271,7 @@ async function withInputMode<T>(
       const beginId = nextRequestId++
       send({ type: 'overlay-guard', requestId: beginId, action: 'begin', mode: 'input' })
       sentBegin = true
-      activeExcludeWindowIds = await waitAck(beginId, signal)
+      activeExcludeWindowIds = await waitExcludeAck(beginId, signal)
       hidBegan = true
     }
     return await run()
@@ -207,12 +282,30 @@ async function withInputMode<T>(
       const endId = nextRequestId++
       send({ type: 'overlay-guard', requestId: endId, action: 'end', mode: 'input' })
       try {
-        await waitAck(endId)
+        await waitExcludeAck(endId)
       } catch {
         // Electron already gone, ack lost, or Host stopping; Host-exit restore covers the overlay.
       }
       if (captureDepth === 0) activeExcludeWindowIds = []
     }
+  }
+}
+
+async function setObservationFrameMode(
+  send: (event: OverlayGuardTransportEvent) => void,
+  bounds: ObservationFrameBounds | null,
+  signal?: AbortSignal,
+): Promise<void> {
+  const requestId = nextRequestId++
+  send({ type: 'observation-frame', requestId, bounds })
+  await waitFrameAck(requestId, signal)
+}
+
+function passThroughGuard(): ComputerUseOverlayGuard {
+  return {
+    withCapture: run => run({ excludeWindowIds: [] }),
+    withInput: run => run(),
+    setObservationFrame: () => Promise.resolve(),
   }
 }
 
@@ -222,17 +315,13 @@ async function withInputMode<T>(
  * @returns capture and HID cloak helpers.
  */
 export function createComputerUseOverlayGuard(
-  send?: (event: OverlayGuardIpcEvent) => void,
+  send?: (event: OverlayGuardTransportEvent) => void,
 ): ComputerUseOverlayGuard {
-  if (send === undefined) {
-    return {
-      withCapture: run => run({ excludeWindowIds: [] }),
-      withInput: run => run(),
-    }
-  }
+  if (send === undefined) return passThroughGuard()
   return {
     withCapture: (run, signal) => withCaptureMode(send, run, signal),
     withInput: (run, signal) => withInputMode(send, run, signal),
+    setObservationFrame: (bounds, signal) => setObservationFrameMode(send, bounds, signal),
   }
 }
 
@@ -249,6 +338,10 @@ export function apply(ctx: Context): void {
     withInput: (run, signal) => {
       const send = transportSend
       return send === undefined ? run() : withInputMode(send, run, signal)
+    },
+    setObservationFrame: (bounds, signal) => {
+      const send = transportSend
+      return send === undefined ? Promise.resolve() : setObservationFrameMode(send, bounds, signal)
     },
   } satisfies ComputerUseOverlayGuard)
 }
