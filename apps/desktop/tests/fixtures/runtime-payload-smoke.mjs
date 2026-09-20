@@ -1,11 +1,12 @@
 /** Exercise filtered Desktop native and HTML dependencies under its bundled Node. */
 
 import assert from 'node:assert/strict'
-import { closeSync, mkdtempSync, openSync, readFileSync, readSync, writeFileSync } from 'node:fs'
+import { closeSync, mkdtempSync, openSync, readFileSync, writeFileSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const runtime = process.argv[2]
 assert.ok(runtime, 'Pass the filtered resources/dsh directory')
@@ -64,17 +65,17 @@ async function checkPty() {
   }
 }
 
-/** fs-ext implements seek on Windows through SetFilePointerEx and on POSIX through lseek. */
-function checkFsExt() {
-  const fsExt = requireRuntime('fs-ext')
-  const file = join(scratch, 'seek.txt')
-  writeFileSync(file, 'abcdef', { flag: 'wx', mode: 0o600 })
-  const fd = openSync(file, 'r')
+/** POSIX flock for session write leases; Windows uses a kernel semaphore instead. */
+async function checkFlock() {
+  if (process.platform === 'win32') return
+  const { tryLockExclusive } = await import(
+    pathToFileURL(requireRuntime.resolve('@deepseek-ai/node-addon-system/flock')).href
+  )
+  const file = join(scratch, 'lock.txt')
+  writeFileSync(file, '', { flag: 'wx', mode: 0o600 })
+  const fd = openSync(file, 'r+')
   try {
-    assert.equal(fsExt.seekSync(fd, 2, fsExt.constants.SEEK_SET), 2)
-    const bytes = Buffer.alloc(4)
-    assert.equal(readSync(fd, bytes, 0, bytes.length, null), 4)
-    assert.equal(bytes.toString(), 'cdef')
+    await tryLockExclusive(fd)
   } finally {
     closeSync(fd)
   }
@@ -121,7 +122,7 @@ function checkHtml() {
 }
 
 try {
-  checkFsExt()
+  await checkFlock()
   checkKoffi()
   await checkSharp()
   checkHtml()
@@ -134,5 +135,5 @@ try {
 // Natural event-loop drain includes node-pty's worker and console-list helper teardown.
 process.once('beforeExit', () => {
   console.log(JSON.stringify({ node: process.versions.node, platform: process.platform, arch: process.arch,
-    fsExt: true, koffi: true, sharp: true, html: true, pty: true }))
+    flock: process.platform !== 'win32', koffi: true, sharp: true, html: true, pty: true }))
 })

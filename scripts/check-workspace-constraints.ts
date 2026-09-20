@@ -196,6 +196,7 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
     'lib/code-agent.js',
     'presets',
     'lib/macos-sck-capture',
+    'lib/libmacos-sck-capture.dylib',
   ],
 }
 

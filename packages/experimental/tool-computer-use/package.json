@@ -29,6 +29,7 @@
     "lib/code-agent.js",
     "presets",
     "lib/macos-sck-capture",
+    "lib/libmacos-sck-capture.dylib",
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",

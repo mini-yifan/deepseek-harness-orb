@@ -147,6 +147,17 @@ pnpm run package:desktop:win:x64:unsigned
 
 该命令要求设置 `DSH_DESKTOP_APP_ID` 并具备常规构建依赖，包括编译原生模块所需的 Python 和 Visual C++ 构建工具。Python 不在 `PATH` 中时，将 `PYTHON` 设置为其可执行文件路径。命令将安装包写入 `.desktop-build/targets/win-x64/unsigned-artifacts/`，省略自动更新配置，清除签名凭据，且不生成发布完成记录。它不需要 EV 凭据或更新源地址。签名打包和上传命令仍遵循正式发布要求。
 
+### 未签名 macOS 测试安装包
+
+在 macOS 上，使用完整的未签名打包命令进行本地安装测试：
+
+```sh
+pnpm run package:desktop:mac:arm64:unsigned
+pnpm run package:desktop:mac:x64:unsigned
+```
+
+该命令要求设置 `DSH_DESKTOP_APP_ID` 并具备常规构建依赖。命令将磁盘映像写入 `.desktop-build/targets/<target>/unsigned-artifacts/`，省略自动更新配置和 ZIP 更新载荷，跳过 Developer ID 签名与公证，清除签名凭据，且不生成发布完成记录。它不需要签名身份、Team ID 或 notarytool 凭据。本地生成的磁盘映像通常可以直接打开；将应用拷到别处后，macOS Gatekeeper 可能要求通过上下文菜单选择打开。签名打包和上传命令仍遵循正式发布要求。
+
 ### Windows EV 签名
 
 Windows 打包将 7-Zip 过滤器固定为 `BCJ`，以兼容内置的 NSIS 解码器。这样可以保留 x64 安装包中由依赖携带的 ARM64 二进制文件；自动 ARM64 过滤会生成该解码器无法解压的条目。
@@ -194,7 +205,7 @@ pnpm run prepare:desktop
 
 ## 底层开发覆盖项
 
-未打包的 Electron 进程使用应用目录下的 `.desktop-build/development/project` 作为开发项目。该项目的 `node_modules` 镜像工作区虚拟提升目录（`node_modules/.pnpm/node_modules`），再从 `@deepseek-ai/dsh-base` 和 `@deepseek-ai/dsh-web-app` 的嵌套 `node_modules` 补上提升目录漏掉的名称，使 profile 插件在提升省略时仍可解析。外部插件持久化在 `$DSH_HOME/profiles/desktop`，并在每次重建后链入提升项目；随后把各插件的宿主 peer 包从提升项目链回该 store，以便 Node ESM 在 realpath 之后仍能解析它们；`start:desktop` 在该处钉入 `dshmarket@1.47.0`，以便设置 → 插件显示插件市场。`DSH_DESKTOP_NODE_BINARY`、`DSH_DESKTOP_PNPM_ENTRY` 和 `DSH_DESKTOP_DSH_DIR` 用于选择明确的运行时资源。打包应用会忽略这些变量，从 `process.resourcesPath` 解析签名资源，并使用受管 Desktop profile。
+未打包的 Electron 进程使用应用目录下的 `.desktop-build/development/project` 作为开发项目。该项目的 `node_modules` 镜像工作区虚拟提升目录（`node_modules/.pnpm/node_modules`），再从 `@deepseek-ai/dsh-base` 和 `@deepseek-ai/dsh-web-app` 的嵌套 `node_modules` 补上提升目录漏掉的名称，使 profile 插件在提升省略时仍可解析。外部插件持久化在 `$DSH_HOME/profiles/desktop`，并在每次重建后链入提升项目；随后把各插件的宿主 peer 包从提升项目链回该 store，以便 Node ESM 在 realpath 之后仍能解析它们；`start:desktop` 在该处钉入 `dshmarket@1.50.0`，以便设置 → 插件显示插件市场。`DSH_DESKTOP_NODE_BINARY`、`DSH_DESKTOP_PNPM_ENTRY` 和 `DSH_DESKTOP_DSH_DIR` 用于选择明确的运行时资源。打包应用会忽略这些变量，从 `process.resourcesPath` 解析签名资源，使用受管 Desktop profile，并在缺少该精确 spec 时从内置 tarball 写入 `dshmarket@1.50.0`。打包 `applyRelease` 在该插件图无法保持启用时禁用全部第三方 bundle 并继续启动。
 
 ## 已知限制
 
@@ -205,4 +216,4 @@ pnpm run prepare:desktop
 - 桌面壳与 CLI dsh 共享 `$DSH_HOME` 下的会话、设置、凭据、工作区和存储，但可执行包、插件激活、锁文件与包管理器状态彼此隔离。
 - macOS 悬浮球是同一 Desktop Host 上的第二扇 Electron overlay。它把 Computer Use 会话放在侧栏 `dsh_orb` 文件夹下；主窗口保持当前会话。Windows 仍是单主窗口。
 - macOS 拖拽划选后，不激活的工具条提供搜索 / 翻译 / 发给 Agent。翻译写入球的 Computer Use 会话；发给 Agent 把选区贴到 overlay 输入框；搜索打开 Bing。Windows 没有工具条。
-- Computer Use 作为签名 runtime extra 放在 `extraResources/dsh` 下，而不是 Desktop Host 的 npm 依赖。主窗口始终可被截到。macOS overlay、划词工具条与观察框彩带只要可见，就由 ScreenCaptureKit 窗口排除从 Computer Use 截图中省略；HID 点击穿透作用于球，并在该突发期间隐藏工具条。见 [Computer Use 观察框彩带](../../.agents/notes/implemented/feature/2026-09-19-computer-use-observation-frame.zh.md)。
+- Computer Use 作为签名 runtime extra 放在 `extraResources/dsh` 下，而不是 Desktop Host 的 npm 依赖。主窗口始终可被截到。macOS overlay、划词工具条与观察框彩带只要可见，就由 ScreenCaptureKit 窗口排除从 Computer Use 截图中省略；该捕获跑在 DeepSeek Orb 进程里。HID 点击穿透作用于球，并在该突发期间隐藏工具条。见 [Computer Use 观察框彩带](../../.agents/notes/implemented/feature/2026-09-19-computer-use-observation-frame.zh.md)。

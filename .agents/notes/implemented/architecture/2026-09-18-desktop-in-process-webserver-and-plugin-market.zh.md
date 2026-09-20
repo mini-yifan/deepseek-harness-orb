@@ -14,7 +14,7 @@ Desktop 以 `listen: false` 启用 `@deepseek-ai/dsh-host-webserver`。激活不
 
 在 Loader 条目挂载之前，Desktop Host 提供 `desktopProfiles.current = { name: 'desktop', dir }` 以及带 `runPlugin`／`runExternalMarketPluginInstall` 的 `desktopPnpm`。这些方法发送 Host→Electron 的 `plugin-run` IPC。Electron 通过 `DesktopProjectManager.mutateWhileRunning` 运行内置 pnpm，不停止 Host，随后市场 UI 提示用户重启。GitHub、gist、git、file 和 URL spec 仍然被拒绝。
 
-未打包启动把外部插件持久化在 `$DSH_HOME/profiles/desktop`，并重新链入被清空的 hoist 项目。链接器随后把各插件的宿主 peer 包从 hoist 放到 store 副本旁边，因为 Node ESM 对 store 插件做 realpath 后不会搜索 hoist 的 `node_modules`。`start:desktop` 在该 store 中钉入 `dshmarket@1.47.0`。`--skip-build` 会重建 `@deepseek-ai/dsh-host-webserver` 与 `@deepseek-ai/dsh-client-modules`，以便 Host 从这些包的 `lib/index.js` 加载 `dispatch` 以及 `/plugins` 载体注册。当载体已经提供时，client-modules 通过 `ctx.get('webServer')` 注册该路由，因为 Cordis 在插件 fiber 上通过属性访问服务需要 inject。市场包不是签名的 `DESKTOP_PROFILE_BUNDLES` 成员。打包应用默认预装市场不在本轮范围。
+未打包启动把外部插件持久化在 `$DSH_HOME/profiles/desktop`，并重新链入被清空的 hoist 项目。链接器随后把各插件的宿主 peer 包从 hoist 放到 store 副本旁边，因为 Node ESM 对 store 插件做 realpath 后不会搜索 hoist 的 `node_modules`。`start:desktop` 在该 store 中钉入 `dshmarket@1.50.0`。`--skip-build` 会重建 `@deepseek-ai/dsh-host-webserver` 与 `@deepseek-ai/dsh-client-modules`，以便 Host 从这些包的 `lib/index.js` 加载 `dispatch` 以及 `/plugins` 载体注册。当载体已经提供时，client-modules 通过 `ctx.get('webServer')` 注册该路由，因为 Cordis 在插件 fiber 上通过属性访问服务需要 inject。市场包不是签名的 `DESKTOP_PROFILE_BUNDLES` 成员。打包应用把 `dshmarket@1.50.0` 放在 `extraResources/plugins/dshmarket-1.50.0.tgz`，并在 Desktop profile 缺少该精确 spec 时从该 tarball 写入；首次 seed 仍可能从 registry 拉取该包的 npm 依赖。Peer `satisfies` 包含 prerelease，因此宿主 `0.1.5-rc.2` 能匹配 caret-rc 范围。打包 `applyRelease` 在插件图校验仍失败时禁用全部第三方 bundle 并继续启动。
 
 ## 考虑过的替代方案
 
@@ -26,6 +26,6 @@ Desktop 以 `listen: false` 启用 `@deepseek-ai/dsh-host-webserver`。激活不
 
 ## 后果
 
-`start:desktop` 后，只要 `dshmarket` 已在开发 store 中，设置 → 插件即可显示插件市场。市场对 registry 包的安装能在下一次 hoist 重建后保留。仅 GitHub 的目录条目会以明确的不受支持 spec 错误失败。Desktop 仍不监听 TCP，仍不启用 `web-runtime` 或 `client-hmr`，也仍不允许 CLI 管理 `profile desktop`。
+`start:desktop` 后，只要 `dshmarket` 已在开发 store 中，设置 → 插件即可显示插件市场；打包启动则在内置 tarball 写入 profile 后同样显示。市场对 registry 包的安装能在下一次 hoist 重建后保留。仅 GitHub 的目录条目会以明确的不受支持 spec 错误失败。Desktop 仍不监听 TCP，仍不启用 `web-runtime` 或 `client-hmr`，也仍不允许 CLI 管理 `profile desktop`。
 
-测试覆盖 `listen: false` 且无 TCPWRAP、`dispatch` 前缀命中与未命中、Host／Origin 的 `sameOrigin` 值、fetch 顺序、开发 store 链入 `dshmarket` 及其宿主 peer，以及 `github:` 拒绝。对 awesome-dsh-plugin 的 GUI 浏览／安装仍是本地 Desktop 运行。
+测试覆盖 `listen: false` 且无 TCPWRAP、`dispatch` 前缀命中与未命中、Host／Origin 的 `sameOrigin` 值、fetch 顺序、开发 store 链入 `dshmarket` 及其宿主 peer、`github:` 拒绝、打包 profile 在缺少 spec 时从内置 tarball seed、已记录 `dshmarket@1.50.0` 时跳过，以及打包 `applyRelease` 在插件图无法保持启用时禁用第三方插件。对 awesome-dsh-plugin 的 GUI 浏览／安装仍是本地 Desktop 运行。

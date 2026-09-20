@@ -138,7 +138,7 @@ async function main(): Promise<void> {
       resolve(APP_ROOT, '..', '..', 'packages', 'experimental', 'tool-computer-use'),
       DSH_OUTPUT_ROOT,
     )
-    if (process.platform === 'darwin') {
+    if (process.platform === 'darwin' && process.env.DSH_DESKTOP_UNSIGNED !== '1') {
       await signMacOSRuntime(DSH_OUTPUT_ROOT, resolveDesktopAppId(process.env), resolveMacOSSigningEnvironment(process.env))
     }
     writeDesktopRuntime(DSH_OUTPUT_ROOT, release, packageSet.packages.map(entry => entry.name), target)

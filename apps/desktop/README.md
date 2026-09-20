@@ -147,6 +147,17 @@ pnpm run package:desktop:win:x64:unsigned
 
 The command requires `DSH_DESKTOP_APP_ID` and the normal build dependencies, including Python and Visual C++ build tools for native modules. Set `PYTHON` to the Python executable when it is absent from `PATH`. It writes the installer to `.desktop-build/targets/win-x64/unsigned-artifacts/`, omits automatic-update configuration, strips signing credentials, and creates no release completion record. It does not require EV credentials or an update origin. The signed packaging and upload commands retain their release requirements.
 
+### Unsigned macOS test installer
+
+On macOS, use the complete unsigned packaging command for local installation testing:
+
+```sh
+pnpm run package:desktop:mac:arm64:unsigned
+pnpm run package:desktop:mac:x64:unsigned
+```
+
+The command requires `DSH_DESKTOP_APP_ID` and the normal build dependencies. It writes the disk image to `.desktop-build/targets/<target>/unsigned-artifacts/`, omits automatic-update configuration and the ZIP updater payload, skips Developer ID signing and notarization, strips signing credentials, and creates no release completion record. It does not require a signing identity, Team ID, or notarytool credentials. A locally built disk image usually opens; after copying the application elsewhere, macOS Gatekeeper may require Open from the context menu. The signed packaging and upload commands retain their release requirements.
+
 ### Windows EV signing
 
 Windows packaging fixes the 7-Zip filter to `BCJ` for compatibility with the bundled NSIS decoder. This preserves ARM64 binaries carried by dependencies in x64 installers; automatic ARM64 filtering produces entries that this decoder cannot extract.
@@ -194,7 +205,7 @@ Signed packaging emits generic-provider channel metadata for the deployment sele
 
 ## Low-level development overrides
 
-An unpackaged Electron process uses `.desktop-build/development/project` under its application directory as its development project. That project's `node_modules` mirrors the workspace virtual hoist (`node_modules/.pnpm/node_modules`), then links any remaining names from the nested `node_modules` of `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-web-app` so profile plugins the hoist omitted still resolve. External plugins persist in `$DSH_HOME/profiles/desktop` and are linked into the hoist project after each rebuild; each plugin's host peer packages are then linked from the hoist into that store so Node ESM resolution after realpath can load them; `start:desktop` pins `dshmarket@1.47.0` there so Settings → Plugins can show Plugin Market. `DSH_DESKTOP_NODE_BINARY`, `DSH_DESKTOP_PNPM_ENTRY`, and `DSH_DESKTOP_DSH_DIR` select explicit runtime resources. Packaged applications ignore these variables, resolve signed resources from `process.resourcesPath`, and use the managed Desktop profile.
+An unpackaged Electron process uses `.desktop-build/development/project` under its application directory as its development project. That project's `node_modules` mirrors the workspace virtual hoist (`node_modules/.pnpm/node_modules`), then links any remaining names from the nested `node_modules` of `@deepseek-ai/dsh-base` and `@deepseek-ai/dsh-web-app` so profile plugins the hoist omitted still resolve. External plugins persist in `$DSH_HOME/profiles/desktop` and are linked into the hoist project after each rebuild; each plugin's host peer packages are then linked from the hoist into that store so Node ESM resolution after realpath can load them; `start:desktop` pins `dshmarket@1.50.0` there so Settings → Plugins can show Plugin Market. `DSH_DESKTOP_NODE_BINARY`, `DSH_DESKTOP_PNPM_ENTRY`, and `DSH_DESKTOP_DSH_DIR` select explicit runtime resources. Packaged applications ignore these variables, resolve signed resources from `process.resourcesPath`, use the managed Desktop profile, and seed `dshmarket@1.50.0` from the bundled tarball when that exact spec is absent. Packaged `applyRelease` disables every third-party bundle and continues when that graph cannot stay enabled.
 
 ## Known limitations
 
@@ -205,4 +216,4 @@ An unpackaged Electron process uses `.desktop-build/development/project` under i
 - The desktop shell shares sessions, settings, credentials, workspaces, and storage under `$DSH_HOME` with CLI dsh, while executable packages, plugin activation, lockfiles, and package-manager state remain separate.
 - The macOS floating ball is a second Electron overlay on the same Desktop Host. It locks Computer Use sessions under the `dsh_orb` sidebar folder; the main window stays on its current session. Windows keeps a single main window.
 - After a macOS drag-select, Search / Translate / Send to Agent appear on a no-activate toolbar. Translate prompts the ball’s Computer Use session; Send to Agent attaches the quote to the overlay composer; Search opens Bing. Windows has no toolbar.
-- Computer Use ships as a signed runtime extra under `extraResources/dsh`, not as a Desktop Host npm dependency. The main window stays capturable. The macOS overlay, selection toolbar, and observation-frame ribbon are omitted from Computer Use screenshots by ScreenCaptureKit window exclusion while they are visible; HID click-through applies to the ball and hides the toolbar for that burst. See [Computer Use observation-frame ribbon](../../.agents/notes/implemented/feature/2026-09-19-computer-use-observation-frame.md).
+- Computer Use ships as a signed runtime extra under `extraResources/dsh`, not as a Desktop Host npm dependency. The main window stays capturable. The macOS overlay, selection toolbar, and observation-frame ribbon are omitted from Computer Use screenshots by ScreenCaptureKit window exclusion while they are visible; that capture runs in the DeepSeek Orb process. HID click-through applies to the ball and hides the toolbar for that burst. See [Computer Use observation-frame ribbon](../../.agents/notes/implemented/feature/2026-09-19-computer-use-observation-frame.md).

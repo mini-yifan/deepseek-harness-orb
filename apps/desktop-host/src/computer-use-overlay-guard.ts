@@ -35,8 +35,21 @@ export interface ObservationFrameIpcEvent {
   readonly bounds: ObservationFrameBounds | null
 }
 
-/** Overlay-guard and observation-frame events sent on the same Host → Electron transport. */
-export type OverlayGuardTransportEvent = OverlayGuardIpcEvent | ObservationFrameIpcEvent
+/** Overlay-exclude ScreenCaptureKit JPEG request. */
+export interface OverlayExcludedRegionCaptureInput {
+  readonly region: string
+  readonly excludeWindowIds: readonly number[]
+  readonly output: string
+}
+
+/** Host → Electron overlay-exclude capture IPC event. */
+export interface SckCaptureIpcEvent extends OverlayExcludedRegionCaptureInput {
+  readonly type: 'sck-capture'
+  readonly requestId: number
+}
+
+/** Overlay-guard, observation-frame, and overlay-exclude capture events on the same Host → Electron transport. */
+export type OverlayGuardTransportEvent = OverlayGuardIpcEvent | ObservationFrameIpcEvent | SckCaptureIpcEvent
 
 /**
  * Overlay CGWindowIDs to omit from one ScreenCaptureKit display capture.
@@ -80,10 +93,20 @@ export interface ComputerUseOverlayGuard {
    * @param signal - cooperative cancellation for the ack wait.
    */
   setObservationFrame(bounds: ObservationFrameBounds | null, signal?: AbortSignal): Promise<void>
+  /**
+   * Capture `input.region` as JPEG at `input.output`, omitting overlay CGWindowIDs in the Electron process.
+   * Pass-through hosts omit this method; CLI then spawns `macos-sck-capture`.
+   * @param input - region `x,y,w,h`, overlay window ids, and JPEG destination path.
+   * @param signal - cooperative cancellation for the ack wait.
+   */
+  captureExcludedRegion?(input: OverlayExcludedRegionCaptureInput, signal?: AbortSignal): Promise<void>
 }
 
 /** Milliseconds to wait for Electron's overlay-guard ack before failing the Computer Use call. */
 export const OVERLAY_GUARD_ACK_TIMEOUT_MS = 1_000
+
+/** Milliseconds to wait for Electron's overlay-exclude capture ack. Screen Recording prompts can appear. */
+export const SCK_CAPTURE_ACK_TIMEOUT_MS = 30_000
 
 /** Milliseconds Host waits after HID returns before sending input end, so WindowServer finishes hit-testing posted CGEvents. */
 export const OVERLAY_GUARD_INPUT_DRAIN_MS = 80
@@ -101,10 +124,16 @@ interface PendingFrameAck {
   readonly reject: (error: Error) => void
 }
 
+interface PendingSckAck {
+  readonly resolve: () => void
+  readonly reject: (error: Error) => void
+}
+
 let nextRequestId = 1
 let transportSend: ((event: OverlayGuardTransportEvent) => void) | undefined
 const pendingExclude = new Map<number, PendingExcludeAck>()
 const pendingFrame = new Map<number, PendingFrameAck>()
+const pendingSck = new Map<number, PendingSckAck>()
 /** Nested withInput / withCapture share one Electron cloak; only depth 0 sends begin/end. */
 let inputDepth = 0
 let captureDepth = 0
@@ -140,6 +169,8 @@ export function clearOverlayGuardTransport(error: Error): void {
   pendingExclude.clear()
   for (const waiter of pendingFrame.values()) waiter.reject(error)
   pendingFrame.clear()
+  for (const waiter of pendingSck.values()) waiter.reject(error)
+  pendingSck.clear()
 }
 
 /**
@@ -169,6 +200,21 @@ export function completeObservationFrameAck(requestId: number): boolean {
   if (waiter === undefined) return false
   pendingFrame.delete(requestId)
   waiter.resolve()
+  return true
+}
+
+/**
+ * Complete one Electron overlay-exclude capture acknowledgement.
+ * @param requestId - id from the matching Host `sck-capture` event.
+ * @param error - failure message; omit or pass empty on success.
+ * @returns whether a waiter existed.
+ */
+export function completeSckCaptureAck(requestId: number, error?: string): boolean {
+  const waiter = pendingSck.get(requestId)
+  if (waiter === undefined) return false
+  pendingSck.delete(requestId)
+  if (error !== undefined && error !== '') waiter.reject(new Error(error))
+  else waiter.resolve()
   return true
 }
 
@@ -220,6 +266,33 @@ function waitFrameAck(requestId: number, signal?: AbortSignal): Promise<void> {
     }
     signal?.addEventListener('abort', onAbort, { once: true })
     pendingFrame.set(requestId, {
+      resolve: () => { settle(() => { resolve() }) },
+      reject: (error) => { settle(() => { reject(error) }) },
+    })
+  })
+}
+
+function waitSckAck(requestId: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(errorOf(signal.reason, 'dsh desktop: overlay-exclude capture aborted'))
+      return
+    }
+    const timer = setTimeout(() => {
+      settle(() => { reject(new Error('dsh desktop: sck-capture ack timed out')) })
+    }, SCK_CAPTURE_ACK_TIMEOUT_MS)
+    timer.unref()
+    const settle = (next: () => void): void => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
+      pendingSck.delete(requestId)
+      next()
+    }
+    const onAbort = (): void => {
+      settle(() => { reject(errorOf(signal?.reason, 'dsh desktop: overlay-exclude capture aborted')) })
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+    pendingSck.set(requestId, {
       resolve: () => { settle(() => { resolve() }) },
       reject: (error) => { settle(() => { reject(error) }) },
     })
@@ -301,6 +374,22 @@ async function setObservationFrameMode(
   await waitFrameAck(requestId, signal)
 }
 
+async function captureExcludedRegionMode(
+  send: (event: OverlayGuardTransportEvent) => void,
+  input: OverlayExcludedRegionCaptureInput,
+  signal?: AbortSignal,
+): Promise<void> {
+  const requestId = nextRequestId++
+  send({
+    type: 'sck-capture',
+    requestId,
+    region: input.region,
+    excludeWindowIds: input.excludeWindowIds,
+    output: input.output,
+  })
+  await waitSckAck(requestId, signal)
+}
+
 function passThroughGuard(): ComputerUseOverlayGuard {
   return {
     withCapture: run => run({ excludeWindowIds: [] }),
@@ -322,6 +411,7 @@ export function createComputerUseOverlayGuard(
     withCapture: (run, signal) => withCaptureMode(send, run, signal),
     withInput: (run, signal) => withInputMode(send, run, signal),
     setObservationFrame: (bounds, signal) => setObservationFrameMode(send, bounds, signal),
+    captureExcludedRegion: (input, signal) => captureExcludedRegionMode(send, input, signal),
   }
 }
 
@@ -342,6 +432,13 @@ export function apply(ctx: Context): void {
     setObservationFrame: (bounds, signal) => {
       const send = transportSend
       return send === undefined ? Promise.resolve() : setObservationFrameMode(send, bounds, signal)
+    },
+    captureExcludedRegion: (input, signal) => {
+      const send = transportSend
+      if (send === undefined) {
+        return Promise.reject(new Error('dsh desktop: overlay-exclude capture is not attached'))
+      }
+      return captureExcludedRegionMode(send, input, signal)
     },
   } satisfies ComputerUseOverlayGuard)
 }

@@ -5,8 +5,10 @@
  * and intra-event sleeps, and `input_text` pastes via NSPasteboard + Cmd+V.
  * Tests inject a {@link CommandRunner}; production uses `/usr/bin/osascript`
  * and `/usr/sbin/screencapture` plus `sips` crop of the frontmost-app window union,
- * or the ScreenCaptureKit helper `--region=` when overlay window ids are active
- * (`screencapture -R` fails on this OS). Foreground inspect uses
+ * or the ScreenCaptureKit overlay-exclude path when overlay window ids are active
+ * (`screencapture -R` fails on this OS). Desktop Host calls `captureExcludedRegion`
+ * so ScreenCaptureKit runs in the Electron process; CLI still spawns `macos-sck-capture`.
+ * Foreground inspect uses
  * CGWindowList (skip overlay ids only) plus Finder AppleScript for the current
  * folder. JXA does not bridge `CGWindowListCopyWindowInfo` to `NSArray` unless
  * `ObjC.bindFunction` declares the return type as `id`; without that bind,
@@ -77,6 +79,17 @@ const SIPS = '/usr/bin/sips'
 export function macosSckCaptureHelperPath(): string {
   return fileURLToPath(new URL('../lib/macos-sck-capture', import.meta.url))
 }
+
+/**
+ * Overlay-exclude ScreenCaptureKit JPEG capture. Desktop Host implements this over IPC.
+ * @param input - region `x,y,w,h`, overlay window ids, JPEG path, and optional abort.
+ */
+export type OverlayExcludedRegionCapture = (input: {
+  readonly region: string
+  readonly excludeWindowIds: readonly number[]
+  readonly output: string
+  readonly signal?: AbortSignal
+}) => Promise<void>
 
 /** JXA that lists localized names of running regular applications. */
 export const LIST_APPS_SCRIPT = `ObjC.import('AppKit')
@@ -830,9 +843,13 @@ async function runHidScript(
 /**
  * Construct the production macOS backend, optionally with a test command runner.
  * @param run - subprocess runner; omitted uses {@link runCommand}.
+ * @param excludedRegionCapture - Desktop overlay-exclude capture; omitted spawns the CLI helper.
  * @returns capture and HID input against the host desktop.
  */
-export function createMacosDesktopBackend(run: CommandRunner = runCommand): DesktopBackend {
+export function createMacosDesktopBackend(
+  run: CommandRunner = runCommand,
+  excludedRegionCapture?: OverlayExcludedRegionCapture,
+): DesktopBackend {
   const hid = async (body: string, signal?: AbortSignal): Promise<void> => {
     await runHidScript(run, hidScript(body), signal)
   }
@@ -855,9 +872,22 @@ export function createMacosDesktopBackend(run: CommandRunner = runCommand): Desk
       const dir = await mkdtemp(join(tmpdir(), 'dsh-computer-use-'))
       const file = join(dir, 'screen.jpg')
       const excludeWindowIds = activeCaptureExcludeWindowIds()
-      const overlayCapture = async (argv: readonly string[]): Promise<void> => {
+      const overlayCapture = async (region: string, ids: readonly number[]): Promise<void> => {
         try {
-          await run(macosSckCaptureHelperPath(), argv, { signal })
+          if (excludedRegionCapture !== undefined) {
+            await excludedRegionCapture({
+              region,
+              excludeWindowIds: ids,
+              output: file,
+              ...signal === undefined ? {} : { signal },
+            })
+            return
+          }
+          await run(macosSckCaptureHelperPath(), [
+            `--region=${region}`,
+            `--exclude=${ids.join(',')}`,
+            `--out=${file}`,
+          ], { signal })
         } catch (error: unknown) {
           throw new Error(`computer-use: overlay-exclude capture failed: ${errorDetail(error)}`)
         }
@@ -880,11 +910,7 @@ export function createMacosDesktopBackend(run: CommandRunner = runCommand): Desk
             file,
           ], { signal })
         } else {
-          await overlayCapture([
-            `--region=${region}`,
-            `--exclude=${excludeWindowIds.join(',')}`,
-            `--out=${file}`,
-          ])
+          await overlayCapture(region, excludeWindowIds)
         }
         const data = await readFile(file)
         return { data, mediaType: mediaTypeOf(data) }

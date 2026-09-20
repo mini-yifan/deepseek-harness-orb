@@ -54,14 +54,16 @@ export const inject = ['tools', 'systemPrompt', 'attachments']
 /**
  * Mount Computer Use with the host-platform backend.
  * When Desktop Host provides `computerUseOverlayGuard`, capture, inspect, listScreens, HID, and withGuiTurn run
- * inside overlay-guard intervals, and `listScreens` waits for the observation-frame ribbon ack.
+ * inside overlay-guard intervals, `listScreens` waits for the observation-frame ribbon ack, and overlay-exclude
+ * capture runs ScreenCaptureKit in the Electron process.
  * @param ctx - registration scope; `inject` must already be satisfied.
  * @param config - optional tunables; omitted fields use schema defaults.
  */
 export function apply(ctx: Context, config: Config = {}): void {
   const guard = ctx.get('computerUseOverlayGuard')
-  const backend = guard === undefined
-    ? createPlatformBackend()
-    : wrapDesktopBackend(createPlatformBackend(), guard)
-  applyComputerUse(ctx, backend, resolveComputerUseConfig(config))
+  const backend = createPlatformBackend(
+    process.platform,
+    guard?.captureExcludedRegion?.bind(guard),
+  )
+  applyComputerUse(ctx, guard === undefined ? backend : wrapDesktopBackend(backend, guard), resolveComputerUseConfig(config))
 }

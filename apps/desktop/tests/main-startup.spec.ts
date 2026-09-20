@@ -147,6 +147,7 @@ const harness = await vi.hoisted(async () => {
       _pluginProfileDir?: string,
       _onPluginRun?: unknown,
       onObservationFrame?: FakeHost['onObservationFrame'],
+      _onSckCapture?: unknown,
     ) {
       this.onOverlayGuard = onOverlayGuard
       this.onObservationFrame = onObservationFrame

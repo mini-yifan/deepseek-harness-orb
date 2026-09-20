@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import {
   apply,
   clearOverlayGuardTransport,
   completeObservationFrameAck,
   completeOverlayGuardAck,
+  completeSckCaptureAck,
   createComputerUseOverlayGuard,
   setOverlayGuardTransport,
   type ComputerUseOverlayGuard,
@@ -22,6 +23,7 @@ function overlayEvents(events: readonly OverlayGuardTransportEvent[]): OverlayGu
 
 function ack(event: OverlayGuardTransportEvent, excludeWindowIds: readonly number[] = []): void {
   if (event.type === 'observation-frame') completeObservationFrameAck(event.requestId)
+  else if (event.type === 'sck-capture') completeSckCaptureAck(event.requestId)
   else completeOverlayGuardAck(event.requestId, excludeWindowIds)
 }
 
@@ -36,12 +38,18 @@ describe('computer-use overlay guard', () => {
     })).resolves.toBe('shot')
     await expect(guard.withInput(async () => 'click')).resolves.toBe('click')
     await expect(guard.setObservationFrame(null)).resolves.toBeUndefined()
+    await expect(guard.captureExcludedRegion!({
+      region: '0,0,10,10',
+      excludeWindowIds: [1],
+      output: '/tmp/screen.jpg',
+    })).rejects.toThrow(/not attached/u)
   })
 
   it('passes through createComputerUseOverlayGuard without a sender', async () => {
     const guard = createComputerUseOverlayGuard()
     await expect(guard.withCapture(async () => 1)).resolves.toBe(1)
     await expect(guard.setObservationFrame({ x: 1, y: 2, width: 3, height: 4 })).resolves.toBeUndefined()
+    expect(guard.captureExcludedRegion).toBeUndefined()
   })
 
   it('sends begin then end and waits for each ack', async () => {
@@ -214,5 +222,69 @@ describe('computer-use overlay guard', () => {
     await guard.setObservationFrame(null)
     expect(overlayEvents(events).map(event => `${event.action}:${event.mode}`)).toEqual(['begin:input', 'end:input'])
     expect(events.some(event => event.type === 'observation-frame' && event.bounds === null)).toBe(true)
+  })
+
+  it('sends sck-capture and waits for ack', async () => {
+    const events: OverlayGuardTransportEvent[] = []
+    const guard = createComputerUseOverlayGuard((event) => {
+      events.push(event)
+      queueMicrotask(() => { ack(event) })
+    })
+    await guard.captureExcludedRegion!({
+      region: '0,0,10,10',
+      excludeWindowIds: [9],
+      output: '/tmp/screen.jpg',
+    })
+    expect(events.filter(event => event.type === 'sck-capture')).toEqual([
+      {
+        type: 'sck-capture',
+        requestId: expect.any(Number),
+        region: '0,0,10,10',
+        excludeWindowIds: [9],
+        output: '/tmp/screen.jpg',
+      },
+    ])
+  })
+
+  it('rejects sck-capture when Electron reports a failure', async () => {
+    const guard = createComputerUseOverlayGuard((event) => {
+      if (event.type === 'sck-capture') {
+        queueMicrotask(() => { completeSckCaptureAck(event.requestId, 'TCC denied') })
+      }
+    })
+    await expect(guard.captureExcludedRegion!({
+      region: '0,0,10,10',
+      excludeWindowIds: [1],
+      output: '/tmp/screen.jpg',
+    })).rejects.toThrow('TCC denied')
+  })
+
+  it('times out when Electron never acks sck-capture', async () => {
+    vi.useFakeTimers()
+    try {
+      const guard = createComputerUseOverlayGuard(() => undefined)
+      const pending = guard.captureExcludedRegion!({
+        region: '0,0,10,10',
+        excludeWindowIds: [1],
+        output: '/tmp/screen.jpg',
+      })
+      const expectation = expect(pending).rejects.toThrow(/sck-capture ack timed out/u)
+      await vi.advanceTimersByTimeAsync(30_000)
+      await expectation
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('rejects sck-capture when the ack wait is aborted', async () => {
+    const guard = createComputerUseOverlayGuard(() => undefined)
+    const controller = new AbortController()
+    const pending = guard.captureExcludedRegion!({
+      region: '0,0,10,10',
+      excludeWindowIds: [1],
+      output: '/tmp/screen.jpg',
+    }, controller.signal)
+    controller.abort()
+    await expect(pending).rejects.toThrow(/aborted/u)
   })
 })

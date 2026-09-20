@@ -19,6 +19,7 @@ import {
 import { resolveDesktopPaths } from './paths.ts'
 import { DesktopProjectManager, type DesktopProjectHooks } from './project-manager.ts'
 import { DesktopHostProcess } from './host-process.ts'
+import { captureExcludedRegionOnElectron } from './macos-sck-napi.ts'
 import { runDesktopPluginArgs } from './plugin-run.ts'
 import { linkDevelopmentPluginStore } from './development-plugin-store.ts'
 import { DesktopBackendController, type DesktopBackendState } from './backend-controller.ts'
@@ -510,6 +511,11 @@ async function main(): Promise<void> {
         showObservationFrame(observationFrameWindow, event.bounds)
         raiseOverlayAboveObservationFrame(floatingWindow, selection?.window())
       },
+      event => captureExcludedRegionOnElectron({
+        region: event.region,
+        excludeWindowIds: event.excludeWindowIds,
+        output: event.output,
+      }),
     )
     return {
       start: () => host.start(),

@@ -11,6 +11,7 @@ import {
 } from '../src/development-plugin-store.ts'
 import { DESKTOP_HOST_PROTOCOL_VERSION } from '../src/host-protocol.ts'
 import { parseDesktopPluginArgs } from '../src/project-manager.ts'
+import { DESKTOP_MARKET_VERSION } from '../src/market-plugin.ts'
 import type { DesktopRelease } from '../src/release.ts'
 
 const roots: string[] = []
@@ -51,13 +52,13 @@ describe('desktop development plugin store', () => {
     ensureDevelopmentPluginProfile(store)
     const market = join(store, 'node_modules', 'dshmarket')
     mkdirSync(market, { recursive: true })
-    writeFileSync(join(market, 'package.json'), '{"name":"dshmarket","version":"1.47.0","dsh":{"bundle":{"patch":"./bundle.yml"}}}\n')
+    writeFileSync(join(market, 'package.json'), `{"name":"dshmarket","version":"${DESKTOP_MARKET_VERSION}","dsh":{"bundle":{"patch":"./bundle.yml"}}}\n`)
     writeFileSync(join(market, 'bundle.yml'), '[]\n')
     writeFileSync(join(store, 'package.json'), `${JSON.stringify({
       name: '@deepseek-ai/dsh-desktop-runtime',
       private: true,
       version: '0.0.0',
-      dependencies: { dshmarket: '1.47.0' },
+      dependencies: { dshmarket: DESKTOP_MARKET_VERSION },
       dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'dshmarket'] } },
     }, undefined, 2)}\n`)
 
@@ -74,7 +75,7 @@ describe('desktop development plugin store', () => {
       dsh: { profile: { bundles: string[] } }
     }
     expect(manifest.dsh.profile.bundles).toEqual(['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'dshmarket'])
-    expect(DESKTOP_DEVELOPMENT_MARKET_SPEC).toBe('dshmarket@1.47.0')
+    expect(DESKTOP_DEVELOPMENT_MARKET_SPEC).toBe(`dshmarket@${DESKTOP_MARKET_VERSION}`)
   })
 
   it('links required hoist peers beside store plugins and skips missing optional peers', () => {
@@ -95,7 +96,7 @@ describe('desktop development plugin store', () => {
     mkdirSync(market, { recursive: true })
     writeFileSync(join(market, 'package.json'), `${JSON.stringify({
       name: 'dshmarket',
-      version: '1.47.0',
+      version: DESKTOP_MARKET_VERSION,
       peerDependencies: {
         '@deepseek-ai/cordis': '^4.0.1',
         '@deepseek-ai/schemastery': '^3.18.1',
@@ -110,7 +111,7 @@ describe('desktop development plugin store', () => {
       name: '@deepseek-ai/dsh-desktop-runtime',
       private: true,
       version: '0.0.0',
-      dependencies: { dshmarket: '1.47.0' },
+      dependencies: { dshmarket: DESKTOP_MARKET_VERSION },
       dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'dshmarket'] } },
     }, undefined, 2)}\n`)
     linkDevelopmentPluginStore(project, store)
@@ -132,14 +133,14 @@ describe('desktop development plugin store', () => {
     mkdirSync(market, { recursive: true })
     writeFileSync(join(market, 'package.json'), `${JSON.stringify({
       name: 'dshmarket',
-      version: '1.47.0',
+      version: DESKTOP_MARKET_VERSION,
       peerDependencies: { '@deepseek-ai/cordis': '^4.0.1' },
     })}\n`)
     writeFileSync(join(store, 'package.json'), `${JSON.stringify({
       name: '@deepseek-ai/dsh-desktop-runtime',
       private: true,
       version: '0.0.0',
-      dependencies: { dshmarket: '1.47.0' },
+      dependencies: { dshmarket: DESKTOP_MARKET_VERSION },
       dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'dshmarket'] } },
     }, undefined, 2)}\n`)
     expect(() => { linkDevelopmentPluginStore(project, store) })
@@ -188,7 +189,7 @@ describe('desktop development plugin store', () => {
       name: '@deepseek-ai/dsh-desktop-runtime',
       private: true,
       version: '0.0.0',
-      dependencies: { dshmarket: '1.47.0' },
+      dependencies: { dshmarket: DESKTOP_MARKET_VERSION },
       dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app', 'dshmarket'] } },
     }, undefined, 2)}\n`)
     expect(developmentStoreHasSpec(store, DESKTOP_DEVELOPMENT_MARKET_SPEC)).toBe(true)
