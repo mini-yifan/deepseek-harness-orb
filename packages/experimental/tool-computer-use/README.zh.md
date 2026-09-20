@@ -120,8 +120,8 @@ Desktop 上新建 `code_agent` 会在 `session.create` 之后、`session.prompt`
 | [`src/code-agent.ts`](src/code-agent.ts) | 仅 Computer Use 的 `code_agent`、`code_agent_status` 与 `code_agent_stop`：调用方登记表、子目录 cwd、`session.create`、Desktop 新建时可选 `selectModel`、`session.prompt` |
 | [`src/code-agent-completion.ts`](src/code-agent-completion.ts) | Code 会话与 Computer Use 调用方都空闲后投递的插件通知；停止时可中止 |
 | [`src/code-agent-unattended.ts`](src/code-agent-unattended.ts) | 在活的 Code agent 上前置自动允许 `approval/request` 与自动应答 `user-questions/request` |
-| [`src/macos.ts`](src/macos.ts) | Darwin 通过整屏 `screencapture` 加 `sips` 裁切前台应用窗口并集，或在设置了 overlay 窗口 id 时走 ScreenCaptureKit helper `--region=`；click、scroll、hotkey、长按与拖拽走 JXA `CGEvent`；`input_text` 通过 NSPasteboard 粘贴；`list_apps` / `open_app` 走 NSWorkspace；`open_in_browser` / `open_in_finder` 走 `/usr/bin/open`；`inspectForeground` 绑定 `CGWindowListCopyWindowInfo` 再 unwrap（跳过 overlay id）加 Finder AppleScript |
-| [`src/macos-sck-capture.swift`](src/macos-sck-capture.swift) | Darwin helper：窗口捕获或排除 overlay 后的区域裁切，仍省略 overlay CGWindowID；先在主 actor 启动 `NSApplication` |
+| [`src/macos.ts`](src/macos.ts) | Darwin 通过整屏 `screencapture` 加 `sips` 裁切前台应用窗口并集，或在设置了 overlay 窗口 id 时走排除 overlay 的 ScreenCaptureKit `--region=`（Desktop IPC 进 Electron，CLI 派生 helper）；click、scroll、hotkey、长按与拖拽走 JXA `CGEvent`；`input_text` 通过 NSPasteboard 粘贴；`list_apps` / `open_app` 走 NSWorkspace；`open_in_browser` / `open_in_finder` 走 `/usr/bin/open`；`inspectForeground` 绑定 `CGWindowListCopyWindowInfo` 再 unwrap（跳过 overlay id）加 Finder AppleScript |
+| [`src/macos-sck-capture.swift`](src/macos-sck-capture.swift) | Darwin helper 与进程内库：窗口捕获或排除 overlay 后的区域裁切，仍省略 overlay CGWindowID；CLI 先在主 actor 启动 `NSApplication`；库入口不改 activation policy |
 | [`src/open.ts`](src/open.ts) | `long_press` 时长、`open_in_browser` URL 与 `open_in_finder` 路径校验 |
 | [`src/wait-args.ts`](src/wait-args.ts) | 固定 1 秒的 `wait` 与 `long_wait` 的 10/30/60/120 分档 |
 | [`src/screenshot.ts`](src/screenshot.ts) | `screenshot` 的桌面文件名与唯一路径写入 |
@@ -159,6 +159,7 @@ Desktop 上新建 `code_agent` 会在 `session.create` 之后、`session.prompt`
 - [桌面悬浮球](../../../.agents/notes/implemented/feature/2026-09-14-desktop-floating-orb.zh.md) — macOS overlay、runtime extra，以及一等 `code_agent` 会话。
 - [悬浮球 Agent 模型菜单](../../../.agents/notes/implemented/feature/2026-09-17-orb-agent-model-menus.zh.md) — overlay 与后台模型持久化、`saveAsDefault: false`、仅新建时应用到 `code_agent`。
 - [桌面 overlay-guard](../../../.agents/notes/implemented/architecture/2026-09-14-desktop-overlay-guard.zh.md) — 悬浮球的截屏排除与 HID 点击穿透。
+- [Desktop 在 Orb 进程内做 ScreenCaptureKit](../../../.agents/notes/implemented/architecture/2026-09-20-desktop-sck-in-process-identity.zh.md) — 排除 overlay 的捕获跑在 Electron 里，屏幕录制只剩带图标的 DeepSeek Orb。
 - [Computer Use 观察框彩带](../../../.agents/notes/implemented/feature/2026-09-19-computer-use-observation-frame.zh.md) — 观察并集四边的仅给人看的 chrome；ScreenCaptureKit 省略；从不进图。
 - [Headless computer-use snapshot](../../../snapshots/session/computer-use/snapshot.yml) — 在假桌面与视觉模型上人工编写的点击循环。
 
@@ -251,7 +252,7 @@ When a user message starts with "Desktop selection. Answer in this chat only. Do
 这些限制是当前的包约束。该插件驱动真实的未沙箱化桌面。
 
 - **仅 macOS** — 捕获与 HID 输入在 Darwin 上实现；其他平台在执行时抛错。
-- **屏幕录制、辅助功能与自动化 TCC** — 捕获需要屏幕录制；点击、输入、滚动、热键、长按与拖拽需要辅助功能；Finder 当前文件夹查询需要访达的自动化权限。插件不会提示授予这些权限。Desktop overlay 会在 overlay `session/prompt` 前盖住屏幕录制与辅助功能；访达自动化仍在第一次使用访达时弹出。执行时缺权限仍会点名对应 TCC。
+- **屏幕录制、辅助功能与自动化 TCC** — 捕获需要屏幕录制；点击、输入、滚动、热键、长按与拖拽需要辅助功能；Finder 当前文件夹查询需要访达的自动化权限。插件不会提示授予这些权限。Desktop overlay 会在 overlay `session/prompt` 前盖住屏幕录制与辅助功能；访达自动化仍在第一次使用访达时弹出。执行时缺权限仍会点名对应 TCC。Desktop 排除 overlay 的捕获使用 Electron 进程里 DeepSeek Orb 的屏幕录制授权；CLI 仍派生 `macos-sck-capture`。
 - **没有逐次点击批准** — 安装或 patch 插件就是同意门槛；视觉循环不能在每个动作上询问。
 - **宿主 chrome 不是最前窗口时不会进图** — Web 窗口只在它是最前窗口时出现。Desktop 主窗口在 overlay 跳过后仍可被截到。macOS overlay 与观察框彩带由 ScreenCaptureKit 的 exclude id 校验从 Computer Use 截图中省略（display exclude 加裁切），overlay 在 HID 突发、`open_app` 及其 recapture 期间通过带确认的 overlay-guard IPC 点击穿透。前台检查与 `listScreens` 都跳过这些 overlay 窗口 id，因此主窗口可以出现在 `<frontmost_app>` 里。
 - **输入会使用字符串剪贴板** — `input_text` 通过 Cmd+V 粘贴，并在之后恢复先前的字符串剪贴板。其他剪贴板类型不会被恢复。`screenshot` 会用捕获的图片替换剪贴板，不恢复先前内容。

@@ -224,7 +224,7 @@ export function validateDesktopPluginGraph(
         throw new Error(`desktop profile: ${chain} resolves ${name} outside its owned packages`)
       }
       const dependency = manifest(target)
-      if (peer && !satisfies(dependency.version, range)) {
+      if (peer && !satisfies(dependency.version, range, { includePrerelease: true })) {
         throw new Error(`desktop profile: ${chain} requires ${name}@${range}, found ${dependency.version}`)
       }
       if (host === undefined) visit(target, `${chain} -> ${name}`)

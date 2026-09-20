@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-18-desktop-in-process-webserver-and-plugin-market.md
-2026-09-18-desktop-in-process-webserver-and-plugin-market.md: f17bb07fd0dd98ee5d52d57f5f4a049cac50c570
-2026-09-18-desktop-in-process-webserver-and-plugin-market.zh.md: 3dd420093295a9e192e5c7c520e14b40ec1f896e
+2026-09-18-desktop-in-process-webserver-and-plugin-market.md: 65f19832a179595f5af2922e2298e87b7b1c434b
+2026-09-18-desktop-in-process-webserver-and-plugin-market.zh.md: 52a047260ebf1cd2e01863060ce559907c82dfb5

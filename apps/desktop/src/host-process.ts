@@ -47,6 +47,10 @@ function isObservationFrameBounds(value: unknown): value is DesktopObservationFr
     && isFiniteNumber(row.height) && row.height > 0
 }
 
+function isExcludeWindowIds(value: unknown): value is readonly number[] {
+  return Array.isArray(value) && value.every(id => typeof id === 'number' && Number.isInteger(id) && id >= 1)
+}
+
 function isDesktopHostEvent(message: unknown): message is DesktopHostEvent {
   if (typeof message !== 'object' || message === null || !('type' in message)) return false
   const candidate = message as Record<string, unknown>
@@ -61,6 +65,13 @@ function isDesktopHostEvent(message: unknown): message is DesktopHostEvent {
         && (candidate.mode === 'capture' || candidate.mode === 'input')
     case 'observation-frame':
       return isPositiveInteger(candidate.requestId) && isObservationFrameBounds(candidate.bounds)
+    case 'sck-capture':
+      return isPositiveInteger(candidate.requestId)
+        && typeof candidate.region === 'string'
+        && candidate.region !== ''
+        && isExcludeWindowIds(candidate.excludeWindowIds)
+        && typeof candidate.output === 'string'
+        && candidate.output !== ''
     case 'plugin-run':
       return isPositiveInteger(candidate.requestId) && Array.isArray(candidate.args)
         && candidate.args.every(arg => typeof arg === 'string')
@@ -137,6 +148,7 @@ export class DesktopHostProcess {
    * @param pluginProfileDir - persistent plugin profile when it differs from `projectDir`.
    * @param onPluginRun - Host-alive pnpm mutation invoked from Plugin Market IPC.
    * @param onObservationFrame - Show or hide the Computer Use observation ribbon, then ack.
+   * @param onSckCapture - Run overlay-exclude ScreenCaptureKit in this Electron process, then ack.
    */
   constructor(
     private readonly node: string,
@@ -156,6 +168,9 @@ export class DesktopHostProcess {
     ) => Promise<{ exitCode: number | null; signal: NodeJS.Signals | null }>,
     private readonly onObservationFrame?: (
       event: Extract<DesktopHostEvent, { type: 'observation-frame' }>,
+    ) => void | Promise<void>,
+    private readonly onSckCapture?: (
+      event: Extract<DesktopHostEvent, { type: 'sck-capture' }>,
     ) => void | Promise<void>,
   ) {}
 
@@ -514,6 +529,9 @@ export class DesktopHostProcess {
       case 'observation-frame':
         void this.dispatchObservationFrame(message)
         return
+      case 'sck-capture':
+        void this.dispatchSckCapture(message)
+        return
       case 'plugin-run':
         void this.dispatchPluginRun(message)
         return
@@ -570,6 +588,33 @@ export class DesktopHostProcess {
       requestId,
     } satisfies DesktopHostCommand, (error) => {
       if (error !== null) this.fail(error)
+    })
+  }
+
+  private async dispatchSckCapture(
+    message: Extract<DesktopHostEvent, { type: 'sck-capture' }>,
+  ): Promise<void> {
+    let error: string | undefined
+    try {
+      if (this.onSckCapture === undefined) {
+        throw new Error('dsh desktop: overlay-exclude capture is unavailable')
+      }
+      await this.onSckCapture(message)
+    } catch (reason) {
+      error = errorOf(reason, 'dsh desktop: overlay-exclude capture failed').message
+    }
+    this.ackSckCapture(message.requestId, error)
+  }
+
+  private ackSckCapture(requestId: number, error?: string): void {
+    const child = this.child
+    if (child === undefined || !child.connected) return
+    child.send({
+      type: 'sck-capture-ack',
+      requestId,
+      ...error === undefined ? {} : { error },
+    } satisfies DesktopHostCommand, (sendError) => {
+      if (sendError !== null) this.fail(sendError)
     })
   }
 

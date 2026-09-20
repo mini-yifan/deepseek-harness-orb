@@ -1,22 +1,25 @@
 import AppKit
 import CoreGraphics
+import Dispatch
 import Foundation
 import ImageIO
 import ScreenCaptureKit
 import UniformTypeIdentifiers
 
+#if DSH_SCK_CLI
 @main
 enum MacosSckCapture {
   static func main() async {
     do {
       let args = try Arguments.parse(CommandLine.arguments)
-      try await capture(args)
+      try await capture(args, startCliApplication: true)
     } catch {
       fputs("computer-use: overlay-exclude capture failed: \(error.localizedDescription)\n", stderr)
       exit(1)
     }
   }
 }
+#endif
 
 private enum CaptureTarget {
   case window(UInt32)
@@ -112,10 +115,13 @@ private func parseExclude(_ value: String) throws -> [UInt32] {
 }
 
 /// Window capture uses CGS; a CLI `@main` task is not a GUI process until AppKit starts on the main actor.
+/// Desktop loads this as a dylib inside Electron and must not change the host activation policy.
 @MainActor
-private func capture(_ args: Arguments) async throws {
-  let application = NSApplication.shared
-  application.setActivationPolicy(.prohibited)
+private func capture(_ args: Arguments, startCliApplication: Bool) async throws {
+  if startCliApplication {
+    let application = NSApplication.shared
+    application.setActivationPolicy(.prohibited)
+  }
   let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
   for id in args.excludeWindowIds {
     guard content.windows.contains(where: { $0.windowID == id }) else {
@@ -187,4 +193,66 @@ private func writeJPEG(_ image: CGImage, to url: URL) throws {
   }
   CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)
   if !CGImageDestinationFinalize(destination) { throw CaptureError.jpeg }
+}
+
+private func writeCString(_ message: String, to buffer: UnsafeMutablePointer<CChar>?, length: Int32) {
+  guard let buffer, length > 1 else { return }
+  let bytes = Array(message.utf8)
+  let count = min(bytes.count, Int(length) - 1)
+  for index in 0..<count {
+    buffer[index] = CChar(bitPattern: bytes[index])
+  }
+  buffer[count] = 0
+}
+
+/// Overlay-exclude capture for the Desktop Electron process. Callers must not invoke this on the main thread.
+/// @param region Region `x,y,w,h` string, or null when unused with a window id.
+/// @param exclude Comma-separated CGWindowIDs.
+/// @param output JPEG destination path.
+/// @param errorBuffer Optional UTF-8 error message buffer.
+/// @param errorLength Capacity of `errorBuffer`.
+/// @returns 0 on success, 1 on failure.
+@_cdecl("dsh_macos_sck_capture")
+public func dsh_macos_sck_capture(
+  region: UnsafePointer<CChar>?,
+  exclude: UnsafePointer<CChar>?,
+  output: UnsafePointer<CChar>?,
+  errorBuffer: UnsafeMutablePointer<CChar>?,
+  errorLength: Int32,
+) -> Int32 {
+  var argv = ["macos-sck-capture"]
+  if let region {
+    argv.append("--region=\(String(cString: region))")
+  }
+  if let exclude {
+    argv.append("--exclude=\(String(cString: exclude))")
+  }
+  if let output {
+    argv.append("--out=\(String(cString: output))")
+  }
+  let args: Arguments
+  do {
+    args = try Arguments.parse(argv)
+  } catch {
+    writeCString(error.localizedDescription, to: errorBuffer, length: errorLength)
+    return 1
+  }
+  let lock = DispatchSemaphore(value: 0)
+  var failure: String?
+  DispatchQueue.main.async {
+    Task { @MainActor in
+      do {
+        try await capture(args, startCliApplication: false)
+      } catch {
+        failure = error.localizedDescription
+      }
+      lock.signal()
+    }
+  }
+  lock.wait()
+  if let failure {
+    writeCString(failure, to: errorBuffer, length: errorLength)
+    return 1
+  }
+  return 0
 }

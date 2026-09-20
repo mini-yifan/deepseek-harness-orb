@@ -31,6 +31,12 @@ import {
   desktopPluginLockHash, linkDesktopHostPackages, readDesktopProfileState,
   unlinkDesktopHostPackages, validateDesktopPluginGraph, type DesktopProfileState,
 } from './profile-packages.ts'
+import {
+  bundledMarketTarballPath,
+  DESKTOP_MARKET_PACKAGE,
+  DESKTOP_MARKET_SPEC,
+  DESKTOP_MARKET_VERSION,
+} from './market-plugin.ts'
 
 /** Desktop plugin record derived from the installed profile. */
 export interface DesktopPluginRecord {
@@ -221,6 +227,21 @@ function pluginRecords(projectDir: string): readonly DesktopPluginRecord[] {
   return Object.keys(projectManifest(projectDir).dependencies).sort().map(name => inspectPlugin(projectDir, name))
 }
 
+function profileHasMarketSpec(projectDir: string): boolean {
+  if (!existsSync(join(projectDir, 'package.json'))) return false
+  const installed = projectManifest(projectDir).dependencies[DESKTOP_MARKET_PACKAGE]
+  if (installed !== DESKTOP_MARKET_VERSION) return false
+  return existsSync(join(projectDir, 'node_modules', DESKTOP_MARKET_PACKAGE))
+}
+
+function recordExactDependency(projectDir: string, name: string, version: string): void {
+  const path = join(projectDir, 'package.json')
+  const value = readJson(path)
+  if (!isRecord(value)) throw new Error(`desktop project: invalid desktop profile manifest ${path}`)
+  const dependencies = isRecord(value.dependencies) ? value.dependencies : {}
+  writeJson(path, { ...value, dependencies: { ...dependencies, [name]: version } })
+}
+
 function writeProfilePlugins(projectDir: string, plugins: readonly DesktopPluginRecord[]): void {
   const manifest = projectManifest(projectDir)
   writeJson(join(projectDir, 'package.json'), {
@@ -233,6 +254,19 @@ function writeProfilePlugins(projectDir: string, plugins: readonly DesktopPlugin
       },
     },
   } satisfies DesktopProjectManifest)
+}
+
+function disableThirdPartyPlugins(projectDir: string): void {
+  const manifest = projectManifest(projectDir)
+  writeJson(join(projectDir, 'package.json'), {
+    ...manifest,
+    dsh: { ...manifest.dsh, profile: { ...manifest.dsh.profile, bundles: [...DESKTOP_PROFILE_BUNDLES] } },
+  })
+}
+
+function isOutdatedLockfileError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /frozen-lockfile|OUTDATED_LOCKFILE/iu.test(message)
 }
 
 function inspectPlugin(projectDir: string, requestedName: string): DesktopPluginRecord {
@@ -349,18 +383,25 @@ export class DesktopProjectManager {
     return this.withLock(async () => {
       const target = this.readRuntime()
       this.descriptor = target
-      const previous = readDesktopProfileState(this.paths.profile)
-      if (!existsSync(this.pendingPackages) && previous?.runtimeId === desktopRuntimeId(target)
-        && previous.lockHash === desktopPluginLockHash(this.paths.profile)
-        && previous.links.length === target.sharedPackages.length
-        && previous.links.every(link => existsSync(link.target)
-          && existsSync(join(this.paths.profile, 'node_modules', link.name))
-          && realpathSync.native(link.target) === realpathSync.native(join(this.runtime.dsh, 'node_modules', link.name)))) {
-        return false
+      try {
+        const previous = readDesktopProfileState(this.paths.profile)
+        const unchanged = !existsSync(this.pendingPackages) && previous?.runtimeId === desktopRuntimeId(target)
+          && previous.lockHash === desktopPluginLockHash(this.paths.profile)
+          && previous.links.length === target.sharedPackages.length
+          && previous.links.every(link => existsSync(link.target)
+            && existsSync(join(this.paths.profile, 'node_modules', link.name))
+            && realpathSync.native(link.target) === realpathSync.native(join(this.runtime.dsh, 'node_modules', link.name)))
+        const tarball = this.bundledMarketTarball()
+        const needsMarket = tarball !== undefined && !profileHasMarketSpec(this.paths.profile)
+        if (unchanged && !needsMarket) return false
+        if (previous === undefined) createPluginProfile(this.paths.profile)
+        if (tarball !== undefined && needsMarket) await this.installBundledMarket(this.paths.profile, tarball)
+        if (!unchanged || needsMarket) await this.reconcileProfile(this.paths.profile, previous, needsMarket)
+        return true
+      } catch (error) {
+        if (!this.disableThirdPartyAfterGraphFailure(error)) throw error
+        return true
       }
-      if (previous === undefined) createPluginProfile(this.paths.profile)
-      await this.reconcileProfile(this.paths.profile, previous)
-      return true
     })
   }
 
@@ -371,11 +412,7 @@ export class DesktopProjectManager {
       if (!existsSync(this.paths.profile)) throw new Error('desktop project: active profile is not installed')
       await hooks.beforeChange()
       if (mutation.type === 'plugins-disable-all') {
-        const manifest = projectManifest(this.paths.profile)
-        writeJson(join(this.paths.profile, 'package.json'), {
-          ...manifest,
-          dsh: { ...manifest.dsh, profile: { ...manifest.dsh.profile, bundles: [...DESKTOP_PROFILE_BUNDLES] } },
-        })
+        disableThirdPartyPlugins(this.paths.profile)
         this.prepareProfile(this.paths.profile)
         await hooks.afterChange()
         return
@@ -419,11 +456,7 @@ export class DesktopProjectManager {
       try {
         if (this.descriptor === undefined) {
           if (mutation.type === 'plugins-disable-all') {
-            const manifest = projectManifest(this.paths.profile)
-            writeJson(join(this.paths.profile, 'package.json'), {
-              ...manifest,
-              dsh: { ...manifest.dsh, profile: { ...manifest.dsh.profile, bundles: [...DESKTOP_PROFILE_BUNDLES] } },
-            })
+            disableThirdPartyPlugins(this.paths.profile)
             return
           }
           await this.applyMutation(this.paths.profile, mutation)
@@ -431,11 +464,7 @@ export class DesktopProjectManager {
           return
         }
         if (mutation.type === 'plugins-disable-all') {
-          const manifest = projectManifest(this.paths.profile)
-          writeJson(join(this.paths.profile, 'package.json'), {
-            ...manifest,
-            dsh: { ...manifest.dsh, profile: { ...manifest.dsh.profile, bundles: [...DESKTOP_PROFILE_BUNDLES] } },
-          })
+          disableThirdPartyPlugins(this.paths.profile)
           this.prepareProfile(this.paths.profile)
           return
         }
@@ -465,7 +494,12 @@ export class DesktopProjectManager {
       writeFileSync(this.pendingPackages, '')
       unlinkDesktopHostPackages(projectDir)
       removeOwnedDirectory(join(projectDir, 'node_modules'))
-      await this.runPnpm(projectDir, ['install', '--frozen-lockfile', '--ignore-scripts'])
+      try {
+        await this.runPnpm(projectDir, ['install', '--frozen-lockfile', '--ignore-scripts'])
+      } catch (error) {
+        if (!isOutdatedLockfileError(error)) throw error
+        await this.runPnpm(projectDir, ['install', '--ignore-scripts'])
+      }
     }
     if (rebuild || packagesChanged) await this.finishPackageOperation(projectDir)
     else this.prepareProfile(projectDir)
@@ -476,6 +510,42 @@ export class DesktopProjectManager {
     await this.runPnpm(projectDir, ['rebuild', '--pending'])
     this.prepareProfile(projectDir)
     unlinkSync(this.pendingPackages)
+  }
+
+  private bundledMarketTarball(): string | undefined {
+    const path = bundledMarketTarballPath(this.runtime.dsh)
+    return existsSync(path) ? path : undefined
+  }
+
+  private disableThirdPartyAfterGraphFailure(error: unknown): boolean {
+    if (!(error instanceof Error) || !error.message.startsWith('desktop profile:')) return false
+    if (!existsSync(join(this.paths.profile, 'package.json'))) return false
+    if (profilePluginNames(this.paths.profile).length === 0) return false
+    disableThirdPartyPlugins(this.paths.profile)
+    this.prepareProfile(this.paths.profile)
+    if (existsSync(this.pendingPackages)) unlinkSync(this.pendingPackages)
+    return true
+  }
+
+  private async installBundledMarket(projectDir: string, tarball: string): Promise<void> {
+    // User-facing plugin-add still rejects file/git/URL specs; this path is the packaged extraResources seed.
+    unlinkDesktopHostPackages(projectDir)
+    try {
+      await this.runPnpm(projectDir, ['add', tarball, '--save-exact', '--ignore-scripts'])
+      recordExactDependency(projectDir, DESKTOP_MARKET_PACKAGE, DESKTOP_MARKET_VERSION)
+      await this.runPnpm(projectDir, ['install', '--ignore-scripts'])
+      const installed = inspectPlugin(projectDir, DESKTOP_MARKET_PACKAGE)
+      if (installed.version !== DESKTOP_MARKET_VERSION) {
+        throw new Error(`desktop project: bundled market is ${installed.name}@${installed.version}, expected ${DESKTOP_MARKET_SPEC}`)
+      }
+      writeProfilePlugins(
+        projectDir,
+        [...pluginRecords(projectDir).filter(plugin => plugin.name !== installed.name), { ...installed, enabled: true }]
+          .sort((left, right) => left.name.localeCompare(right.name)),
+      )
+    } finally {
+      linkDesktopHostPackages(projectDir, this.runtime.dsh, this.currentRuntime())
+    }
   }
 
   private async applyMutation(projectDir: string, mutation: Exclude<DesktopProjectMutation, { type: 'plugins-disable-all' }>): Promise<void> {

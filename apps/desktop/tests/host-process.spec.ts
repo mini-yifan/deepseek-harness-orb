@@ -346,6 +346,98 @@ function onRequestFrame(frame) {
     }
   })
 
+  it('acks sck-capture events without treating them as fatal', async () => {
+    const applied: unknown[] = []
+    const runtime = projectWithHost(`
+let lastAck = { requestId: 0, type: '', error: '' }
+process.on('message', message => {
+  if (message.type === 'sck-capture-ack') lastAck = { requestId: message.requestId, type: message.type, error: message.error ?? '' }
+})
+process.send({ type: 'ready', protocolVersion: ${String(DESKTOP_HOST_PROTOCOL_VERSION)}, dshVersion: 'sck-capture' })
+process.send({ type: 'sck-capture', requestId: 5, region: '0,0,10,10', excludeWindowIds: [9], output: '/tmp/screen.jpg' })
+function onRequestFrame(frame) {
+  if (frame.type !== 1) return
+  responseStart(frame.streamId, { headers: [['content-type', 'application/json']] })
+  responseData(frame.streamId, JSON.stringify(lastAck))
+  responseEnd(frame.streamId)
+}
+`)
+    const host = new DesktopHostProcess(
+      process.execPath,
+      runtime,
+      runtime,
+      undefined,
+      process.env,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (event) => {
+        applied.push(event)
+      },
+    )
+    try {
+      await host.start()
+      await expect.poll(() => applied).toEqual([
+        {
+          type: 'sck-capture',
+          requestId: 5,
+          region: '0,0,10,10',
+          excludeWindowIds: [9],
+          output: '/tmp/screen.jpg',
+        },
+      ])
+      await expect.poll(async () => {
+        const response = await host.fetch(new Request('dsh-app://app/sck'))
+        return await response.json() as { requestId: number; type: string; error: string }
+      }).toEqual({ requestId: 5, type: 'sck-capture-ack', error: '' })
+    } finally {
+      await host.stop()
+    }
+  })
+
+  it('acks sck-capture failures without treating them as fatal', async () => {
+    const runtime = projectWithHost(`
+let lastAck = { requestId: 0, type: '', error: '' }
+process.on('message', message => {
+  if (message.type === 'sck-capture-ack') lastAck = { requestId: message.requestId, type: message.type, error: message.error ?? '' }
+})
+process.send({ type: 'ready', protocolVersion: ${String(DESKTOP_HOST_PROTOCOL_VERSION)}, dshVersion: 'sck-capture' })
+process.send({ type: 'sck-capture', requestId: 6, region: '0,0,10,10', excludeWindowIds: [9], output: '/tmp/screen.jpg' })
+function onRequestFrame(frame) {
+  if (frame.type !== 1) return
+  responseStart(frame.streamId, { headers: [['content-type', 'application/json']] })
+  responseData(frame.streamId, JSON.stringify(lastAck))
+  responseEnd(frame.streamId)
+}
+`)
+    const host = new DesktopHostProcess(
+      process.execPath,
+      runtime,
+      runtime,
+      undefined,
+      process.env,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      () => {
+        throw new Error('TCC denied')
+      },
+    )
+    try {
+      await host.start()
+      await expect.poll(async () => {
+        const response = await host.fetch(new Request('dsh-app://app/sck'))
+        return await response.json() as { requestId: number; type: string; error: string }
+      }).toEqual({ requestId: 6, type: 'sck-capture-ack', error: 'TCC denied' })
+    } finally {
+      await host.stop()
+    }
+  })
+
   it('acks overlay-guard only after an async callback resolves', async () => {
     let entered = false
     let release!: () => void

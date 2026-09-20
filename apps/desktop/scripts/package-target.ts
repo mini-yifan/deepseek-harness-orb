@@ -1,7 +1,7 @@
 /** Build one release target with matching Electron, Node.js, and dsh architecture. */
 
 import { spawn } from 'node:child_process'
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync, existsSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import { join, resolve } from 'node:path'
 import {
@@ -10,6 +10,7 @@ import {
 } from './desktop-auto-update-environment.mjs'
 import { desktopTargetBuildPaths } from './desktop-build-paths.mjs'
 import { packageMacOSArtifacts, type DesktopPrepackagedArtifact } from './package-macos.ts'
+import { DESKTOP_MARKET_PACKAGE, DESKTOP_MARKET_SPEC, DESKTOP_MARKET_TARBALL } from '../src/market-plugin.ts'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
 const REPOSITORY_ROOT = resolve(APP_ROOT, '..', '..')
@@ -20,6 +21,7 @@ const WINDOWS_SIGNING_ENV_NAMES = [
   'DSH_DESKTOP_WINDOWS_SIGNTOOL',
   'DSH_DESKTOP_WINDOWS_TOKEN_PIN',
 ] as const
+const UNSIGNED_SIGNING_ENV_PATTERN = /^(?:(?:WIN_)?CSC_|DSH_DESKTOP_MACOS_|APPLE_)/iu
 const DESKTOP_UPLOAD_CREDENTIAL_ENV_NAMES = new Set([
   'DOWNLOAD_TEST_COS_SECRET_ID',
   'DOWNLOAD_TEST_COS_SECRET_KEY',
@@ -76,7 +78,7 @@ export function withoutWindowsSigningEnvironment(environment: NodeJS.ProcessEnv)
 /**
  * Select signing and NSIS-compatible archive filters for electron-builder.
  * @param environment - Target packaging environment.
- * @param unsigned - Whether to create a local unsigned Windows artifact.
+ * @param unsigned - Whether to create a local unsigned artifact.
  * @returns Packaging environment without certificate inputs for unsigned builds.
  */
 export function desktopElectronBuilderEnvironment(environment: NodeJS.ProcessEnv, unsigned: boolean): NodeJS.ProcessEnv {
@@ -86,7 +88,7 @@ export function desktopElectronBuilderEnvironment(environment: NodeJS.ProcessEnv
   if (!unsigned) return selected
   return {
     ...Object.fromEntries(Object.entries(withoutWindowsSigningEnvironment(selected))
-      .filter(([name]) => !/^(?:WIN_)?CSC_/iu.test(name))),
+      .filter(([name]) => !UNSIGNED_SIGNING_ENV_PATTERN.test(name))),
     CSC_IDENTITY_AUTO_DISCOVERY: 'false',
     DSH_DESKTOP_UNSIGNED: '1',
   }
@@ -204,7 +206,6 @@ export function parseDesktopPackageInvocation(
   })
   if (positionals.length > 1) throw new Error('desktop package: expected at most one target')
   const name = positionals[0] ?? hostTargetName(hostPlatform, hostArch)
-  if (values.unsigned && name !== 'win-x64') throw new Error('desktop package: --unsigned requires win-x64')
   if (values.unsigned && values['prepare-only']) throw new Error('desktop package: --unsigned cannot use --prepare-only')
   return {
     target: resolveDesktopPackageTarget(name, hostPlatform, hostArch),
@@ -268,6 +269,26 @@ function runPnpm(
   })
 }
 
+/**
+ * Download the published Plugin Market tarball into the target extraResources tree.
+ * `pnpm pack <spec>` packs the current workspace package, not a registry spec.
+ * @param pluginsDir - Target `plugins/` extraResources directory.
+ */
+async function packBundledMarket(pluginsDir: string): Promise<void> {
+  rmSync(pluginsDir, { recursive: true, force: true })
+  mkdirSync(pluginsDir, { recursive: true })
+  const packed = join(pluginsDir, DESKTOP_MARKET_TARBALL)
+  const url = `https://registry.npmjs.org/${DESKTOP_MARKET_PACKAGE}/-/${DESKTOP_MARKET_TARBALL}`
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`desktop package: failed to download ${DESKTOP_MARKET_SPEC}: ${String(response.status)} ${response.statusText}`)
+  }
+  writeFileSync(packed, Buffer.from(await response.arrayBuffer()))
+  if (!existsSync(packed)) {
+    throw new Error(`desktop package: packed ${DESKTOP_MARKET_SPEC} did not write ${DESKTOP_MARKET_TARBALL}`)
+  }
+}
+
 async function main(): Promise<void> {
   const invocation = parseDesktopPackageInvocation(process.argv.slice(2))
   const { target } = invocation
@@ -282,6 +303,7 @@ async function main(): Promise<void> {
     ...buildEnv,
     DSH_DESKTOP_TARGET_PLATFORM: target.platform,
     DSH_DESKTOP_TARGET_ARCH: target.arch,
+    DSH_DESKTOP_UNSIGNED: invocation.unsigned ? '1' : '0',
   }
   const electronBuilderEnv = desktopElectronBuilderEnvironment(targetEnv, invocation.unsigned)
   for (const name of WINDOWS_SIGNING_ENV_NAMES) {
@@ -310,8 +332,9 @@ async function main(): Promise<void> {
   await runPnpm(['run', 'prepare:runtime'], targetEnv)
   await runPnpm(['run', 'prepare:packages'], targetEnv)
   await runPnpm(['run', 'prepare:dsh'], targetEnv)
+  await packBundledMarket(buildPaths.plugins)
   if (invocation.prepareOnly) return
-  if (target.platform === 'darwin' && !invocation.directory) {
+  if (target.platform === 'darwin' && !invocation.directory && !invocation.unsigned) {
     await runPnpm([
       ...desktopElectronBuilderArguments(target, true),
       '--config.mac.notarize=false',

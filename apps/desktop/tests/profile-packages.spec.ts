@@ -52,6 +52,19 @@ it('rejects incompatible peers only when the plugin is enabled', () => {
   expect(() =>{  validateDesktopPluginGraph(profile, dsh, runtime, ['plugin']) }).toThrow(/found 1.0.0/u)
   expect(() =>{  validateDesktopPluginGraph(profile, dsh, runtime, []) }).not.toThrow()
 })
+it('accepts a host prerelease that satisfies an earlier caret-rc peer range', () => {
+  const root = mkdtempSync(join(tmpdir(), 'desktop-profile-'))
+  roots.push(root)
+  const dsh = join(root, 'dsh')
+  const runtime = runtimeFixture(dsh, '0.1.5-rc.2')
+  const profile = join(root, 'profile')
+  createPluginProfile(profile)
+  linkDesktopHostPackages(profile, dsh, runtime)
+  writePackage(join(profile, 'node_modules'), 'plugin', {
+    peerDependencies: { '@deepseek-ai/cordis': '^0.1.0-rc.7' },
+  })
+  expect(() => { validateDesktopPluginGraph(profile, dsh, runtime, ['plugin']) }).not.toThrow()
+})
 it('refuses to satisfy a plugin dependency from an ancestor CLI project', () => {
   const { root, dsh, runtime, profile } = fixture()
   writePackage(join(root, 'node_modules'), 'ambient')

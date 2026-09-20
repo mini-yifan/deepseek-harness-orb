@@ -5,6 +5,7 @@ import { createRequire } from 'node:module'
 import { FileMatcher } from 'app-builder-lib/out/fileMatcher.js'
 import { runtimeFixture } from './runtime-fixture.ts'
 import { verifyDesktopRuntime } from '../src/runtime-tree.ts'
+import { DESKTOP_MARKET_TARBALL } from '../src/market-plugin.ts'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { NotarizeOptions } from '@electron/notarize'
 import {
@@ -52,16 +53,28 @@ describe('desktop macOS release signature', () => {
     const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
     const config = createElectronBuilderConfig(RELEASE_ENVIRONMENT, 'darwin', 'arm64')
     expect(portablePath(config.directories.output)).toContain('/.desktop-build/targets/mac-arm64/artifacts')
-    expect(config.extraResources).toHaveLength(3)
+    expect(config.icon).toBe('build/icon.png')
+    expect(config.extraResources).toHaveLength(4)
     expect(config.extraResources[0]?.to).toBe('runtime')
     expect(config.extraResources[1]?.to).toBe('dsh')
+    expect(config.extraResources[3]?.to).toBe(`plugins/${DESKTOP_MARKET_TARBALL}`)
     expect(portablePath(config.extraResources[0]?.from ?? '')).toContain('/.desktop-build/targets/mac-arm64/runtime')
     expect(portablePath(config.extraResources[1]?.from ?? '')).toContain('/.desktop-build/targets/mac-arm64/dsh')
+    expect(portablePath(config.extraResources[3]?.from ?? '')).toContain(`/${DESKTOP_MARKET_TARBALL}`)
     expect(config).toMatchObject({
       appId: RELEASE_ENVIRONMENT.DSH_DESKTOP_APP_ID,
       productName: 'DeepSeek Orb',
-      files: expect.arrayContaining(['lib/*.js', 'lib/macos-selection']),
-      asarUnpack: ['lib/macos-selection'],
+      files: expect.arrayContaining([
+        'lib/*.js',
+        'lib/macos-selection',
+        'lib/macos-sck-napi.node',
+        'lib/libmacos-sck-capture.dylib',
+      ]),
+      asarUnpack: [
+        'lib/macos-selection',
+        'lib/macos-sck-napi.node',
+        'lib/libmacos-sck-capture.dylib',
+      ],
       mac: {
         identity: RELEASE_ENVIRONMENT.DSH_DESKTOP_MACOS_SIGNING_IDENTITY,
         forceCodeSigning: true,
@@ -108,7 +121,7 @@ describe('desktop macOS release signature', () => {
       const destination = join(root, 'resources')
       runtimeFixture(source)
       const sourceRoot = config.extraResources[1].from
-      const matchers = config.extraResources.slice(1).map(entry => new FileMatcher(
+      const matchers = config.extraResources.slice(1, 3).map(entry => new FileMatcher(
         join(source, relative(sourceRoot, entry.from)), join(destination, entry.to), value => value,
       ))
       await copyFiles(matchers.slice(0, 1))
@@ -142,10 +155,30 @@ describe('desktop macOS release signature', () => {
     })
   })
 
-  it('rejects unsigned macOS builds and malformed signing modes', async () => {
+  it('isolates unsigned macOS artifacts and omits updater metadata without release credentials', async () => {
     const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
-    expect(() => createElectronBuilderConfig({ ...RELEASE_ENVIRONMENT, DSH_DESKTOP_UNSIGNED: '1' }))
-      .toThrow(/unsigned builds require Windows/u)
+    const config = createElectronBuilderConfig({
+      DSH_DESKTOP_APP_ID: RELEASE_ENVIRONMENT.DSH_DESKTOP_APP_ID,
+      DSH_DESKTOP_TARGET_PLATFORM: 'darwin',
+      DSH_DESKTOP_TARGET_ARCH: 'arm64',
+      DSH_DESKTOP_UNSIGNED: '1',
+    }, 'darwin', 'arm64')
+    expect(portablePath(config.directories.output)).toContain('/targets/mac-arm64/unsigned-artifacts')
+    expect(config).toMatchObject({
+      mac: {
+        identity: null,
+        forceCodeSigning: false,
+        notarize: false,
+        target: ['dmg'],
+      },
+      dmg: { sign: false },
+      publish: null,
+    })
+    expect(createElectronBuilderConfig({ ...RELEASE_ENVIRONMENT, DSH_DESKTOP_UNSIGNED: '1' }).mac.identity).toBeNull()
+  })
+
+  it('rejects malformed signing modes', async () => {
+    const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
     expect(() => createElectronBuilderConfig({ ...RELEASE_ENVIRONMENT, DSH_DESKTOP_UNSIGNED: 'yes' }))
       .toThrow(/must be 0 or 1/u)
   })

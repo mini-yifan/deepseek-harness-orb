@@ -22,6 +22,13 @@ export interface ObservationFrameBounds {
   readonly height: number
 }
 
+/** Overlay-exclude ScreenCaptureKit JPEG request. Desktop Host fills this over IPC. */
+export interface OverlayExcludedRegionCaptureInput {
+  readonly region: string
+  readonly excludeWindowIds: readonly number[]
+  readonly output: string
+}
+
 /**
  * Cloak host chrome for the duration of one capture or HID call.
  * Desktop Host provides this; Web and CLI compositions omit it.
@@ -53,6 +60,13 @@ export interface ComputerUseOverlayGuard {
    * @param signal - cooperative cancellation for the ack wait.
    */
   setObservationFrame(bounds: ObservationFrameBounds | null, signal?: AbortSignal): Promise<void>
+  /**
+   * Capture `input.region` as JPEG at `input.output`, omitting overlay CGWindowIDs in the Electron process.
+   * Pass-through hosts omit this method; CLI then spawns `macos-sck-capture`.
+   * @param input - region `x,y,w,h`, overlay window ids, and JPEG destination path.
+   * @param signal - cooperative cancellation for the ack wait.
+   */
+  captureExcludedRegion?(input: OverlayExcludedRegionCaptureInput, signal?: AbortSignal): Promise<void>
 }
 
 declare module '@deepseek-ai/cordis' {

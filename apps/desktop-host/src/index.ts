@@ -42,9 +42,11 @@ import {
   clearOverlayGuardTransport,
   completeOverlayGuardAck,
   completeObservationFrameAck,
+  completeSckCaptureAck,
   setOverlayGuardTransport,
   type ObservationFrameIpcEvent,
   type OverlayGuardIpcEvent,
+  type SckCaptureIpcEvent,
 } from './computer-use-overlay-guard.ts'
 import { setOrbCodeAgentModelSelection } from './computer-use-orb-code-agent-model.ts'
 import { isOrbCoordinateMode, setOrbCoordinateMode } from './computer-use-orb-coordinate-mode.ts'
@@ -84,6 +86,10 @@ export type DesktopHostCommand = {
   readonly type: 'observation-frame-ack'
   readonly requestId: number
 } | {
+  readonly type: 'sck-capture-ack'
+  readonly requestId: number
+  readonly error?: string
+} | {
   readonly type: 'orb-code-agent-model'
   readonly provider: string
   readonly model: string
@@ -115,7 +121,7 @@ export type DesktopHostEvent = {
 } | {
   readonly type: 'fatal'
   readonly message: string
-} | OverlayGuardIpcEvent | ObservationFrameIpcEvent | PluginRunIpcEvent | PluginRunCancelIpcEvent
+} | OverlayGuardIpcEvent | ObservationFrameIpcEvent | SckCaptureIpcEvent | PluginRunIpcEvent | PluginRunCancelIpcEvent
 
 /** Controller returned to tests and the self-executing process entry. */
 export interface DesktopHostController {
@@ -160,6 +166,9 @@ function isDesktopHostCommand(message: unknown): message is DesktopHostCommand {
         && candidate.requestId >= 1 && isExcludeWindowIds(candidate.excludeWindowIds)
     case 'observation-frame-ack':
       return isPositiveInteger(candidate.requestId)
+    case 'sck-capture-ack':
+      return isPositiveInteger(candidate.requestId)
+        && (candidate.error === undefined || typeof candidate.error === 'string')
     case 'orb-code-agent-model':
       return typeof candidate.provider === 'string' && candidate.provider !== ''
         && typeof candidate.model === 'string' && candidate.model !== ''
@@ -716,6 +725,9 @@ async function main(): Promise<void> {
         return
       case 'observation-frame-ack':
         completeObservationFrameAck(message.requestId)
+        return
+      case 'sck-capture-ack':
+        completeSckCaptureAck(message.requestId, message.error)
         return
       case 'orb-code-agent-model':
         setOrbCodeAgentModelSelection(message)

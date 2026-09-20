@@ -1,7 +1,7 @@
 /** Versioned control messages and framed byte transport for the Desktop Host child. */
 
 /** Protocol version implemented by the Electron shell and installed dsh Host. */
-export const DESKTOP_HOST_PROTOCOL_VERSION = 7 as const
+export const DESKTOP_HOST_PROTOCOL_VERSION = 8 as const
 
 /** Child descriptor Electron writes request frames to. */
 export const DESKTOP_REQUEST_PIPE_FD = 3
@@ -64,6 +64,10 @@ export type DesktopHostCommand = {
   readonly type: 'observation-frame-ack'
   readonly requestId: number
 } | {
+  readonly type: 'sck-capture-ack'
+  readonly requestId: number
+  readonly error?: string
+} | {
   readonly type: 'orb-code-agent-model'
   readonly provider: string
   readonly model: string
@@ -87,7 +91,7 @@ export type DesktopHostCommand = {
   readonly signal: string | null
 }
 
-/** Lifecycle, overlay-guard, observation-frame, and plugin-run events retained on Node IPC. */
+/** Lifecycle, overlay-guard, observation-frame, overlay-exclude capture, and plugin-run events retained on Node IPC. */
 export type DesktopHostEvent = {
   readonly type: 'ready'
   readonly protocolVersion: typeof DESKTOP_HOST_PROTOCOL_VERSION
@@ -104,6 +108,12 @@ export type DesktopHostEvent = {
   readonly type: 'observation-frame'
   readonly requestId: number
   readonly bounds: DesktopObservationFrameBounds | null
+} | {
+  readonly type: 'sck-capture'
+  readonly requestId: number
+  readonly region: string
+  readonly excludeWindowIds: readonly number[]
+  readonly output: string
 } | {
   readonly type: 'plugin-run'
   readonly requestId: number

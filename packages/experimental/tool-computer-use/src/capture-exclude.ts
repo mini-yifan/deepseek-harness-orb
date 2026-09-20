@@ -1,5 +1,5 @@
 /**
- * Capture-interval overlay window ids for the macOS ScreenCaptureKit helper.
+ * Capture-interval overlay window ids for macOS overlay-exclude ScreenCaptureKit.
  * {@link wrapDesktopBackend} stores the ids; {@link createMacosDesktopBackend} reads them.
  * @module @deepseek-ai/dsh-experimental-tool-computer-use/src/capture-exclude
  */

@@ -17,10 +17,13 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { DESKTOP_MARKET_SPEC } from './market-plugin.ts'
 import { createPluginProfile, packageNameFromSpec } from './project-manager.ts'
 
+export { DESKTOP_MARKET_SPEC } from './market-plugin.ts'
+
 /** Exact npm spec pinned into the unpackaged development plugin store. */
-export const DESKTOP_DEVELOPMENT_MARKET_SPEC = 'dshmarket@1.47.0'
+export const DESKTOP_DEVELOPMENT_MARKET_SPEC = DESKTOP_MARKET_SPEC
 
 const CORE_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'] as const
 

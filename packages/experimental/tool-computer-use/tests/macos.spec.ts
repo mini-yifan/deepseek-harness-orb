@@ -282,6 +282,33 @@ describe('macOS backend with an injected runner', () => {
     ])
   })
 
+  it('uses overlay-guard captureExcludedRegion instead of the helper when provided', async () => {
+    const files: string[] = []
+    const captured: Array<{
+      region: string
+      excludeWindowIds: readonly number[]
+      output: string
+    }> = []
+    const backend = createMacosDesktopBackend(runner({ files }), async (input) => {
+      captured.push({
+        region: input.region,
+        excludeWindowIds: input.excludeWindowIds,
+        output: input.output,
+      })
+      await writeCaptureFile(input.output, FAKE_DESKTOP_PNG)
+    })
+    const [screen] = await backend.listScreens()
+    files.length = 0
+    const result = await runWithCaptureExcludeWindowIds([4242], () => backend.capture(screen!))
+    expect(result.mediaType).toBe('image/png')
+    expect(files).toEqual([])
+    expect(captured).toEqual([{
+      region: '0,0,100,50',
+      excludeWindowIds: [4242],
+      output: expect.stringMatching(/screen\.jpg$/u),
+    }])
+  })
+
   it('starts AppKit on the main actor before ScreenCaptureKit window capture', async () => {
     const source = await readFile(new URL('../src/macos-sck-capture.swift', import.meta.url), 'utf8')
     expect(source).toContain('import AppKit')
@@ -292,8 +319,16 @@ describe('macOS backend with an injected runner', () => {
     expect(source).toContain('--region=')
     expect(source).toContain('excludingWindows')
     expect(source).toContain('sourceRect')
+    expect(source).toContain('#if DSH_SCK_CLI')
+    expect(source).toContain('startCliApplication: true')
+    expect(source).toContain('@_cdecl("dsh_macos_sck_capture")')
+    const cdecl = source.slice(source.indexOf('@_cdecl("dsh_macos_sck_capture")'))
+    expect(cdecl).toContain('startCliApplication: false')
+    expect(cdecl).not.toContain('setActivationPolicy')
     const build = await readFile(new URL('../scripts/build-macos-sck-capture.mjs', import.meta.url), 'utf8')
     expect(build).toContain("'AppKit'")
+    expect(build).toContain('-emit-library')
+    expect(build).toContain('libmacos-sck-capture.dylib')
   })
 
   it('does not fall back to screencapture when overlay-exclude capture fails', async () => {

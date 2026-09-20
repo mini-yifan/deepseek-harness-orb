@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { resolveDesktopPaths } from '../src/paths.ts'
 import { DesktopProjectManager, packageNameFromSpec, type DesktopProjectHooks } from '../src/project-manager.ts'
+import { DESKTOP_MARKET_SPEC, DESKTOP_MARKET_TARBALL, DESKTOP_MARKET_VERSION } from '../src/market-plugin.ts'
 import { runtimeFixture } from './runtime-fixture.ts'
 
 const roots: string[] = []
@@ -13,6 +14,13 @@ function temporaryRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'dsh-desktop-test-'))
   roots.push(root)
   return root
+}
+function writeBundledMarket(root: string): string {
+  const directory = join(root, 'resources', 'plugins')
+  mkdirSync(directory, { recursive: true })
+  const tarball = join(directory, DESKTOP_MARKET_TARBALL)
+  writeFileSync(tarball, 'tarball')
+  return tarball
 }
 function writeFakePnpm(root: string): string {
   const path = join(root, 'pnpm.mjs')
@@ -26,11 +34,31 @@ appendFileSync(${JSON.stringify(join(root, 'pnpm-log.jsonl'))}, JSON.stringify({
 if (command !== 'rebuild') {
   const manifestPath = join(project, 'package.json')
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+  if (command === 'install' && args.includes('--frozen-lockfile')) {
+    try {
+      if (readFileSync(join(project, 'pnpm-lock.yaml'), 'utf8').includes('OUTDATED')) {
+        console.error('ERR_PNPM_OUTDATED_LOCKFILE Specs in package.json were modified')
+        process.exit(1)
+      }
+    } catch (error) {
+      if (error && error.code !== 'ENOENT') throw error
+    }
+  }
   if (command === 'add') {
     const spec = args[args.indexOf(command) + 1]
-    const index = spec.lastIndexOf('@')
-    const name = index > 0 ? spec.slice(0, index) : spec
-    manifest.dependencies[name] = index > 0 ? spec.slice(index + 1) : '1.0.0'
+    let name
+    let version
+    if (spec.endsWith('.tgz')) {
+      const file = spec.replaceAll('\\\\', '/').split('/').pop()
+      const dash = file.lastIndexOf('-')
+      name = file.slice(0, dash)
+      version = file.slice(dash + 1, -'.tgz'.length)
+    } else {
+      const index = spec.lastIndexOf('@')
+      name = index > 0 ? spec.slice(0, index) : spec
+      version = index > 0 ? spec.slice(index + 1) : '1.0.0'
+    }
+    manifest.dependencies[name] = version
   }
   if (command === 'remove') delete manifest.dependencies[args[args.indexOf(command) + 1]]
   writeFileSync(manifestPath, JSON.stringify(manifest))
@@ -209,6 +237,63 @@ describe('desktop external plugin profile', () => {
     expect(readFileSync(join(manager.paths.profile, 'user-file'), 'utf8')).toBe('retain')
   })
 
+  it('seeds the bundled market when the profile lacks that exact spec', async () => {
+    const { root, manager } = setup()
+    const tarball = writeBundledMarket(root)
+    await expect(manager.applyRelease()).resolves.toBe(true)
+    expect(manager.listPlugins()).toEqual([{ name: 'dshmarket', version: DESKTOP_MARKET_VERSION, enabled: true }])
+    expect(calls(root).some(entry => entry.args.includes('add') && entry.args.includes(tarball))).toBe(true)
+    await expect(manager.applyRelease()).resolves.toBe(false)
+    expect(calls(root).filter(entry => entry.args.includes(tarball))).toHaveLength(1)
+  })
+
+  it('seeds an existing packaged profile that never received the market', async () => {
+    const { root, manager } = setup()
+    await expect(manager.applyRelease()).resolves.toBe(true)
+    await expect(manager.applyRelease()).resolves.toBe(false)
+    const tarball = writeBundledMarket(root)
+    await expect(manager.applyRelease()).resolves.toBe(true)
+    expect(manager.listPlugins()).toEqual([{ name: 'dshmarket', version: DESKTOP_MARKET_VERSION, enabled: true }])
+    expect(calls(root).some(entry => entry.args.includes(tarball))).toBe(true)
+  })
+
+  it('does not reinstall a profile that already records the bundled market spec', async () => {
+    const { root, manager } = setup()
+    await manager.applyRelease()
+    await manager.mutate({ type: 'plugin-add', spec: DESKTOP_MARKET_SPEC }, hooks())
+    writeBundledMarket(root)
+    await expect(manager.applyRelease()).resolves.toBe(false)
+    expect(calls(root).some(entry => entry.args.some(arg => arg.endsWith('.tgz')))).toBe(false)
+  })
+
+  it('disables third-party plugins when packaged graph validation fails', async () => {
+    const { manager } = setup()
+    await manager.applyRelease()
+    await manager.mutate({ type: 'plugin-add', spec: 'plugin@1.0.0' }, hooks())
+    writeFileSync(join(manager.paths.profile, 'node_modules/plugin/package.json'), `${JSON.stringify({
+      name: 'plugin',
+      version: '1.0.0',
+      peerDependencies: { '@deepseek-ai/cordis': '^2.0.0' },
+      dsh: { bundle: { patch: './bundle.yml' } },
+    })}\n`)
+    unlinkSync(join(manager.paths.profile, 'node_modules/@deepseek-ai/cordis'))
+    await expect(manager.applyRelease()).resolves.toBe(true)
+    expect(manager.listPlugins()).toEqual([{ name: 'plugin', version: '1.0.0', enabled: false }])
+    expect((JSON.parse(readFileSync(join(manager.paths.profile, 'package.json'), 'utf8')) as {
+      dsh: { profile: { bundles: string[] } }
+    }).dsh.profile.bundles).toEqual(['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'])
+  })
+
+  it('repairs an outdated lockfile during packaged rebuild without disabling plugins', async () => {
+    const { manager } = setup()
+    await manager.applyRelease()
+    await manager.mutate({ type: 'plugin-add', spec: 'plugin@1.0.0' }, hooks())
+    writeFileSync(join(manager.paths.profile, 'pnpm-lock.yaml'), 'OUTDATED\n')
+    writeFileSync(join(manager.paths.profile, 'desktop-packages-pending'), '')
+    await expect(manager.applyRelease()).resolves.toBe(true)
+    expect(manager.listPlugins()).toEqual([{ name: 'plugin', version: '1.0.0', enabled: true }])
+  })
+
   it.each(['plugin-add', 'runtime-change'] as const)('retries failed rebuild after %s across manager instances', async (operation) => {
     const { root, manager } = setup()
     await manager.applyRelease()
@@ -341,11 +426,10 @@ describe('desktop external plugin profile', () => {
     const dsh = join(root, 'next-major')
     runtimeFixture(dsh, '2.0.0')
     const next = new DesktopProjectManager(manager.paths, { ...manager.runtime, dsh })
-    await expect(next.applyRelease()).rejects.toThrow(/requires @deepseek-ai\/cordis/u)
-    expect(next.releaseVersion()).toBe('2.0.0')
-    await next.mutate({ type: 'plugins-disable-all' }, hooks())
+    await expect(next.applyRelease()).resolves.toBe(true)
     expect(next.releaseVersion()).toBe('2.0.0')
     expect(next.listPlugins()).toEqual([{ name: 'plugin', version: '1.0.0', enabled: false }])
+    expect(existsSync(join(manager.paths.profile, 'node_modules/plugin/package.json'))).toBe(true)
   })
 
   it.each(['before', 'after'] as const)('retains direct writes when the %s change hook fails', async (phase) => {
