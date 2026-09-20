@@ -7,6 +7,7 @@ import type { FloatingExpandState } from './floating-window.ts'
 import type { OrbAgentModelSelection } from './orb-agent-models.ts'
 import type { OrbPermissionPreset } from './orb-permission.ts'
 import type { SelectionTranslateLanguage } from './selection-prompt.ts'
+import type { TccRight, TccStatus } from './tcc.ts'
 
 /** IPC channel names kept private to the desktop application bundle. */
 export const DESKTOP_IPC = {
@@ -40,6 +41,10 @@ export const DESKTOP_IPC = {
   floatingRunning: 'dsh-desktop:floating-running',
   floatingAvatarGet: 'dsh-desktop:floating-avatar-get',
   floatingAvatar: 'dsh-desktop:floating-avatar',
+  floatingTccGet: 'dsh-desktop:floating-tcc-get',
+  floatingTccOpen: 'dsh-desktop:floating-tcc-open',
+  floatingTccRelaunch: 'dsh-desktop:floating-tcc-relaunch',
+  floatingTcc: 'dsh-desktop:floating-tcc',
   orbSupported: 'dsh-desktop:orb-supported',
   orbSnapshot: 'dsh-desktop:orb-snapshot',
   orbPickAvatar: 'dsh-desktop:orb-pick-avatar',
@@ -48,6 +53,7 @@ export const DESKTOP_IPC = {
   orbSetBackgroundModel: 'dsh-desktop:orb-set-background-model',
   orbSetSelectionEnabled: 'dsh-desktop:orb-set-selection-enabled',
   orbSetMillifractionEnabled: 'dsh-desktop:orb-set-millifraction-enabled',
+  orbOpenTcc: 'dsh-desktop:orb-open-tcc',
   floatingCreateSession: 'dsh-desktop:floating-create-session',
   selectionPrompt: 'dsh-desktop:selection-prompt',
   selectionAttach: 'dsh-desktop:selection-attach',
@@ -122,6 +128,10 @@ export interface DshDesktopApi {
     onSelectionPrompt(listener: (payload: SelectionPromptPayload) => void): () => void
     onSelectionAttach(listener: (payload: SelectionAttachPayload) => void): () => void
     onCreateSession(listener: () => void): () => void
+    tccStatus(): Promise<TccStatus>
+    openTcc(right: TccRight): Promise<TccStatus>
+    relaunch(): Promise<void>
+    onTccStatus(listener: (status: TccStatus) => void): () => void
   }
   readonly selection: {
     search(): Promise<void>
@@ -142,6 +152,7 @@ export interface OrbSettingsSnapshot {
   readonly background: OrbAgentModelSelection
   readonly selectionEnabled: boolean
   readonly millifractionEnabled: boolean
+  readonly tcc: TccStatus
 }
 
 /** Result of confirming a millifraction-coordinates default change. */
@@ -169,6 +180,7 @@ export interface DshDesktopAppApi {
     setBackgroundModel(selection: OrbAgentModelSelection): Promise<void>
     setSelectionEnabled(enabled: boolean): Promise<void>
     setMillifractionEnabled(enabled: boolean): Promise<OrbMillifractionWriteResult>
+    openTcc(right: TccRight): Promise<OrbSettingsSnapshot>
   }
 }
 

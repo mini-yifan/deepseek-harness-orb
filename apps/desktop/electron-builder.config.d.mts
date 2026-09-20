@@ -1,6 +1,7 @@
 /** Electron-builder fields asserted by the Desktop release tests. */
 export interface DesktopElectronBuilderConfig {
   readonly appId: string
+  readonly productName: string
   readonly directories: {
     readonly output: string
   }
@@ -16,6 +17,9 @@ export interface DesktopElectronBuilderConfig {
     readonly forceCodeSigning: boolean
     readonly notarize: boolean
     readonly signIgnore: readonly string[]
+    readonly extendInfo: {
+      readonly NSAppleEventsUsageDescription: string
+    }
   }
   readonly dmg: {
     readonly sign: boolean

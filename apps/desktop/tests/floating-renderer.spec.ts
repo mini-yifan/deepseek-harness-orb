@@ -1972,3 +1972,190 @@ it('applies a pushed custom avatar URL to the ball image', async () => {
     expect(gif?.src).toBe('dsh-app://shell/orb-avatar?v=2')
   } finally { dom.window.close() }
 })
+
+it('covers the overlay with the TCC gate on first expand and blocks send', async () => {
+  const status = {
+    applicable: true,
+    appName: 'DeepSeek Orb',
+    screen: 'missing',
+    accessibility: 'missing',
+  }
+  const tccStatus = vi.fn(async () => status)
+  const openTcc = vi.fn(async (right: 'screen' | 'accessibility') => {
+    if (right === 'screen') status.screen = 'needsRelaunch'
+    else status.accessibility = 'needsRelaunch'
+    return { ...status }
+  })
+  const relaunch = vi.fn(async () => undefined)
+  let onTccStatus: ((status: {
+    applicable: boolean
+    appName: string
+    screen: string
+    accessibility: string
+  }) => void) | undefined
+  const html = readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8')
+  const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'dsh-app://shell/floating.html' })
+  const calls: { method: string }[] = []
+  const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+    if (isRemoteStream(_input)) return hangingStreamResponse(init?.signal)
+    const body = JSON.parse(String(init?.body)) as { rpcId: string; method: string }
+    calls.push({ method: body.method })
+    let value: unknown = {}
+    if (body.method === 'workspace/create') {
+      value = { workspace: { workspaceId: 'ws-orb' }, created: true }
+    }
+    if (body.method === 'session/create') value = { sessionId: 'session-orb', agentPreset: 'computer-use' }
+    if (body.method === 'session/list') {
+      value = { items: [{ sessionId: 'session-orb', running: false, projections: { asOfSeq: 0 } }] }
+    }
+    if (body.method === 'session/prompt') value = { accepted: true }
+    return rpcResponse(body.rpcId, value)
+  })
+  Object.defineProperty(dom.window, 'fetch', { value: fetchMock })
+  Object.defineProperty(dom.window, 'crypto', { value: globalThis.crypto })
+  const setSessionId = vi.fn()
+  Object.defineProperty(dom.window, 'dshDesktop', {
+    value: {
+      locale: async () => resolveDesktopLocale('en'),
+      backend: { status: async () => ({ phase: 'ready' }), subscribe: vi.fn() },
+      floating: {
+        sessionId: async () => undefined,
+        setSessionId,
+        move: vi.fn(),
+        clamp: vi.fn(),
+        setExpanded: vi.fn(async (expanded: boolean) => ({
+          expanded, horizontal: 'left', vertical: 'up',
+        })),
+        orbWorkspacePath: async () => '/tmp/dsh_orb',
+        setSessionRunning: vi.fn(),
+        overlayModel: async () => ({
+          provider: 'deepseek-official',
+          model: 'deepseek-flash',
+          reasoningEffort: 'max',
+        }),
+        overlayPermission: async () => 'danger-full-access',
+        setOverlayPermission: vi.fn(),
+        tccStatus,
+        openTcc,
+        relaunch,
+        onTccStatus: (listener: (status: {
+          applicable: boolean
+          appName: string
+          screen: string
+          accessibility: string
+        }) => void) => {
+          onTccStatus = listener
+          return () => { onTccStatus = undefined }
+        },
+        onOverlayModel: () => () => {},
+        onSelectionPrompt: () => () => {},
+        onSelectionAttach: () => () => {},
+        onCreateSession: () => () => {},
+      },
+    },
+  })
+  try {
+    runInContext(readFileSync(new URL('../renderer/floating.js', import.meta.url), 'utf8'), dom.getInternalVMContext())
+    await expect.poll(() => setSessionId.mock.calls).toEqual([['session-orb']])
+    const document = dom.window.document
+    expect(document.querySelector<HTMLElement>('#tcc-gate')?.hidden).toBe(true)
+    document.body.dispatchEvent(new dom.window.Event('pointerenter', { bubbles: true }))
+    await expect.poll(() => document.querySelector<HTMLElement>('#tcc-gate')?.hidden).toBe(false)
+    expect(document.querySelector('#tcc-title')?.textContent).toBe('Desktop agent needs two Mac permissions')
+    expect(document.querySelector('#tcc-app')?.textContent).toBe('In the list, turn on DeepSeek Orb.')
+    expect(document.body.classList.contains('tcc-gating')).toBe(true)
+    const prompt = document.querySelector<HTMLElement>('#prompt')
+    if (prompt === null) throw new Error('missing prompt')
+    setPromptText(prompt, 'Open WeChat')
+    document.querySelector<HTMLFormElement>('#composer')?.dispatchEvent(
+      new dom.window.Event('submit', { bubbles: true, cancelable: true }),
+    )
+    await expect.poll(() => tccStatus.mock.calls.length).toBeGreaterThan(1)
+    expect(calls.some(call => call.method === 'session/prompt')).toBe(false)
+    expect(prompt.textContent).toBe('Open WeChat')
+    document.querySelector<HTMLButtonElement>('#tcc-later')?.click()
+    expect(document.querySelector<HTMLElement>('#tcc-gate')?.hidden).toBe(true)
+    document.querySelector<HTMLFormElement>('#composer')?.dispatchEvent(
+      new dom.window.Event('submit', { bubbles: true, cancelable: true }),
+    )
+    await expect.poll(() => document.querySelector<HTMLElement>('#tcc-gate')?.hidden).toBe(false)
+    expect(calls.some(call => call.method === 'session/prompt')).toBe(false)
+    document.querySelector<HTMLButtonElement>('#tcc-screen-open')?.click()
+    await expect.poll(() => document.querySelector('#tcc-screen-status')?.textContent).toBe('On — quit and reopen')
+    expect(openTcc).toHaveBeenCalledWith('screen')
+    expect(document.querySelector<HTMLButtonElement>('#tcc-relaunch')?.hidden).toBe(false)
+    document.querySelector<HTMLButtonElement>('#tcc-relaunch')?.click()
+    expect(relaunch).toHaveBeenCalledTimes(1)
+    onTccStatus?.({
+      applicable: true,
+      appName: 'DeepSeek Orb',
+      screen: 'granted',
+      accessibility: 'granted',
+    })
+    expect(document.querySelector<HTMLElement>('#tcc-gate')?.hidden).toBe(true)
+    expect(document.body.classList.contains('tcc-gating')).toBe(false)
+  } finally { dom.window.close() }
+})
+
+it('hides the TCC gate when both rights are already granted', async () => {
+  const html = readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8')
+  const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'dsh-app://shell/floating.html' })
+  const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+    if (isRemoteStream(_input)) return hangingStreamResponse(init?.signal)
+    const body = JSON.parse(String(init?.body)) as { rpcId: string; method: string }
+    let value: unknown = {}
+    if (body.method === 'workspace/create') {
+      value = { workspace: { workspaceId: 'ws-orb' }, created: true }
+    }
+    if (body.method === 'session/create') value = { sessionId: 'session-orb', agentPreset: 'computer-use' }
+    if (body.method === 'session/list') {
+      value = { items: [{ sessionId: 'session-orb', running: false, projections: { asOfSeq: 0 } }] }
+    }
+    return rpcResponse(body.rpcId, value)
+  })
+  Object.defineProperty(dom.window, 'fetch', { value: fetchMock })
+  Object.defineProperty(dom.window, 'crypto', { value: globalThis.crypto })
+  const setSessionId = vi.fn()
+  Object.defineProperty(dom.window, 'dshDesktop', {
+    value: {
+      locale: async () => resolveDesktopLocale('en'),
+      backend: { status: async () => ({ phase: 'ready' }), subscribe: vi.fn() },
+      floating: {
+        sessionId: async () => undefined,
+        setSessionId,
+        move: vi.fn(),
+        clamp: vi.fn(),
+        setExpanded: vi.fn(async (expanded: boolean) => ({
+          expanded, horizontal: 'left', vertical: 'up',
+        })),
+        orbWorkspacePath: async () => '/tmp/dsh_orb',
+        setSessionRunning: vi.fn(),
+        overlayModel: async () => ({
+          provider: 'deepseek-official',
+          model: 'deepseek-flash',
+          reasoningEffort: 'max',
+        }),
+        tccStatus: async () => ({
+          applicable: true,
+          appName: 'DeepSeek Orb',
+          screen: 'granted',
+          accessibility: 'granted',
+        }),
+        onTccStatus: () => () => {},
+        onOverlayModel: () => () => {},
+        onSelectionPrompt: () => () => {},
+        onSelectionAttach: () => () => {},
+        onCreateSession: () => () => {},
+      },
+    },
+  })
+  try {
+    runInContext(readFileSync(new URL('../renderer/floating.js', import.meta.url), 'utf8'), dom.getInternalVMContext())
+    await expect.poll(() => setSessionId.mock.calls).toEqual([['session-orb']])
+    const document = dom.window.document
+    document.body.dispatchEvent(new dom.window.Event('pointerenter', { bubbles: true }))
+    await expect.poll(() => document.body.classList.contains('expanded')).toBe(true)
+    expect(document.querySelector<HTMLElement>('#tcc-gate')?.hidden).toBe(true)
+    expect(document.body.classList.contains('tcc-gating')).toBe(false)
+  } finally { dom.window.close() }
+})

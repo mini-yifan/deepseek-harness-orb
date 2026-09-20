@@ -1,5 +1,5 @@
 ---
-description: "桌面端设置里的 macOS 悬浮球分页：自定义头像、悬浮球与后台 Agent 模型、划词工具栏，以及千分比坐标。"
+description: "桌面端设置里的 macOS 悬浮球分页：自定义头像、悬浮球与后台 Agent 模型、划词工具栏、千分比坐标，以及屏幕录制与辅助功能状态。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-本包在桌面端设置中增加「悬浮球」分页。用户可改球头像（GIF、PNG 或 WebP，建议不超过 2 MB，可恢复默认）、悬浮球 Agent 模型、后台 `code_agent` 模型、是否启用划词工具栏，以及新建 overlay 对话是否使用千分比坐标。头像、模型和划词工具栏立即写入 Desktop 配置。千分比坐标在 Electron main 确认后才持久化，并新建一条 overlay 对话。`dsh web` 从不显示该页。Windows 仍列出它，但全部控件禁用。
+本包在桌面端设置中增加「悬浮球」分页。用户可改球头像（GIF、PNG 或 WebP，建议不超过 2 MB，可恢复默认）、悬浮球 Agent 模型、后台 `code_agent` 模型、是否启用划词工具栏、新建 overlay 对话是否使用千分比坐标，以及 — 在 macOS 上 — 屏幕录制与辅助功能状态。头像、模型和划词工具栏立即写入 Desktop 配置。千分比坐标在 Electron main 确认后才持久化，并新建一条 overlay 对话。`dsh web` 从不显示该页。Windows 仍列出它，但全部控件禁用。
 
 ## 目录
 
@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-Desktop Host overlay 插入本插件。在主窗口打开设置并选择「悬浮球」。选择图片会拷进 Desktop 配置并更新正在显示的球。悬浮球 Agent 与后台 Agent 选择器使用与球右键菜单相同的 Host `session/modelCatalog` 分组。划词开关会启动或停止 macOS helper。千分比开关请 Electron main 确认、持久化并新建 overlay 对话；本页不调用 `session.create`。Access、打开主窗口和退出仍留在原生右键菜单。
+Desktop Host overlay 插入本插件。在主窗口打开设置并选择「悬浮球」。选择图片会拷进 Desktop 配置并更新正在显示的球。悬浮球 Agent 与后台 Agent 选择器使用与球右键菜单相同的 Host `session/modelCatalog` 分组。划词开关会启动或停止 macOS helper。千分比开关请 Electron main 确认、持久化并新建 overlay 对话；本页不调用 `session.create`。在 macOS 上，屏幕录制与辅助功能按钮打开系统设置对应页。Access、打开主窗口和退出仍留在原生右键菜单。
 
 -----
 
@@ -35,7 +35,7 @@ Desktop Host overlay 插入本插件。在主窗口打开设置并选择「悬�
 <details>
 <summary>实现细节——点击展开</summary>
 
-节点半部是空的 `apply`，便于 Loader 列出该插件。浏览器半部注册 `settings.section`，id 为 `orb`，order 为 25。目录读取走 `ctx.remote.session.modelCatalog()`。偏好写入走 `dsh-app://app` 上的 `window.dshDesktop.orb`（应用 preload，不是 shell 启动桥）。自定义头像落在配置目录的 `orb-avatar` 与 `orb-avatar.json`；`dsh-app://app/orb-avatar` 与 `dsh-app://shell/orb-avatar` 提供该文件或打包 GIF。千分比开关在原生对话框打开期间不设置 `busy`；确认、持久化、Host 推送和 overlay New 都在 Electron main。Windows 收到同一页且 `supported: false`。[桌面悬浮球设置 Agent Note](../../../.agents/notes/implemented/feature/2026-09-18-desktop-orb-settings.zh.md) 拥有组合、应用 preload 与配置头像。[Overlay 会话上的 Computer Use 千分比与像素坐标模式](../../../.agents/notes/implemented/feature/2026-09-19-computer-use-session-coordinate-modes.zh.md) 拥有千分比确认路径。
+节点半部是空的 `apply`，便于 Loader 列出该插件。浏览器半部注册 `settings.section`，id 为 `orb`，order 为 25。目录读取走 `ctx.remote.session.modelCatalog()`。偏好写入走 `dsh-app://app` 上的 `window.dshDesktop.orb`（应用 preload，不是 shell 启动桥）。自定义头像落在配置目录的 `orb-avatar` 与 `orb-avatar.json`；`dsh-app://app/orb-avatar` 与 `dsh-app://shell/orb-avatar` 提供该文件或打包 GIF。千分比开关在原生对话框打开期间不设置 `busy`；确认、持久化、Host 推送和 overlay New 都在 Electron main。Windows 收到同一页且 `supported: false`。[桌面悬浮球设置 Agent Note](../../../.agents/notes/implemented/feature/2026-09-18-desktop-orb-settings.zh.md) 拥有组合、应用 preload 与配置头像。[Overlay 会话上的 Computer Use 千分比与像素坐标模式](../../../.agents/notes/implemented/feature/2026-09-19-computer-use-session-coordinate-modes.zh.md) 拥有千分比确认路径。[Desktop Orb TCC 门](../../../.agents/notes/implemented/feature/2026-09-20-desktop-orb-tcc-gate.zh.md) 拥有 macOS 权限卡与 overlay 覆盖层。
 
 </details>
 
@@ -48,6 +48,7 @@ Desktop Host overlay 插入本插件。在主窗口打开设置并选择「悬�
 - [ui-settings-general](../ui-settings-general/README.zh.md)——投影本分区的设置外壳。
 - [桌面悬浮球](../../../.agents/notes/implemented/feature/2026-09-14-desktop-floating-orb.zh.md)——overlay 窗口与 Computer Use 会话。
 - [Overlay 会话上的 Computer Use 千分比与像素坐标模式](../../../.agents/notes/implemented/feature/2026-09-19-computer-use-session-coordinate-modes.zh.md)——千分比设置卡片与确认后创建。
+- [Desktop Orb TCC 门](../../../.agents/notes/implemented/feature/2026-09-20-desktop-orb-tcc-gate.zh.md)——overlay 覆盖层与 macOS 权限卡。
 
 -----
 

@@ -80,6 +80,7 @@ import {
   readMillifractionCoordinates,
   writeMillifractionCoordinates,
 } from './millifraction-coordinates.ts'
+import { isTccRight, TccController, type TccStatus } from './tcc.ts'
 
 const SCHEME = 'dsh-app'
 let focusPrimaryWindow = (): void => {}
@@ -254,6 +255,20 @@ async function main(): Promise<void> {
   let updateState: DesktopUpdateState = { phase: 'idle' }
   const locale = resolveDesktopLocale(app.getLocale())
   const messages = locale.messages
+  const tcc = new TccController({
+    platform: process.platform,
+    appName: () => app.name,
+    screenGranted: () => systemPreferences.getMediaAccessStatus('screen') === 'granted',
+    accessibilityGranted: () => systemPreferences.isTrustedAccessibilityClient(false),
+    openExternal: url => shell.openExternal(url),
+  })
+  const publishTcc = (): TccStatus => {
+    const status = tcc.status()
+    if (floatingWindow !== undefined && !floatingWindow.isDestroyed()) {
+      floatingWindow.webContents.send(DESKTOP_IPC.floatingTcc, status)
+    }
+    return status
+  }
   const appPreload = fileURLToPath(new URL('./preload-app.cjs', import.meta.url))
   const managementPreload = fileURLToPath(new URL('./preload.cjs', import.meta.url))
   const startupUrl = `${SCHEME}://shell/startup.html`
@@ -352,6 +367,7 @@ async function main(): Promise<void> {
     app.setActivationPolicy('regular')
     app.dock?.show()
     floatingWindow.once('closed', () => { floatingWindow = undefined })
+    floatingWindow.on('focus', () => { publishTcc() })
     void floatingWindow.loadURL(`${SCHEME}://shell/floating.html`)
     if (selection.window() === undefined) {
       const toolbar = createSelectionToolbarWindow(managementPreload)
@@ -420,6 +436,7 @@ async function main(): Promise<void> {
           background: readOrbAgentModels(activeProject).background,
           selectionEnabled: selection?.enabled() ?? true,
           millifractionEnabled: result.enabled,
+          tcc: tcc.status(),
         },
       }
     })()
@@ -625,6 +642,7 @@ async function main(): Promise<void> {
       background: models.background,
       selectionEnabled: selection?.enabled() ?? true,
       millifractionEnabled: readMillifractionCoordinates(activeProject).enabled,
+      tcc: tcc.status(),
     }
   }
 
@@ -878,6 +896,21 @@ async function main(): Promise<void> {
     requireFloatingWindow(event)
     return orbAvatarUrl('shell', orbAvatarCacheToken(activeProject))
   })
+  ipcMain.handle(DESKTOP_IPC.floatingTccGet, (event) => {
+    requireFloatingWindow(event)
+    return tcc.status()
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingTccOpen, async (event, right: unknown) => {
+    requireFloatingWindow(event)
+    if (!isTccRight(right)) throw new Error('dsh desktop: TCC right must be screen or accessibility')
+    noteOverlayOwnedActivation()
+    await tcc.open(right)
+    return publishTcc()
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingTccRelaunch, async (event) => {
+    requireFloatingWindow(event)
+    await recoverApplication('restart')
+  })
   ipcMain.handle(DESKTOP_IPC.orbSupported, (event) => {
     requireAppSender(event)
     return orbSettingsSupported(process.platform)
@@ -942,6 +975,14 @@ async function main(): Promise<void> {
     }
     const parent = BrowserWindow.fromWebContents(event.sender)
     return confirmMillifractionEnabled(enabled, parent === null ? undefined : parent)
+  })
+  ipcMain.handle(DESKTOP_IPC.orbOpenTcc, async (event, right: unknown) => {
+    requireAppSender(event)
+    assertOrbSettingsWritable(process.platform)
+    if (!isTccRight(right)) throw new Error('dsh desktop: TCC right must be screen or accessibility')
+    await tcc.open(right)
+    publishTcc()
+    return orbSnapshotFor(event)
   })
   ipcMain.handle(DESKTOP_IPC.selectionSearch, (event) => {
     noteOverlayOwnedActivation()
@@ -1083,6 +1124,7 @@ async function main(): Promise<void> {
   }
 
   app.on('activate', () => {
+    publishTcc()
     if (overlayOwnedActivationActive()) return
     focusPrimaryWindow()
   })

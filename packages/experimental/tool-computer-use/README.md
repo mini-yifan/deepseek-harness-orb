@@ -58,7 +58,7 @@ A custom Loader composition that can resolve the package name may instead mount:
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-experimental-tool-computer-use) is the exhaustive source for every accepted field and its JSDoc.
 
-On macOS, grant Screen Recording to capture, Accessibility to post clicks and keys, and Automation for Finder. Missing Screen Recording or Accessibility fails the capture or input with a message that names that TCC right. Windows and Linux still load; every backend method then throws `computer-use: desktop control is implemented only on macOS`.
+On macOS, grant Screen Recording to capture, Accessibility to post clicks and keys, and Automation for Finder. Desktop's overlay covers Screen Recording and Accessibility before overlay send; the plugin still fails capture or input with a message that names that TCC right if a right is missing at execute. Finder Automation prompts on first use. Windows and Linux still load; every backend method then throws `computer-use: desktop control is implemented only on macOS`.
 
 ### The tools
 
@@ -251,7 +251,7 @@ Prefix-stable while the sixteen definitions and order are unchanged. Registratio
 These limits are current package constraints. The plugin drives the real unsandboxed desktop.
 
 - **macOS only** — capture and HID input are implemented on Darwin; other platforms throw at execute.
-- **Screen Recording, Accessibility, and Automation TCC** — capture needs Screen Recording; clicks, typing, scroll, hotkeys, long-press, and drag need Accessibility; Finder folder lookup needs Automation for Finder. The plugin does not prompt for those rights.
+- **Screen Recording, Accessibility, and Automation TCC** — capture needs Screen Recording; clicks, typing, scroll, hotkeys, long-press, and drag need Accessibility; Finder folder lookup needs Automation for Finder. The plugin does not prompt. Desktop's overlay cover asks for Screen Recording and Accessibility before overlay `session/prompt`; Finder Automation still prompts at first Finder use. Missing rights at execute still name that TCC.
 - **No per-click approval** — installing or patching the plugin is the consent gate; a visual loop cannot ask on every action.
 - **Host chrome is omitted from the shot when it is not the frontmost window** — Web windows appear only when that window is frontmost. Desktop's main window stays capturable when it is next after overlay skip. The macOS overlay and observation-frame ribbon are omitted from Computer Use screenshots by ScreenCaptureKit exclude-id checks (display exclude plus crop) and the overlay is click-through for HID bursts, `open_app`, and their recapture via ack'd overlay-guard IPC. Foreground inspect and `listScreens` skip those overlay window ids, so the main window can appear as `<frontmost_app>`.
 - **Typing uses the string clipboard** — `input_text` pastes with Cmd+V and restores the previous string clipboard afterwards. Other clipboard types are not restored. `screenshot` replaces the pasteboard with the captured image and does not restore the previous clipboard.

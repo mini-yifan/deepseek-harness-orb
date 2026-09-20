@@ -36,7 +36,7 @@ const messages = {
   floatingBackgroundAgentSettings: 'Background Agent Settings',
   floatingNoModels: 'No models available.',
   floatingEffortDefault: 'Default',
-  floatingQuit: 'Quit DeepSeek Harness',
+  floatingQuit: 'Quit DeepSeek Orb',
   selectionToolbarEnable: 'Enable Selection Toolbar',
   selectionToolbarDisable: 'Disable Selection Toolbar',
   millifractionEnable: 'Enable millifraction coordinates',
@@ -178,7 +178,7 @@ describe('floating window context menu', () => {
       { type: 'separator' },
       { label: 'Open Main Window', click: onOpenMain },
       { type: 'separator' },
-      { label: 'Quit DeepSeek Harness', click: onQuit },
+      { label: 'Quit DeepSeek Orb', click: onQuit },
     ])
   })
 
@@ -192,7 +192,7 @@ describe('floating window context menu', () => {
     expect(template).toEqual([
       { label: 'Open Main Window', click: onOpenMain },
       { type: 'separator' },
-      { label: 'Quit DeepSeek Harness', click: onQuit },
+      { label: 'Quit DeepSeek Orb', click: onQuit },
     ])
   })
 
@@ -212,7 +212,7 @@ describe('floating window context menu', () => {
       { type: 'separator' },
       { label: 'Disable Selection Toolbar', click: onToggle },
       { type: 'separator' },
-      { label: 'Quit DeepSeek Harness', click: onQuit },
+      { label: 'Quit DeepSeek Orb', click: onQuit },
     ])
   })
 
@@ -234,7 +234,7 @@ describe('floating window context menu', () => {
       { label: 'Disable Selection Toolbar', click: onToggle },
       { label: 'Enable millifraction coordinates', click: onMillifraction },
       { type: 'separator' },
-      { label: 'Quit DeepSeek Harness', click: onQuit },
+      { label: 'Quit DeepSeek Orb', click: onQuit },
     ])
   })
 
@@ -287,7 +287,7 @@ describe('floating window context menu', () => {
       'Enable Selection Toolbar',
       'Disable millifraction coordinates',
       'separator',
-      'Quit DeepSeek Harness',
+      'Quit DeepSeek Orb',
     ])
     const overlay = template[2]
     expect(overlay?.submenu).toEqual([

@@ -27,6 +27,21 @@ export type OrbSettingsKey =
   | 'millifractionTitle'
   | 'millifractionDescription'
   | 'millifractionToggle'
+  | 'tccTitle'
+  | 'tccDescription'
+  | 'tccAppHint'
+  | 'tccScreenName'
+  | 'tccScreenReason'
+  | 'tccScreenPath'
+  | 'tccScreenOpen'
+  | 'tccAccessibilityName'
+  | 'tccAccessibilityReason'
+  | 'tccAccessibilityPath'
+  | 'tccAccessibilityOpen'
+  | 'tccStatusMissing'
+  | 'tccStatusGranted'
+  | 'tccStatusNeedsRelaunch'
+  | 'tccFooter'
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh: Record<OrbSettingsKey, string> = {
@@ -55,6 +70,21 @@ export const zh: Record<OrbSettingsKey, string> = {
   millifractionTitle: '千分比坐标',
   millifractionDescription: '新建 overlay 对话使用截图的 0–1000 比例。关闭后使用已附加图片的像素。更改此项会新建对话。',
   millifractionToggle: '使用千分比坐标',
+  tccTitle: 'Mac 权限',
+  tccDescription: 'Computer Use 需要屏幕录制与辅助功能。点按钮打开系统设置对应页。',
+  tccAppHint: '在列表里打开 {name}。',
+  tccScreenName: '屏幕录制',
+  tccScreenReason: '让 agent 看见当前窗口。',
+  tccScreenPath: '系统设置 → 隐私与安全性 → 屏幕录制',
+  tccScreenOpen: '打开「屏幕录制」设置',
+  tccAccessibilityName: '辅助功能',
+  tccAccessibilityReason: '让 agent 点击和输入。',
+  tccAccessibilityPath: '系统设置 → 隐私与安全性 → 辅助功能',
+  tccAccessibilityOpen: '打开「辅助功能」设置',
+  tccStatusMissing: '未开启',
+  tccStatusGranted: '已开启',
+  tccStatusNeedsRelaunch: '已开启，请退出后重开',
+  tccFooter: '打开开关后必须完全退出 {name} 再打开。只关主窗口无效。',
 }
 
 /** English dictionary, checked complete against the zh key set. */
@@ -84,4 +114,19 @@ export const en: Record<OrbSettingsKey, string> = {
   millifractionTitle: 'Millifraction coordinates',
   millifractionDescription: 'New overlay chats use 0–1000 fractions of the screenshot. Turn off to use pixels of the attached image. Changing this creates a new conversation.',
   millifractionToggle: 'Use millifraction coordinates',
+  tccTitle: 'Mac permissions',
+  tccDescription: 'Computer Use needs Screen Recording and Accessibility. Each button opens that System Settings pane.',
+  tccAppHint: 'In the list, turn on {name}.',
+  tccScreenName: 'Screen Recording',
+  tccScreenReason: 'Lets the agent see the current window.',
+  tccScreenPath: 'System Settings → Privacy & Security → Screen Recording',
+  tccScreenOpen: 'Open Screen Recording settings',
+  tccAccessibilityName: 'Accessibility',
+  tccAccessibilityReason: 'Lets the agent click and type.',
+  tccAccessibilityPath: 'System Settings → Privacy & Security → Accessibility',
+  tccAccessibilityOpen: 'Open Accessibility settings',
+  tccStatusMissing: 'Off',
+  tccStatusGranted: 'On',
+  tccStatusNeedsRelaunch: 'On — quit and reopen',
+  tccFooter: 'After you turn the switches on, quit {name} fully, then open it again. Closing the main window does not quit.',
 }

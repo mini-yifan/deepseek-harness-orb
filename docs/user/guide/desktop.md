@@ -2,7 +2,7 @@
 
 English | [中文](desktop.zh.md)
 
-The Desktop app opens an Electron main window on one Desktop Host, and on macOS it also opens a floating ball. The main window reuses the Web UI and creates standard sessions by default. The ball locks Computer Use; its chats and delegated coding sessions appear under the `dsh_orb` sidebar folder.
+The packaged Mac application is DeepSeek Orb. It opens an Electron main window on one Desktop Host, and on macOS it also opens a floating ball. The main window reuses the Web UI and creates standard sessions by default. The ball locks Computer Use; its chats and delegated coding sessions appear under the `dsh_orb` sidebar folder.
 
 ## Before you start
 
@@ -12,7 +12,7 @@ Install dependencies from the repository root. You need Node.js `^22.19 || >=24`
 pnpm install
 ```
 
-Model calls need a [DeepSeek API key](https://platform.deepseek.com/). The floating ball is created only on macOS; Windows still has a single main window. Computer Use capture needs Screen Recording, and clicks and typing need Accessibility; the app does not prompt for those rights.
+Model calls need a [DeepSeek API key](https://platform.deepseek.com/). The floating ball is created only on macOS; Windows still has a single main window. Computer Use needs Screen Recording and Accessibility: the first overlay expand covers the panel with those two rows, each button opens that System Settings pane, and the cover disappears when both rights are granted to this process. Overlay send stays in the composer until then. Finder Automation prompts on first use.
 
 ## Launch from source
 
@@ -28,7 +28,7 @@ That command builds the Host, client, Web frontend, and Electron shell, projects
 pnpm run start:desktop
 ```
 
-When launch succeeds, the main window first shows “Starting DeepSeek Harness…”, then loads the Web UI after Host ready. macOS also shows an always-on-top circular ball. Development mode writes Harness home to `apps/desktop/.desktop-build/development/home` and does not change the `$DSH_HOME` your CLI uses. `export DEEPSEEK_API_KEY=…` before launch reaches the Host; you can also save the key in the main window after it opens.
+When launch succeeds, the main window first shows “Starting DeepSeek Orb…”, then loads the Web UI after Host ready. macOS also shows an always-on-top circular ball. Development mode writes Harness home to `apps/desktop/.desktop-build/development/home` and does not change the `$DSH_HOME` your CLI uses. `export DEEPSEEK_API_KEY=…` before launch reaches the Host; you can also save the key in the main window after it opens.
 
 ## Configure a key and a workspace
 
@@ -38,7 +38,7 @@ The main window matches the [Web UI](./index.md): open **Settings → Models**, 
 
 New sessions in the main window default to standard, and the mode picker stays available. Coding, file edits, and commands follow the same path as the browser Web UI. Background sessions the ball delegates also appear in the sidebar under `dsh_orb`, where you can open them, continue chatting, and stop them. The main window keeps its current session when the ball starts or switches Computer Use chats.
 
-Closing the main window does not quit the app. The Dock icon stays after the ball appears. Quit from the Dock, with Cmd+Q, or from the ball’s right-click **Quit DeepSeek Harness**. The Dock icon or the ball’s right-click **Open Main Window** opens the main window again.
+Closing the main window does not quit the app. The Dock icon stays after the ball appears. Quit from the Dock, with Cmd+Q, or from the ball’s right-click **Quit DeepSeek Orb**. The Dock icon or the ball’s right-click **Open Main Window** opens the main window again.
 
 ## Use the macOS floating ball
 
@@ -46,7 +46,7 @@ The ball is created only after Host ready, on the primary display’s right edge
 
 After a drag-select in another app, a toolbar offers **Search** (Bing in the default browser), **Translate** (Chinese or English into the ball’s current Computer Use chat, no first-frame screenshot), and **Send to Agent** (attaches the quote as a one-line chip on the overlay composer; Enter sends your instruction plus the full quote as a normal Computer Use turn with a first-frame screenshot). New and other overlay buttons keep the chip until that first Enter or the chip’s dismiss control. Any key, a click outside those three actions, a right-click, a middle-click, or a scroll dismisses the toolbar. Right-click the ball to turn the toolbar off. The Mac must allow Accessibility; the first failed read opens System Settings.
 
-The input placeholder is “Ask the desktop agent…”. Sends go to the Computer Use session. The ball defaults to DeepSeek-V41-Flash at Max thinking until you change **Floating Agent Settings** or Settings → **Floating ball**; that choice does not change the main window’s New Chat model. Stop cancels only that Computer Use session, not sidebar standard sessions. Right-click the ball for **Open Main Window**, **Floating Agent Settings** and **Background Agent Settings** (independent model and reasoning effort; background apply is for new `code_agent` sessions only), enable or disable the selection toolbar, enable or disable millifraction coordinates (confirming creates a new overlay chat; the open chat keeps its encoding), and **Quit DeepSeek Harness**; only an explicit Quit ends the process. Settings → **Floating ball** also sets a custom GIF, PNG, or WebP ball image (2 MB cap), restore-to-default, and millifraction coordinates for new overlay chats; Access, Open Main Window, and Quit stay on the right-click menu.
+The input placeholder is “Ask the desktop agent…”. Sends go to the Computer Use session. The ball defaults to DeepSeek-V41-Flash at Max thinking until you change **Floating Agent Settings** or Settings → **Floating ball**; that choice does not change the main window’s New Chat model. Stop cancels only that Computer Use session, not sidebar standard sessions. Right-click the ball for **Open Main Window**, **Floating Agent Settings** and **Background Agent Settings** (independent model and reasoning effort; background apply is for new `code_agent` sessions only), enable or disable the selection toolbar, enable or disable millifraction coordinates (confirming creates a new overlay chat; the open chat keeps its encoding), and **Quit DeepSeek Orb**; only an explicit Quit ends the process. Settings → **Floating ball** also sets a custom GIF, PNG, or WebP ball image (2 MB cap), restore-to-default, millifraction coordinates for new overlay chats, and macOS Screen Recording / Accessibility status; Access, Open Main Window, and Quit stay on the right-click menu.
 
 The ball’s Computer Use bash and filesystem, and new background `code_agent` sessions on `dsh_orb` or a subdirectory of it, follow the Access chip on the ball (default Full access, stored as a Desktop preference). A background session on a named folder outside that tree stays ordinary Workspace Write; that agent also answers its own approval and ask-user prompts. Changing Access in the main window applies while you keep chatting there; sending from the ball writes the chip on the ball back onto that agent.
 

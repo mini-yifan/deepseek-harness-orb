@@ -23,6 +23,10 @@ it('exposes overlay expand, clamp, dsh_orb workspace, and selection IPC', async 
     onAvatar: expect.any(Function),
     overlayPermission: expect.any(Function),
     setOverlayPermission: expect.any(Function),
+    tccStatus: expect.any(Function),
+    openTcc: expect.any(Function),
+    relaunch: expect.any(Function),
+    onTccStatus: expect.any(Function),
     onSelectionPrompt: expect.any(Function),
     onSelectionAttach: expect.any(Function),
     onCreateSession: expect.any(Function),
@@ -46,6 +50,9 @@ it('exposes overlay expand, clamp, dsh_orb workspace, and selection IPC', async 
   await api.floating.overlayModel()
   await api.floating.overlayPermission()
   await api.floating.setOverlayPermission('workspace-write')
+  await api.floating.tccStatus()
+  await api.floating.openTcc('screen')
+  await api.floating.relaunch()
   await api.selection.search()
   await api.selection.interact()
   await api.selection.setContentSize({ width: 280, height: 120 })
@@ -58,6 +65,9 @@ it('exposes overlay expand, clamp, dsh_orb workspace, and selection IPC', async 
     [DESKTOP_IPC.floatingOverlayModelGet],
     [DESKTOP_IPC.floatingOverlayPermissionGet],
     [DESKTOP_IPC.floatingOverlayPermissionSet, 'workspace-write'],
+    [DESKTOP_IPC.floatingTccGet],
+    [DESKTOP_IPC.floatingTccOpen, 'screen'],
+    [DESKTOP_IPC.floatingTccRelaunch],
     [DESKTOP_IPC.selectionSearch],
     [DESKTOP_IPC.selectionInteract],
     [DESKTOP_IPC.selectionSetContentSize, { width: 280, height: 120 }],

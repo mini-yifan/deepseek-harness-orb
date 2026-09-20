@@ -2,6 +2,7 @@
 
 import { contextBridge, ipcRenderer } from 'electron'
 import { DESKTOP_IPC, type DshDesktopApi, type DesktopUpdateState, type SelectionAttachPayload, type SelectionPromptPayload, type SelectionToolbarState } from './ipc.ts'
+import type { TccStatus } from './tcc.ts'
 import type { DesktopBackendState } from './backend-controller.ts'
 import type { OrbAgentModelSelection } from './orb-agent-models.ts'
 import type { OrbPermissionPreset } from './orb-permission.ts'
@@ -87,6 +88,16 @@ const api: DshDesktopApi = {
       }
       ipcRenderer.on(DESKTOP_IPC.floatingCreateSession, handle)
       return () => { ipcRenderer.off(DESKTOP_IPC.floatingCreateSession, handle) }
+    },
+    tccStatus: () => ipcRenderer.invoke(DESKTOP_IPC.floatingTccGet) as Promise<TccStatus>,
+    openTcc: right => ipcRenderer.invoke(DESKTOP_IPC.floatingTccOpen, right) as Promise<TccStatus>,
+    relaunch: () => ipcRenderer.invoke(DESKTOP_IPC.floatingTccRelaunch) as Promise<void>,
+    onTccStatus(listener) {
+      const handle = (_event: Electron.IpcRendererEvent, status: TccStatus): void => {
+        listener(status)
+      }
+      ipcRenderer.on(DESKTOP_IPC.floatingTcc, handle)
+      return () => { ipcRenderer.off(DESKTOP_IPC.floatingTcc, handle) }
     },
   },
   selection: {

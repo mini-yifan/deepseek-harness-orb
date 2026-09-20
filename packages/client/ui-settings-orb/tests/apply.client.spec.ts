@@ -99,6 +99,12 @@ describe('ui-settings-orb apply', () => {
       background: { provider: 'deepseek-official', model: 'deepseek-chat' },
       selectionEnabled: true,
       millifractionEnabled: true,
+      tcc: {
+        applicable: true,
+        appName: 'DeepSeek Orb',
+        screen: 'missing',
+        accessibility: 'missing',
+      },
     }
     const api = {
       protocolVersion: 1 as const,
@@ -111,6 +117,7 @@ describe('ui-settings-orb apply', () => {
         setBackgroundModel: vi.fn(async () => undefined),
         setSelectionEnabled: vi.fn(async () => undefined),
         setMillifractionEnabled: vi.fn(async (): Promise<OrbMillifractionWriteResult> => ({ cancelled: true })),
+        openTcc: vi.fn(async () => snapshot),
       },
     }
     vi.stubGlobal('dshDesktop', api)
@@ -129,6 +136,12 @@ describe('ui-settings-orb apply', () => {
       background: snapshot.background,
       selectionEnabled: true,
       millifractionEnabled: true,
+      tcc: {
+        applicable: true,
+        appName: 'DeepSeek Orb',
+        screen: 'missing',
+        accessibility: 'missing',
+      },
     })
     await section.setOverlayModel({ provider: 'deepseek-official', model: 'deepseek-chat' })
     await section.setBackgroundModel({
@@ -165,6 +178,8 @@ describe('ui-settings-orb apply', () => {
     await section.setMillifractionEnabled(false)
     expect(section.hooks.orbSettings.getSnapshot().millifractionEnabled).toBe(false)
     expect(section.hooks.orbSettings.getSnapshot().busy).toBe(false)
+    await section.openTcc('screen')
+    expect(api.orb.openTcc).toHaveBeenCalledWith('screen')
   })
 
   it('marks the page unavailable without the Desktop app bridge', async () => {
@@ -179,6 +194,7 @@ describe('ui-settings-orb apply', () => {
     await section.setOverlayModel({ provider: 'deepseek-official', model: 'deepseek-chat' })
     await section.setSelectionEnabled(false)
     await section.setMillifractionEnabled(false)
+    await section.openTcc('screen')
     expect(section.hooks.orbSettings.getSnapshot().status).toBe('unavailable')
   })
 
@@ -190,6 +206,12 @@ describe('ui-settings-orb apply', () => {
       background: { provider: 'deepseek-official', model: 'deepseek-chat' },
       selectionEnabled: true,
       millifractionEnabled: true,
+      tcc: {
+        applicable: true,
+        appName: 'DeepSeek Orb',
+        screen: 'missing',
+        accessibility: 'missing',
+      },
     }
     const api = {
       protocolVersion: 1 as const,
@@ -202,6 +224,7 @@ describe('ui-settings-orb apply', () => {
         setBackgroundModel: vi.fn(async () => undefined),
         setSelectionEnabled: vi.fn(async () => { throw new Error('selection failed') }),
         setMillifractionEnabled: vi.fn(async () => { throw new Error('millifraction failed') }),
+        openTcc: vi.fn(async () => { throw new Error('tcc failed') }),
       },
     }
     vi.stubGlobal('dshDesktop', api)
@@ -228,6 +251,8 @@ describe('ui-settings-orb apply', () => {
     expect(section.hooks.orbSettings.getSnapshot().error).toBe('selection failed')
     await section.setMillifractionEnabled(false)
     expect(section.hooks.orbSettings.getSnapshot().error).toBe('millifraction failed')
+    await section.openTcc('accessibility')
+    expect(section.hooks.orbSettings.getSnapshot().error).toBe('tcc failed')
     api.orb.snapshot.mockRejectedValueOnce('snapshot failed')
     await section.load()
     expect(section.hooks.orbSettings.getSnapshot().error).toBe('snapshot failed')

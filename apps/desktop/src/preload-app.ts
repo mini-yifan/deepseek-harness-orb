@@ -47,6 +47,7 @@ const app: DshDesktopAppApi = {
     setMillifractionEnabled: (enabled: boolean) => (
       ipcRenderer.invoke(DESKTOP_IPC.orbSetMillifractionEnabled, enabled) as Promise<OrbMillifractionWriteResult>
     ),
+    openTcc: right => ipcRenderer.invoke(DESKTOP_IPC.orbOpenTcc, right) as Promise<OrbSettingsSnapshot>,
   },
 }
 

@@ -15,6 +15,21 @@ export interface OrbSettingsSnapshot {
   readonly background: OrbAgentModelSelection
   readonly selectionEnabled: boolean
   readonly millifractionEnabled: boolean
+  readonly tcc: TccStatus
+}
+
+/** One macOS privacy right Computer Use needs before capture or HID. */
+export type TccRight = 'screen' | 'accessibility'
+
+/** Whether that right is off, on for this process, or on in Settings but this process still cannot use it. */
+export type TccRightState = 'missing' | 'granted' | 'needsRelaunch'
+
+/** Snapshot the overlay gate and Settings page render. */
+export interface TccStatus {
+  readonly applicable: boolean
+  readonly appName: string
+  readonly screen: TccRightState
+  readonly accessibility: TccRightState
 }
 
 /** Result of confirming a millifraction-coordinates default change. */
@@ -42,6 +57,7 @@ export interface DshDesktopAppApi {
     setBackgroundModel(selection: OrbAgentModelSelection): Promise<void>
     setSelectionEnabled(enabled: boolean): Promise<void>
     setMillifractionEnabled(enabled: boolean): Promise<OrbMillifractionWriteResult>
+    openTcc(right: TccRight): Promise<OrbSettingsSnapshot>
   }
 }
 

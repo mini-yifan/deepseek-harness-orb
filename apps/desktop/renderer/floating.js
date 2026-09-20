@@ -240,6 +240,37 @@ async function main() {
   selectionChipDismiss.textContent = '\u00d7'
   selectionChipDismiss.setAttribute('aria-label', messages.floatingSelectionDismiss)
   selectionChipDismiss.title = messages.floatingSelectionDismiss
+  const tccGate = document.querySelector('#tcc-gate')
+  const tccDismiss = document.querySelector('#tcc-dismiss')
+  const tccTitle = document.querySelector('#tcc-title')
+  const tccApp = document.querySelector('#tcc-app')
+  const tccScreenName = document.querySelector('#tcc-screen-name')
+  const tccScreenReason = document.querySelector('#tcc-screen-reason')
+  const tccScreenPath = document.querySelector('#tcc-screen-path')
+  const tccScreenStatus = document.querySelector('#tcc-screen-status')
+  const tccScreenOpen = document.querySelector('#tcc-screen-open')
+  const tccAccessibilityName = document.querySelector('#tcc-accessibility-name')
+  const tccAccessibilityReason = document.querySelector('#tcc-accessibility-reason')
+  const tccAccessibilityPath = document.querySelector('#tcc-accessibility-path')
+  const tccAccessibilityStatus = document.querySelector('#tcc-accessibility-status')
+  const tccAccessibilityOpen = document.querySelector('#tcc-accessibility-open')
+  const tccFooter = document.querySelector('#tcc-footer')
+  const tccLater = document.querySelector('#tcc-later')
+  const tccRelaunch = document.querySelector('#tcc-relaunch')
+  tccTitle.textContent = messages.tccTitle
+  tccScreenName.textContent = messages.tccScreenName
+  tccScreenReason.textContent = messages.tccScreenReason
+  tccScreenPath.textContent = messages.tccScreenPath
+  tccScreenOpen.textContent = messages.tccScreenOpen
+  tccAccessibilityName.textContent = messages.tccAccessibilityName
+  tccAccessibilityReason.textContent = messages.tccAccessibilityReason
+  tccAccessibilityPath.textContent = messages.tccAccessibilityPath
+  tccAccessibilityOpen.textContent = messages.tccAccessibilityOpen
+  tccLater.textContent = messages.tccLater
+  tccRelaunch.textContent = messages.tccRelaunch
+  tccDismiss.textContent = '\u00d7'
+  tccDismiss.setAttribute('aria-label', messages.tccDismiss)
+  tccDismiss.title = messages.tccDismiss
   questionCancel.textContent = '\u00d7'
   questionCancel.setAttribute('aria-label', messages.floatingQuestionCancel)
   questionCancel.title = messages.floatingQuestionCancel
@@ -265,6 +296,7 @@ async function main() {
   let skipClick = false
   let collapsing = false
   let pinned = false
+  let tccGateVisible = false
   let expanded = false
   let running = false
   let pointer = undefined
@@ -324,6 +356,10 @@ async function main() {
     return currentPending() !== undefined
   }
 
+  function gatingTcc() {
+    return tccGateVisible
+  }
+
   function hasSelectionChip() {
     return attachedSelection !== ''
   }
@@ -341,7 +377,7 @@ async function main() {
   function syncGif() {
     if (pageClosed()) return
     const gif = document.querySelector('#ball-gif')
-    const play = expanded || running || asking() || hasSelectionChip()
+    const play = expanded || running || asking() || gatingTcc() || hasSelectionChip()
     if (play) {
       if (gif.dataset.mode !== 'play') {
         gif.dataset.mode = 'play'
@@ -390,9 +426,10 @@ async function main() {
       ensureTranscriptFrame()
       stop.hidden = !running
       syncGif()
+      await refreshTccGate({ revealIfMissing: true })
       return
     }
-    if (!force && (pinned || running || asking() || hasSelectionChip())) return
+    if (!force && (pinned || running || asking() || gatingTcc() || hasSelectionChip())) return
     expanded = false
     document.body.classList.remove('expanded')
     stop.hidden = true
@@ -415,7 +452,7 @@ async function main() {
   }
 
   function scheduleCollapse() {
-    if (pinned || running || asking() || dragging || hasSelectionChip()) return
+    if (pinned || running || asking() || gatingTcc() || dragging || hasSelectionChip()) return
     if (collapseTimer !== undefined) clearTimeout(collapseTimer)
     collapseTimer = setTimeout(() => {
       collapseTimer = undefined
@@ -549,7 +586,65 @@ async function main() {
     await api.floating.setOverlayPermission(overlayPermission, id)
   }
 
+  function tccReady(status) {
+    return status.applicable === false || (status.screen === 'granted' && status.accessibility === 'granted')
+  }
+
+  function tccStatusLabel(state) {
+    if (state === 'granted') return messages.tccStatusGranted
+    if (state === 'needsRelaunch') return messages.tccStatusNeedsRelaunch
+    return messages.tccStatusMissing
+  }
+
+  function hideTccGate() {
+    tccGateVisible = false
+    if (pageClosed()) return
+    tccGate.hidden = true
+    document.body.classList.remove('tcc-gating')
+    syncGif()
+  }
+
+  function showTccGate(status) {
+    tccGateVisible = true
+    if (pageClosed()) return
+    const name = status.appName
+    tccApp.textContent = messages.tccAppHint.replaceAll('{name}', name)
+    tccFooter.textContent = messages.tccFooter.replaceAll('{name}', name)
+    tccScreenStatus.textContent = tccStatusLabel(status.screen)
+    tccAccessibilityStatus.textContent = tccStatusLabel(status.accessibility)
+    tccScreenOpen.hidden = status.screen === 'granted'
+    tccAccessibilityOpen.hidden = status.accessibility === 'granted'
+    const relaunch = status.screen === 'needsRelaunch' || status.accessibility === 'needsRelaunch'
+    tccRelaunch.hidden = !relaunch
+    tccGate.hidden = false
+    document.body.classList.add('tcc-gating')
+    syncGif()
+  }
+
+  async function refreshTccGate(options = {}) {
+    if (typeof api.floating.tccStatus !== 'function') return true
+    const status = await api.floating.tccStatus()
+    if (tccReady(status)) {
+      hideTccGate()
+      return true
+    }
+    if (options.forceShow || options.revealIfMissing || tccGateVisible) showTccGate(status)
+    return false
+  }
+
+  async function openTccRight(right) {
+    if (typeof api.floating.openTcc !== 'function') return
+    const status = await api.floating.openTcc(right)
+    if (tccReady(status)) hideTccGate()
+    else showTccGate(status)
+  }
+
   async function promptOverlay(text) {
+    const ready = await refreshTccGate({ forceShow: true })
+    if (!ready) {
+      await setExpanded(true, true)
+      return
+    }
     const id = await ensureSession()
     setRunning(true)
     try {
@@ -1049,6 +1144,17 @@ async function main() {
     await createOrbSession()
     await refreshOverlay()
   })
+  api.floating.onTccStatus?.(status => {
+    if (tccReady(status)) hideTccGate()
+    else if (tccGateVisible) showTccGate(status)
+  })
+  tccDismiss.addEventListener('click', () => { hideTccGate() })
+  tccLater.addEventListener('click', () => { hideTccGate() })
+  tccScreenOpen.addEventListener('click', () => { void openTccRight('screen') })
+  tccAccessibilityOpen.addEventListener('click', () => { void openTccRight('accessibility') })
+  tccRelaunch.addEventListener('click', () => {
+    if (typeof api.floating.relaunch === 'function') void api.floating.relaunch()
+  })
   api.floating.onOverlayModel(selection => {
     if (sessionId === undefined) return
     void selectOverlayModel(sessionId, selection)
@@ -1057,6 +1163,11 @@ async function main() {
     event.preventDefault()
     const instruction = promptText(prompt).trim()
     if (instruction === '') return
+    const ready = await refreshTccGate({ forceShow: true })
+    if (!ready) {
+      await setExpanded(true, true)
+      return
+    }
     clearPrompt()
     const selection = attachedSelection
     if (selection !== '') setAttachedSelection('')

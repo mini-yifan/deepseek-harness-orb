@@ -13,6 +13,8 @@ import {
   type OrbAgentModelSelection,
   type OrbAvatarWriteError,
   type OrbSettingsSnapshot,
+  type TccRight,
+  type TccStatus,
 } from './desktop-api.ts'
 
 /** Host-generation catalog fields the overlay model pickers read. */
@@ -50,6 +52,7 @@ export interface OrbSettingsState {
   background: OrbAgentModelSelection
   selectionEnabled: boolean
   millifractionEnabled: boolean
+  tcc: TccStatus
   catalog: OrbModelCatalog | undefined
   busy: boolean
 }
@@ -64,6 +67,7 @@ const IDLE: OrbSettingsState = {
   background: { provider: '', model: '' },
   selectionEnabled: true,
   millifractionEnabled: true,
+  tcc: { applicable: false, appName: '', screen: 'granted', accessibility: 'granted' },
   catalog: undefined,
   busy: false,
 }
@@ -90,6 +94,8 @@ export interface OrbSettingsSectionInjected {
   setSelectionEnabled: (enabled: boolean) => Promise<void>
   /** Confirm, then persist millifraction-coordinates enablement and create a new overlay chat. */
   setMillifractionEnabled: (enabled: boolean) => Promise<void>
+  /** Open the matching macOS System Settings pane for Screen Recording or Accessibility. */
+  openTcc: (right: TccRight) => Promise<void>
 }
 
 /** Loads Desktop orb preferences and the Host model catalog. */
@@ -241,6 +247,27 @@ export class OrbSettingsController {
     }
   }
 
+  /**
+   * Open Screen Recording or Accessibility in System Settings and refresh status.
+   * @param right - the TCC pane to open.
+   * @returns after Desktop writes the snapshot.
+   */
+  async openTcc(right: TccRight): Promise<void> {
+    const api = this.requireApi()
+    if (api === undefined) return
+    this.store.set({ ...this.store.getSnapshot(), busy: true })
+    try {
+      this.applySnapshot(await api.orb.openTcc(right))
+    } catch (error) {
+      this.store.set({
+        ...this.store.getSnapshot(),
+        status: 'error',
+        error: errorMessage(error),
+        busy: false,
+      })
+    }
+  }
+
   private requireApi(): DshDesktopAppApi | undefined {
     const api = readDesktopAppApi()
     if (api === undefined) {
@@ -263,6 +290,7 @@ export class OrbSettingsController {
       background: snapshot.background,
       selectionEnabled: snapshot.selectionEnabled,
       millifractionEnabled: snapshot.millifractionEnabled,
+      tcc: snapshot.tcc,
     })
   }
 
@@ -281,6 +309,7 @@ export class OrbSettingsController {
       background: snapshot.background,
       selectionEnabled: snapshot.selectionEnabled,
       millifractionEnabled: snapshot.millifractionEnabled,
+      tcc: snapshot.tcc,
       catalog,
       busy: false,
     })

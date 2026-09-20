@@ -54,7 +54,7 @@ export function createElectronBuilderConfig(
   const buildPaths = desktopTargetBuildPaths(resolveDesktopBuildTarget(env, hostPlatform, hostArch))
   return {
     appId,
-    productName: 'DeepSeek Harness',
+    productName: 'DeepSeek Orb',
     artifactName: 'deepseek-harness-${version}-${os}-${arch}.${ext}',
     directories: { output: unsigned ? join(buildPaths.root, 'unsigned-artifacts') : buildPaths.artifacts },
     asar: true,
@@ -77,6 +77,10 @@ export function createElectronBuilderConfig(
       identity: macOSSigning?.signingIdentity,
       forceCodeSigning: true,
       hardenedRuntime: true,
+      extendInfo: {
+        NSAppleEventsUsageDescription:
+          'DeepSeek Orb reads the frontmost Finder folder when you refer to this folder. DeepSeek Orb 在你说「这里」或「当前文件夹」时读取访达前台窗口路径。',
+      },
       // Native runtime files are pre-signed; PAK resources are sealed by their enclosing bundle.
       signIgnore: ['/Contents/Resources/dsh(?:/|$)', '\\.pak$'],
       notarize: true,
