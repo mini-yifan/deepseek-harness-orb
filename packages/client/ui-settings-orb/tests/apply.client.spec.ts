@@ -15,7 +15,11 @@ import { apply, inject } from '@deepseek-ai/dsh-client-ui-settings-orb/client'
 import { OrbSettingsSection } from '../src/client/OrbSettingsSection.tsx'
 import type { OrbSettingsSectionInjected } from '../src/client/section-store.ts'
 import { apply as hostApply } from '../src/index.ts'
-import { readDesktopAppApi, type OrbMillifractionWriteResult } from '../src/client/desktop-api.ts'
+import {
+  readDesktopAppApi,
+  type OrbMillifractionWriteResult,
+  type OrbSettingsSnapshot,
+} from '../src/client/desktop-api.ts'
 
 const CATALOG = {
   ok: true as const,
@@ -92,7 +96,7 @@ describe('ui-settings-orb apply', () => {
   })
 
   it('loads the Desktop snapshot and Host catalog through the injected face', async () => {
-    const snapshot = {
+    const snapshot: OrbSettingsSnapshot = {
       supported: true,
       avatarUrl: 'dsh-app://app/orb-avatar?v=1',
       overlay: { provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'max' },
@@ -199,7 +203,7 @@ describe('ui-settings-orb apply', () => {
   })
 
   it('records load, write, and catalog failures', async () => {
-    const snapshot = {
+    const snapshot: OrbSettingsSnapshot = {
       supported: true,
       avatarUrl: 'dsh-app://app/orb-avatar?v=1',
       overlay: { provider: 'deepseek-official', model: 'deepseek-flash' },
