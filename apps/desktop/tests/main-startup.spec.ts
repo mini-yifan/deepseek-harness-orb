@@ -799,8 +799,8 @@ describe('desktop floating overlay', () => {
       DESKTOP_IPC.floatingTcc,
       expect.objectContaining({ applicable: true }),
     )
-    systemPreferences.getMediaAccessStatus.mockReturnValue('granted')
-    systemPreferences.isTrustedAccessibilityClient.mockReturnValue(true)
+    vi.mocked(systemPreferences.getMediaAccessStatus).mockReturnValue('granted')
+    vi.mocked(systemPreferences.isTrustedAccessibilityClient).mockReturnValue(true)
     expect(await invokeFloating(DESKTOP_IPC.floatingTccGet)).toMatchObject({
       screen: 'granted',
       accessibility: 'granted',
