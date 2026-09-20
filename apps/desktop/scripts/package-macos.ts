@@ -72,7 +72,7 @@ export async function packageMacOSArtifacts(
   const { arch, version, artifactsRoot, environment } = request
   const expected = resolveMacOSSigningEnvironment(environment)
   const credentials = resolveMacOSNotarizationEnvironment(environment)
-  const appPath = join(artifactsRoot, `mac${getArchSuffix(Arch[arch])}`, 'DeepSeek Harness.app')
+  const appPath = join(artifactsRoot, `mac${getArchSuffix(Arch[arch])}`, 'DeepSeek Orb.app')
   const root = await mkdtemp(join(dirname(artifactsRoot), 'notarization-'))
   const zipApp = join(root, 'zip', basename(appPath))
   const dmgApp = join(root, 'dmg', basename(appPath))

@@ -57,7 +57,7 @@ it('shows English loading and recovery actions without a Host document', async (
   const page = startup()
   await expect.poll(() => page.element('#title').textContent).not.toBe('')
   expect(page.copy()).toMatchInlineSnapshot(`
-    "Starting DeepSeek Harness…
+    "Starting DeepSeek Orb…
     Your workspace will open when it is ready."
   `)
   expect(page.element('main').getAttribute('aria-busy')).toBe('true')
@@ -67,7 +67,7 @@ it('shows English loading and recovery actions without a Host document', async (
   expect(page.button('#disable-plugins').disabled).toBe(true)
   page.publish({ phase: 'error', profileRecovery: true, message: 'Plugin failed to load' })
   expect(page.copy()).toMatchInlineSnapshot(`
-    "DeepSeek Harness could not start
+    "DeepSeek Orb could not start
     Choose a recovery action below. Disabling third-party plugins retains their files.
     Reset Desktop deletes all Desktop profile configuration and third-party plugins without a backup, then starts a fresh profile. Shared tasks and settings are retained.
     If application files are missing or damaged, close the application and reinstall it. Your tasks are stored separately.
@@ -90,12 +90,12 @@ it('shows Chinese loading and recovery copy', async () => {
   await expect.poll(() => page.element('#title').textContent).not.toBe('')
   expect(page.document.documentElement.lang).toBe('zh-CN')
   expect(page.copy()).toMatchInlineSnapshot(`
-    "正在启动 DeepSeek Harness…
+    "正在启动 DeepSeek Orb…
     准备就绪后将自动打开工作区。"
   `)
   page.publish({ phase: 'error', profileRecovery: true, message: '插件加载失败' })
   expect(page.copy()).toMatchInlineSnapshot(`
-    "DeepSeek Harness 无法启动
+    "DeepSeek Orb 无法启动
     请选择下方的恢复操作。禁用第三方插件会保留插件文件。
     重置 Desktop 会删除桌面端的全部 profile 配置和第三方插件，不保留备份，然后重新初始化并启动。共享任务和设置会保留。
     如果应用文件缺失或损坏，请关闭应用并重新安装。任务数据存储在独立位置。

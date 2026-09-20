@@ -58,7 +58,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-experimental-tool-computer-use)是每个受支持字段及其 JSDoc 的穷尽式真源。
 
-在 macOS 上，截屏需要屏幕录制权限，发送点击与按键需要辅助功能权限，Finder 当前文件夹查询需要访达的自动化权限。缺少屏幕录制或辅助功能时，捕获或输入会失败，并在消息中指出对应的 TCC 权限。Windows 与 Linux 仍会加载；随后每个后端方法都会抛出 `computer-use: desktop control is implemented only on macOS`。
+在 macOS 上，截屏需要屏幕录制权限，发送点击与按键需要辅助功能权限，Finder 当前文件夹查询需要访达的自动化权限。Desktop overlay 会在 overlay 发送前盖住屏幕录制与辅助功能；若执行时仍缺权限，捕获或输入会失败，并在消息中指出对应的 TCC 权限。访达自动化在第一次使用时弹出。Windows 与 Linux 仍会加载；随后每个后端方法都会抛出 `computer-use: desktop control is implemented only on macOS`。
 
 ### 工具
 
@@ -251,7 +251,7 @@ When a user message starts with "Desktop selection. Answer in this chat only. Do
 这些限制是当前的包约束。该插件驱动真实的未沙箱化桌面。
 
 - **仅 macOS** — 捕获与 HID 输入在 Darwin 上实现；其他平台在执行时抛错。
-- **屏幕录制、辅助功能与自动化 TCC** — 捕获需要屏幕录制；点击、输入、滚动、热键、长按与拖拽需要辅助功能；Finder 当前文件夹查询需要访达的自动化权限。插件不会提示授予这些权限。
+- **屏幕录制、辅助功能与自动化 TCC** — 捕获需要屏幕录制；点击、输入、滚动、热键、长按与拖拽需要辅助功能；Finder 当前文件夹查询需要访达的自动化权限。插件不会提示授予这些权限。Desktop overlay 会在 overlay `session/prompt` 前盖住屏幕录制与辅助功能；访达自动化仍在第一次使用访达时弹出。执行时缺权限仍会点名对应 TCC。
 - **没有逐次点击批准** — 安装或 patch 插件就是同意门槛；视觉循环不能在每个动作上询问。
 - **宿主 chrome 不是最前窗口时不会进图** — Web 窗口只在它是最前窗口时出现。Desktop 主窗口在 overlay 跳过后仍可被截到。macOS overlay 与观察框彩带由 ScreenCaptureKit 的 exclude id 校验从 Computer Use 截图中省略（display exclude 加裁切），overlay 在 HID 突发、`open_app` 及其 recapture 期间通过带确认的 overlay-guard IPC 点击穿透。前台检查与 `listScreens` 都跳过这些 overlay 窗口 id，因此主窗口可以出现在 `<frontmost_app>` 里。
 - **输入会使用字符串剪贴板** — `input_text` 通过 Cmd+V 粘贴，并在之后恢复先前的字符串剪贴板。其他剪贴板类型不会被恢复。`screenshot` 会用捕获的图片替换剪贴板，不恢复先前内容。

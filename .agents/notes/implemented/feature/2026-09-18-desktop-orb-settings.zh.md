@@ -14,7 +14,7 @@ Desktop Host 组合插入 `@deepseek-ai/dsh-client-ui-settings-orb`，作为 `se
 
 主窗口是 `dsh-app://app`。[`preload-app.ts`](../../../../apps/desktop/src/preload-app.ts) 向该 hostname 暴露 `dshDesktop.orb`，并把启动桥留在 `shell`。新 IPC 使用 `assertDesktopSender(..., ['app'])`。非 darwin 的写入抛出 `dsh desktop: floating ball settings require macOS`。
 
-自定义图片拷进配置目录的 `orb-avatar` 与 `orb-avatar.json`（GIF/PNG/WebP，2 MB 上限）。`dsh-app://app/orb-avatar` 与 `dsh-app://shell/orb-avatar` 提供该文件或 `deepseek-avatar-square.gif`。叠加与后台模型仍写入 `orb-agent-models.json`；划词开关调用 `SelectionToolbarController.setEnabled`。千分比坐标卡片在 Electron main 里确认，由 [Overlay 会话上的 Computer Use 千分比与像素坐标模式](2026-09-19-computer-use-session-coordinate-modes.zh.md) 拥有。Access、打开主窗口和退出留在原生菜单。目录读取仍走 Host `session/modelCatalog`。
+自定义图片拷进配置目录的 `orb-avatar` 与 `orb-avatar.json`（GIF/PNG/WebP，2 MB 上限）。`dsh-app://app/orb-avatar` 与 `dsh-app://shell/orb-avatar` 提供该文件或 `deepseek-avatar-square.gif`。叠加与后台模型仍写入 `orb-agent-models.json`；划词开关调用 `SelectionToolbarController.setEnabled`。千分比坐标卡片在 Electron main 里确认，由 [Overlay 会话上的 Computer Use 千分比与像素坐标模式](2026-09-19-computer-use-session-coordinate-modes.zh.md) 拥有。Access、打开主窗口和退出留在原生菜单。目录读取仍走 Host `session/modelCatalog`。千分比卡片后的 macOS 屏幕录制与辅助功能卡由 [Desktop Orb TCC 门](2026-09-20-desktop-orb-tcc-gate.zh.md) 拥有。
 
 ## 考虑过的替代方案
 

@@ -51,6 +51,7 @@ export function apply(ctx: ClientContext): void {
     setBackgroundModel: selection => controller.setBackgroundModel(selection),
     setSelectionEnabled: enabled => controller.setSelectionEnabled(enabled),
     setMillifractionEnabled: enabled => controller.setMillifractionEnabled(enabled),
+    openTcc: right => controller.openTcc(right),
   })
 
   ctx.slots.inject('settings.section', () => ctx.slots.register({

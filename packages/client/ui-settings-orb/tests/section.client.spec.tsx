@@ -22,6 +22,12 @@ const READY: OrbSettingsState = {
   background: { provider: 'deepseek-official', model: 'deepseek-chat' },
   selectionEnabled: true,
   millifractionEnabled: true,
+  tcc: {
+    applicable: true,
+    appName: 'DeepSeek Orb',
+    screen: 'missing',
+    accessibility: 'missing',
+  },
   catalog: {
     groups: [{
       id: 'deepseek-official',
@@ -52,6 +58,7 @@ function mount(state: Partial<OrbSettingsState> = {}) {
     setBackgroundModel: vi.fn(() => Promise.resolve()),
     setSelectionEnabled: vi.fn(() => Promise.resolve()),
     setMillifractionEnabled: vi.fn(() => Promise.resolve()),
+    openTcc: vi.fn(() => Promise.resolve()),
   }
   render(<OrbSettingsSection {...({
     ...actions,
@@ -83,6 +90,8 @@ describe('OrbSettingsSection', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'High' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Enable the selection toolbar' }))
     fireEvent.click(screen.getByRole('switch', { name: 'Use millifraction coordinates' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open Screen Recording settings' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open Accessibility settings' }))
     expect(actions.pickAvatar).toHaveBeenCalledTimes(1)
     expect(actions.restoreAvatar).toHaveBeenCalledTimes(1)
     expect(actions.setOverlayModel).toHaveBeenNthCalledWith(1, {
@@ -96,6 +105,8 @@ describe('OrbSettingsSection', () => {
     })
     expect(actions.setSelectionEnabled).toHaveBeenCalledWith(false)
     expect(actions.setMillifractionEnabled).toHaveBeenCalledWith(false)
+    expect(actions.openTcc).toHaveBeenNthCalledWith(1, 'screen')
+    expect(actions.openTcc).toHaveBeenNthCalledWith(2, 'accessibility')
     expect(screen.getByRole('switch', { name: 'Use millifraction coordinates' }).getAttribute('aria-checked')).toBe('true')
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Choose image' }).disabled).toBe(false)
   })
@@ -107,6 +118,7 @@ describe('OrbSettingsSection', () => {
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Floating-ball Agent' }).disabled).toBe(true)
     expect(screen.getByRole<HTMLButtonElement>('switch', { name: 'Enable the selection toolbar' }).disabled).toBe(true)
     expect(screen.getByRole<HTMLButtonElement>('switch', { name: 'Use millifraction coordinates' }).disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Open Screen Recording settings' })).toBeNull()
     cleanup()
     mount({ busy: true })
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Choose image' }).disabled).toBe(true)

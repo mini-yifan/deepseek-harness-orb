@@ -226,7 +226,10 @@ vi.mock('electron', () => ({
     getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } }),
   },
   shell: { openExternal: vi.fn() },
-  systemPreferences: { isTrustedAccessibilityClient: vi.fn(() => false) },
+  systemPreferences: {
+    isTrustedAccessibilityClient: vi.fn(() => false),
+    getMediaAccessStatus: vi.fn(() => 'denied'),
+  },
 }))
 vi.mock('../src/paths.ts', () => ({
   resolveDesktopPaths: () => ({ profile: 'desktop-test-profile', orbWorkspace: 'desktop-test-orb' }),
@@ -759,6 +762,49 @@ describe('desktop floating overlay', () => {
     harness.app.emit('activate')
     expect(main.show).toHaveBeenCalled()
     expect(main.focus).toHaveBeenCalled()
+  })
+
+  it('publishes overlay TCC status and opens the matching System Settings pane', async () => {
+    const { shell, systemPreferences } = await import('electron')
+    vi.stubGlobal('process', { ...process, platform: 'darwin', resourcesPath: 'desktop-test-resources' })
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    harness.prepared.resolve()
+    await harness.hostStarted.promise
+    harness.hosts[0]!.ready.resolve()
+    await harness.navigated.promise
+    const overlay = harness.windows.find(window => window.options.type === 'panel')
+    expect(await invokeFloating(DESKTOP_IPC.floatingTccGet)).toEqual({
+      applicable: true,
+      appName: 'Desktop test',
+      screen: 'missing',
+      accessibility: 'missing',
+    })
+    expect(await invokeFloating(DESKTOP_IPC.floatingTccOpen, 'screen')).toMatchObject({
+      screen: 'needsRelaunch',
+      accessibility: 'missing',
+    })
+    expect(shell.openExternal).toHaveBeenCalledWith(
+      'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
+    )
+    overlay?.webContents.send.mockClear()
+    overlay?.emit('focus')
+    expect(overlay?.webContents.send).toHaveBeenCalledWith(
+      DESKTOP_IPC.floatingTcc,
+      expect.objectContaining({ screen: 'needsRelaunch' }),
+    )
+    overlay?.webContents.send.mockClear()
+    harness.app.emit('activate')
+    expect(overlay?.webContents.send).toHaveBeenCalledWith(
+      DESKTOP_IPC.floatingTcc,
+      expect.objectContaining({ applicable: true }),
+    )
+    systemPreferences.getMediaAccessStatus.mockReturnValue('granted')
+    systemPreferences.isTrustedAccessibilityClient.mockReturnValue(true)
+    expect(await invokeFloating(DESKTOP_IPC.floatingTccGet)).toMatchObject({
+      screen: 'granted',
+      accessibility: 'granted',
+    })
   })
 
   it('installs the standard Edit and Window menus so clipboard shortcuts reach inputs', async () => {

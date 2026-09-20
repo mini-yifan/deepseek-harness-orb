@@ -59,6 +59,7 @@ describe('desktop macOS release signature', () => {
     expect(portablePath(config.extraResources[1]?.from ?? '')).toContain('/.desktop-build/targets/mac-arm64/dsh')
     expect(config).toMatchObject({
       appId: RELEASE_ENVIRONMENT.DSH_DESKTOP_APP_ID,
+      productName: 'DeepSeek Orb',
       files: expect.arrayContaining(['lib/*.js', 'lib/macos-selection']),
       asarUnpack: ['lib/macos-selection'],
       mac: {
@@ -66,6 +67,10 @@ describe('desktop macOS release signature', () => {
         forceCodeSigning: true,
         notarize: true,
         signIgnore: ['/Contents/Resources/dsh(?:/|$)', '\\.pak$'],
+        extendInfo: {
+          NSAppleEventsUsageDescription:
+            'DeepSeek Orb reads the frontmost Finder folder when you refer to this folder. DeepSeek Orb 在你说「这里」或「当前文件夹」时读取访达前台窗口路径。',
+        },
       },
       dmg: {
         sign: true,

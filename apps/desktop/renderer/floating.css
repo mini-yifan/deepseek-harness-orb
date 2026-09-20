@@ -328,8 +328,10 @@ body.expand-down #composer {
 
 body.running #composer,
 body.asking #composer,
+body.tcc-gating #composer,
 body.running #selection-chip,
-body.asking #selection-chip {
+body.asking #selection-chip,
+body.tcc-gating #selection-chip {
   visibility: hidden;
 }
 
@@ -743,4 +745,101 @@ body.expand-down #stop {
 body:not(.expanded) #stop,
 body:not(.running) #stop {
   display: none;
+}
+
+#tcc-gate {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 36px 20px 20px;
+  color: var(--black);
+  background: var(--white);
+  border-radius: var(--panel-radius);
+}
+
+#tcc-gate[hidden] {
+  display: none;
+}
+
+#tcc-dismiss {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  color: var(--pin);
+  background: var(--input-bg);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#tcc-title {
+  margin: 0 28px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+#tcc-app,
+#tcc-footer {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--pin);
+}
+
+.tcc-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.tcc-row h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tcc-row p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--pin);
+}
+
+.tcc-row button,
+.tcc-actions button {
+  align-self: flex-start;
+  border: 1px solid var(--black);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--white);
+  background: var(--black);
+  cursor: pointer;
+}
+
+#tcc-later {
+  border-color: var(--border);
+  color: var(--black);
+  background: var(--white);
+}
+
+.tcc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }

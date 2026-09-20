@@ -2,7 +2,7 @@
 
 [English](desktop.md) | 中文
 
-桌面端在同一 Desktop Host 上打开 Electron 主窗口，并在 macOS 上再打开一颗悬浮球。主窗口沿用 Web UI，新建会话默认走 standard；悬浮球锁死 Computer Use，其对话和委派编码会话出现在侧栏的 `dsh_orb` 文件夹下。
+打包后的 Mac 应用名叫 DeepSeek Orb。桌面端在同一 Desktop Host 上打开 Electron 主窗口，并在 macOS 上再打开一颗悬浮球。主窗口沿用 Web UI，新建会话默认走 standard；悬浮球锁死 Computer Use，其对话和委派编码会话出现在侧栏的 `dsh_orb` 文件夹下。
 
 ## 启动前准备
 
@@ -12,7 +12,7 @@
 pnpm install
 ```
 
-模型调用需要 [DeepSeek API 密钥](https://platform.deepseek.com/)。悬浮球只在 macOS 创建；Windows 仍只有主窗口。Computer Use 截屏需要屏幕录制权限，点击与输入需要辅助功能权限；系统不会替你弹出授权框。
+模型调用需要 [DeepSeek API 密钥](https://platform.deepseek.com/)。悬浮球只在 macOS 创建；Windows 仍只有主窗口。Computer Use 需要屏幕录制与辅助功能：第一次展开面板时若缺权限会盖住对话和输入，每行按钮打开系统设置对应页，两项都授予本进程后该层自动消失。未齐时 overlay 发送留在输入框。访达自动化在第一次使用时弹出。
 
 ## 从源码启动
 
@@ -28,7 +28,7 @@ pnpm run dev:desktop
 pnpm run start:desktop
 ```
 
-启动成功后，主窗口先显示「正在启动 DeepSeek Harness…」，Host 就绪后载入 Web UI。macOS 上还会出现一颗始终置顶的圆形悬浮球。开发模式默认把 Harness home 写到 `apps/desktop/.desktop-build/development/home`，不会改你日常 CLI 使用的 `$DSH_HOME`。启动前 `export DEEPSEEK_API_KEY=…` 会传给 Host；也可以启动后在主窗口里保存密钥。
+启动成功后，主窗口先显示「正在启动 DeepSeek Orb…」，Host 就绪后载入 Web UI。macOS 上还会出现一颗始终置顶的圆形悬浮球。开发模式默认把 Harness home 写到 `apps/desktop/.desktop-build/development/home`，不会改你日常 CLI 使用的 `$DSH_HOME`。启动前 `export DEEPSEEK_API_KEY=…` 会传给 Host；也可以启动后在主窗口里保存密钥。
 
 ## 配置密钥与工作区
 
@@ -38,7 +38,7 @@ pnpm run start:desktop
 
 主窗口默认新建 standard 会话，模式选择器保持可用。在这里写代码、改文件、跑命令，和浏览器里的 Web UI 是同一条路径。悬浮球委派出来的后台会话也会出现在侧栏的 `dsh_orb` 下，可以打开、接着聊、停止。球新建或切换 Computer Use 对话时，主窗口保持当前会话。
 
-关掉主窗口不会退出应用。悬浮球出现后 Dock 图标仍在。退出请用 Dock、Cmd+Q，或球右键「退出 DeepSeek Harness」。Dock 图标或悬浮球右键「打开主窗口」可以再打开主窗口。
+关掉主窗口不会退出应用。悬浮球出现后 Dock 图标仍在。退出请用 Dock、Cmd+Q，或球右键「退出 DeepSeek Orb」。Dock 图标或悬浮球右键「打开主窗口」可以再打开主窗口。
 
 ## 使用 macOS 悬浮球
 
@@ -46,7 +46,7 @@ Host 就绪后才会创建球，出现在主显示器右沿、垂直方向中间
 
 在其他应用里拖拽划选后，工具条提供**搜索**（默认浏览器打开 Bing）、**翻译**（中文或英文，写入球当前 Computer Use 对话，不附带首帧截图）和 **发给 Agent**（把这段话作为一行 chip 贴在 overlay 输入框外侧；回车把你的指令加上完整原文作为普通 Computer Use 轮次发出，并附带首帧截图）。新建和其他 overlay 按钮会保留 chip，直到这次回车或点 chip 的关闭控件。点三个按钮以外的任意位置、按任意键、右击、中键或滚动都会收起这次的工具条。右键球可关闭工具条。Mac 需要允许辅助功能；第一次读取失败会打开系统设置。
 
-输入框占位符是「向桌面 agent 发送消息…」。发送进入 Computer Use 会话。球默认使用 DeepSeek-V41-Flash、思考模式 Max，直到你在**悬浮球 Agent 设置**或设置 → **悬浮球**里改掉；该选择不会改主窗口新建对话的模型。停止按钮只取消球的 Computer Use 会话，不会停止侧栏里的标准会话。右键球可打开**打开主窗口**、**悬浮球 Agent 设置**和**后台 Agent 设置**（各自独立选择模型与思考强度；后台设置只作用于新建的 `code_agent` 会话）、开启或关闭划词、开启或关闭千分比坐标（确认后会新建 overlay 对话；当前对话保持原编码），以及**退出 DeepSeek Harness**；只有明确退出才会结束进程。设置 → **悬浮球**还可自定义 GIF、PNG 或 WebP 球头像（2 MB 上限）、恢复默认，以及新建 overlay 对话的千分比坐标；Access、打开主窗口和退出仍只在右键菜单。
+输入框占位符是「向桌面 agent 发送消息…」。发送进入 Computer Use 会话。球默认使用 DeepSeek-V41-Flash、思考模式 Max，直到你在**悬浮球 Agent 设置**或设置 → **悬浮球**里改掉；该选择不会改主窗口新建对话的模型。停止按钮只取消球的 Computer Use 会话，不会停止侧栏里的标准会话。右键球可打开**打开主窗口**、**悬浮球 Agent 设置**和**后台 Agent 设置**（各自独立选择模型与思考强度；后台设置只作用于新建的 `code_agent` 会话）、开启或关闭划词、开启或关闭千分比坐标（确认后会新建 overlay 对话；当前对话保持原编码），以及**退出 DeepSeek Orb**；只有明确退出才会结束进程。设置 → **悬浮球**还可自定义 GIF、PNG 或 WebP 球头像（2 MB 上限）、恢复默认、新建 overlay 对话的千分比坐标，以及 macOS 屏幕录制与辅助功能状态；Access、打开主窗口和退出仍只在右键菜单。
 
 球上 Computer Use 的 bash 和文件系统，以及 `dsh_orb` 或其子目录上新建的后台 `code_agent` 会话，跟随球上 Access 芯片（默认完全权限，存为桌面偏好）。点名的、在这棵目录树之外的后台会话留在普通的工作区内修改；该 agent 也会自己应答批准和向用户提问。在主窗口改 Access 后若继续在主窗口聊天，就按改后的权限；从球上发送会把球上芯片写回该 Agent。
 

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-13-experimental-computer-use.md
-2026-09-13-experimental-computer-use.md: c5335320b82dba1b9b055bf08d8e22c9b3a906a3
-2026-09-13-experimental-computer-use.zh.md: 55fcf86664aa48669578635a8657ab307ad057c6
+2026-09-13-experimental-computer-use.md: 5940c2831a3d9df7f42f84e0d1d9306a49d00641
+2026-09-13-experimental-computer-use.zh.md: 5715b834d382165cfd3fd3840e5160ded7634e45
