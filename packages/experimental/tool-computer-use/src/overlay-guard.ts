@@ -56,8 +56,9 @@ export interface ComputerUseOverlayGuard {
   /**
    * Show or hide the Desktop observation-frame ribbon around the current capture rectangle.
    * Pass-through hosts resolve immediately. Acks before returning so the next capture omits the frame.
+   * Abort of a SHOW hides the ribbon and waits for that hide ack without the aborted signal; abort of a hide rejects the wait.
    * @param bounds - observation union in global logical points, or `null` to hide.
-   * @param signal - cooperative cancellation for the ack wait.
+   * @param signal - cooperative cancellation for the SHOW ack wait. Hide acks ignore it.
    */
   setObservationFrame(bounds: ObservationFrameBounds | null, signal?: AbortSignal): Promise<void>
   /**
@@ -89,6 +90,7 @@ function captureExcludeIds(session: OverlayCaptureSession | undefined): readonly
 /**
  * Wrap a desktop backend so capture, foreground inspect, listScreens, HID, openApp, and withGuiTurn run inside overlay-guard intervals.
  * After `listScreens`, the wrapper waits for `setObservationFrame` so the next capture exclude list includes the ribbon.
+ * When the listing signal is already aborted, the wrapper hides (`null`) without that signal instead of showing bounds.
  * `openApp` and `withGuiTurn` use `withInput` so the overlay yields key status before activate and stays click-through through recapture.
  * Desktop Host refcounts nested cloak calls so one turn sends one input begin/end.
  * `listApps`, `openInBrowser`, `openInFinder`, and `copyImageToClipboard` are unwrapped because
@@ -108,6 +110,14 @@ export function wrapDesktopBackend(
         captureExcludeIds(session),
         async () => {
           const screens = await inner.listScreens(signal)
+          if (signal?.aborted) {
+            try {
+              await guard.setObservationFrame(null)
+            } catch {
+              // Host IPC already gone or observation-frame ack timed out; hide is best-effort after abort.
+            }
+            signal.throwIfAborted()
+          }
           await guard.setObservationFrame(screens[0]?.bounds ?? null, signal)
           return screens
         },

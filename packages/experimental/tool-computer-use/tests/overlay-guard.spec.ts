@@ -296,6 +296,41 @@ describe('wrapDesktopBackend', () => {
     expect(guard.frames).toEqual([screen.bounds, null])
   })
 
+  it('hides the observation frame when listScreens aborts after the inner listing', async () => {
+    const guard = recordingGuard()
+    const listed = Promise.withResolvers<readonly typeof screen[]>()
+    const inner = stubBackend({
+      listScreens: () => listed.promise,
+    })
+    const backend = wrapDesktopBackend(inner, guard)
+    const controller = new AbortController()
+    const pending = backend.listScreens(controller.signal)
+    controller.abort()
+    listed.resolve([screen])
+    await expect(pending).rejects.toThrow()
+    expect(guard.frames).toEqual([null])
+  })
+
+  it('still aborts listScreens when hide after abort fails', async () => {
+    const frames: Array<Parameters<ComputerUseOverlayGuard['setObservationFrame']>[0]> = []
+    const listed = Promise.withResolvers<readonly typeof screen[]>()
+    const inner = stubBackend({
+      listScreens: () => listed.promise,
+    })
+    const backend = wrapDesktopBackend(inner, idleGuard({
+      setObservationFrame: (bounds) => {
+        frames.push(bounds)
+        return Promise.reject(new Error('hide failed'))
+      },
+    }))
+    const controller = new AbortController()
+    const pending = backend.listScreens(controller.signal)
+    controller.abort()
+    listed.resolve([screen])
+    await expect(pending).rejects.toThrow()
+    expect(frames).toEqual([null])
+  })
+
   it('does not throw when setObservationFrame is a pass-through', async () => {
     const backend = wrapDesktopBackend(stubBackend(), idleGuard())
     await expect(backend.listScreens()).resolves.toEqual([screen])
@@ -435,6 +470,36 @@ describe('apply overlay guard wiring', () => {
       seq: SessionSeq(1),
       time: 1,
       data: { turn: 1, reason: { kind: 'completed' } },
+    })
+    await expect.poll(() => frames).toEqual([null])
+  })
+
+  it('clears the observation frame on aborted turn/end', async () => {
+    const host = new Context()
+    contexts.push(host)
+    const home = await mkdtemp(join(tmpdir(), 'dsh-cu-guard-turn-abort-'))
+    homes.push(home)
+    const frames: Array<Parameters<ComputerUseOverlayGuard['setObservationFrame']>[0]> = []
+    host.provide('computerUseOverlayGuard', idleGuard({
+      setObservationFrame: (bounds) => {
+        frames.push(bounds)
+        return Promise.resolve()
+      },
+    }))
+    await host.plugin(SystemPrompt)
+    await host.plugin(ToolRuntime)
+    await host.plugin(LocalAttachmentStore, { dshHome: home })
+    await host.plugin(LlmRuntime)
+    host.llm.registerAdapter(['visual'], new CatalogAdapter([
+      { provider: 'visual', id: 'vision-model', name: 'Vision', inputModalities: ['text', 'image'] },
+    ]))
+    apply(host, { postActionWaitMs: 0 })
+    const session = Session.create(SessionId('computer-use-frame-turn-abort'))
+    host.emit('session/event', session, {
+      type: 'turn/end',
+      seq: SessionSeq(1),
+      time: 1,
+      data: { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } },
     })
     await expect.poll(() => frames).toEqual([null])
   })

@@ -89,8 +89,9 @@ export interface ComputerUseOverlayGuard {
   /**
    * Show or hide the observation-frame ribbon around the current Computer Use capture rectangle.
    * Pass-through when Electron is not attached. Acks before returning so the next capture exclude list includes the frame.
+   * Abort of a SHOW hides the ribbon and waits for that hide ack without the aborted signal; abort of a hide rejects the wait.
    * @param bounds - observation union in global logical points, or `null` to hide.
-   * @param signal - cooperative cancellation for the ack wait.
+   * @param signal - cooperative cancellation for the SHOW ack wait. Hide acks ignore it.
    */
   setObservationFrame(bounds: ObservationFrameBounds | null, signal?: AbortSignal): Promise<void>
   /**
@@ -138,6 +139,8 @@ const pendingSck = new Map<number, PendingSckAck>()
 let inputDepth = 0
 let captureDepth = 0
 let activeExcludeWindowIds: readonly number[] = []
+/** Turn signals that already send observation-frame hide on abort; recapture reuses one controller. */
+const armedObservationFrameAbort = new WeakSet<AbortSignal>()
 
 function resetOverlayGuardDepths(): void {
   inputDepth = 0
@@ -364,11 +367,43 @@ async function withInputMode<T>(
   }
 }
 
+async function sendObservationFrameHide(
+  send: (event: OverlayGuardTransportEvent) => void,
+): Promise<void> {
+  const requestId = nextRequestId++
+  send({ type: 'observation-frame', requestId, bounds: null })
+  await waitFrameAck(requestId)
+}
+
+function armObservationFrameAbortHide(
+  send: (event: OverlayGuardTransportEvent) => void,
+  signal: AbortSignal,
+): void {
+  if (armedObservationFrameAbort.has(signal)) return
+  armedObservationFrameAbort.add(signal)
+  signal.addEventListener('abort', () => {
+    void sendObservationFrameHide(send).catch(() => {
+      // Electron already gone, ack lost, or Host stopping; Host-exit restore covers the overlay.
+    })
+  }, { once: true })
+}
+
 async function setObservationFrameMode(
   send: (event: OverlayGuardTransportEvent) => void,
   bounds: ObservationFrameBounds | null,
   signal?: AbortSignal,
 ): Promise<void> {
+  if (bounds !== null && signal !== undefined) {
+    armObservationFrameAbortHide(send, signal)
+  }
+  if (bounds !== null && signal?.aborted) {
+    try {
+      await sendObservationFrameHide(send)
+    } catch {
+      // Electron already gone, ack lost, or Host stopping; Host-exit restore covers the overlay.
+    }
+    throw errorOf(signal.reason, 'dsh desktop: observation-frame aborted')
+  }
   const requestId = nextRequestId++
   send({ type: 'observation-frame', requestId, bounds })
   await waitFrameAck(requestId, signal)

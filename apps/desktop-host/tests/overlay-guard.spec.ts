@@ -202,11 +202,64 @@ describe('computer-use overlay guard', () => {
   })
 
   it('rejects observation-frame when the ack wait is aborted', async () => {
-    const guard = createComputerUseOverlayGuard(() => undefined)
+    const events: OverlayGuardTransportEvent[] = []
+    const guard = createComputerUseOverlayGuard((event) => {
+      events.push(event)
+    })
     const controller = new AbortController()
     const pending = guard.setObservationFrame(null, controller.signal)
     controller.abort()
     await expect(pending).rejects.toThrow(/aborted/u)
+    expect(events.filter(event => event.type === 'observation-frame')).toEqual([
+      { type: 'observation-frame', requestId: expect.any(Number), bounds: null },
+    ])
+  })
+
+  it('sends hide when SHOW is requested with an already-aborted signal', async () => {
+    const events: OverlayGuardTransportEvent[] = []
+    const guard = createComputerUseOverlayGuard((event) => {
+      events.push(event)
+      queueMicrotask(() => { ack(event) })
+    })
+    const bounds = { x: 10, y: 20, width: 300, height: 200 }
+    const controller = new AbortController()
+    controller.abort()
+    await expect(guard.setObservationFrame(bounds, controller.signal)).rejects.toThrow(/aborted/u)
+    expect(events.filter(event => event.type === 'observation-frame')).toEqual([
+      { type: 'observation-frame', requestId: expect.any(Number), bounds: null },
+    ])
+  })
+
+  it('hides the observation frame when a SHOW ack wait is aborted', async () => {
+    const events: OverlayGuardTransportEvent[] = []
+    const guard = createComputerUseOverlayGuard((event) => {
+      events.push(event)
+      if (event.type === 'observation-frame' && event.bounds === null) {
+        queueMicrotask(() => { completeObservationFrameAck(event.requestId) })
+      }
+    })
+    const bounds = { x: 10, y: 20, width: 300, height: 200 }
+    const controller = new AbortController()
+    const pending = guard.setObservationFrame(bounds, controller.signal)
+    expect(events.filter(event => event.type === 'observation-frame').map(event => event.bounds)).toEqual([bounds])
+    controller.abort()
+    await expect(pending).rejects.toThrow(/aborted/u)
+    expect(events.filter(event => event.type === 'observation-frame').map(event => event.bounds)).toEqual([bounds, null])
+  })
+
+  it('hides the observation frame when the turn aborts after SHOW ack', async () => {
+    const events: OverlayGuardTransportEvent[] = []
+    const guard = createComputerUseOverlayGuard((event) => {
+      events.push(event)
+      queueMicrotask(() => { ack(event) })
+    })
+    const bounds = { x: 10, y: 20, width: 300, height: 200 }
+    const controller = new AbortController()
+    await guard.setObservationFrame(bounds, controller.signal)
+    controller.abort()
+    await expect.poll(() =>
+      events.filter(event => event.type === 'observation-frame').map(event => event.bounds),
+    ).toEqual([bounds, null])
   })
 
   it('uses the installed transport from apply', async () => {
