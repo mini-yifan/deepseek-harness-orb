@@ -36,7 +36,7 @@ Computer Use 保持对 Electron 无感知：`wrapDesktopBackend` 把 `listScreen
 
 ## 后果
 
-混用的 Electron/Host 壳在 `ready` 时失败，而不是第一次遮蔽时失败。丢失的 `end` 在 Host 子进程退出时恢复。并发 Computer Use 会话共享 overlay 引用计数。键盘焦点仍可能在 `input` 区间之外落到 overlay；`open_app` 与 HID 走 `withInput`，overlay 会在激活或投递事件前 `blur()`。Web 与 CLI 的 Computer Use 保持不遮蔽。Darwin Desktop extra 在已编译 helper 时包含 `lib/macos-sck-capture`。打包的 Electron 把 `lib/macos-sck-napi.node` 与 `lib/libmacos-sck-capture.dylib` 和 `macos-selection` 一起 unpack，不放进 `signIgnore` 的 `dsh/`。
+混用的 Electron/Host 壳在 `ready` 时失败，而不是第一次遮蔽时失败。丢失的 `end` 在 Host 子进程退出时恢复。并发 Computer Use 会话共享 overlay 引用计数。键盘焦点仍可能在 `input` 区间之外落到 overlay；`open_app` 与 HID 走 `withInput`，overlay 会在激活或投递事件前 `blur()`。Web 与 CLI 的 Computer Use 保持不遮蔽。Darwin Desktop extra 在已编译 helper 时包含 `lib/macos-sck-capture`。打包的 Electron 把 `lib/macos-sck-napi.node` 与 `lib/libmacos-sck-capture.dylib` 和 `macos-selection-napi.node` 一起 unpack，不放进 `signIgnore` 的 `dsh/`。
 
 ## 测试
 

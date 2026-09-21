@@ -43,7 +43,7 @@ pnpm run package:desktop:mac:arm64:unsigned
 2. `release:pack` 打 dsh / vendor / landlock tarball，再 pack 私有 `@deepseek-ai/dsh-desktop-host`
 3. `prepare:runtime` / `prepare:packages` / `prepare:dsh`：上游 Node、pnpm、把生产依赖树铺进该 target 的 `dsh/`
 4. 从 npm 拉 `dshmarket@1.50.0` 写成 `plugins/dshmarket-1.50.0.tgz`
-5. Desktop 自己的 `build`：`tsc`、tsdown、`macos-selection`、**`macos-sck-napi.node` + `libmacos-sck-capture.dylib`**
+5. Desktop 自己的 `build`：`tsc`、tsdown、**`macos-selection-napi.node` + `libmacos-selection.dylib`**、**`macos-sck-napi.node` + `libmacos-sck-capture.dylib`**
 6. electron-builder：`DSH_DESKTOP_UNSIGNED=1`，`identity: null`，只出 DMG（没有 ZIP 更新载荷），清掉签名相关环境变量
 
 `--unsigned` 不能和 `--prepare-only` 一起用。`prepare:desktop` 不是这条命令的前半截；完整 `package:*` 会自己再跑一遍官方构建和准备，避免吃到过期的 dsh 树。
@@ -71,7 +71,8 @@ pnpm run package:desktop:mac:arm64:unsigned
 |---|---|
 | `Resources/app.asar.unpacked/lib/macos-sck-napi.node` | Electron 主进程里调 ScreenCaptureKit |
 | `Resources/app.asar.unpacked/lib/libmacos-sck-capture.dylib` | 上面 `.node` 链的 Swift 库（`@rpath`，和 `.node` 同目录） |
-| `Resources/app.asar.unpacked/lib/macos-selection` | 划词工具条 helper |
+| `Resources/app.asar.unpacked/lib/macos-selection-napi.node` | Electron 主进程里的划词监视 |
+| `Resources/app.asar.unpacked/lib/libmacos-selection.dylib` | 上面 `.node` 链的 Swift 库（`@rpath`，和 `.node` 同目录） |
 | `Resources/plugins/dshmarket-1.50.0.tgz` | 首次启动 seed 插件市场 |
 | `Resources/dsh/node_modules/@deepseek-ai/dsh-experimental-tool-computer-use/lib/macos-sck-capture` | **仅 CLI / 无 overlay-guard 时**用的 helper；Desktop 截屏不再 spawn 它 |
 | `Resources/dsh/.../dsh-desktop-host/lib` 里协议 **8**、字符串 `sck-capture` | Host ↔ Electron 排除 overlay 的捕获 IPC |
@@ -159,6 +160,10 @@ pnpm workspace 在部分包上建 `.bin` 失败。这次完整打包仍能成功
 
 给 `captureExcludedRegion` 传 `{ signal }` 而 `signal` 可能是 `undefined` 会在严格可选属性下编不过。只在有 AbortSignal 时展开：`...signal === undefined ? {} : { signal }`。
 
+### 5.9 划词三个按钮不出现
+
+划词监视必须跑在 Electron 主进程里（`macos-selection-napi.node` + `libmacos-selection.dylib`）。派生独立的 `macos-selection` 可执行文件会得到第二条 adhoc CDHash，辅助功能授权给带图标的 Orb 也不生效。确认 unpacked 的是 `.node` 和 dylib，完全退出后再开，辅助功能授权给带图标的 DeepSeek Orb，然后拖超过 8px。
+
 ---
 
 ## 6. 启动后插件市场与第三方插件
@@ -215,6 +220,7 @@ pnpm workspace 在部分包上建 `.bin` 失败。这次完整打包仍能成功
 | Desktop 走 IPC、CLI 走 helper | `packages/experimental/tool-computer-use/src/macos.ts` |
 | overlay-guard | `.agents/notes/implemented/architecture/2026-09-14-desktop-overlay-guard.md` |
 | 为何 SCK 必须进 Orb 进程 | `.agents/notes/implemented/architecture/2026-09-20-desktop-sck-in-process-identity.md` |
+| 为何划词必须进 Orb 进程 | `.agents/notes/implemented/architecture/2026-09-21-desktop-selection-in-process-identity.md` |
 | 插件市场 seed | `.agents/notes/implemented/architecture/2026-09-18-desktop-in-process-webserver-and-plugin-market.md` |
 | 悬浮球 TCC 门禁 | `.agents/notes/implemented/feature/2026-09-20-desktop-orb-tcc-gate.md` |
 
@@ -226,9 +232,11 @@ pnpm workspace 在部分包上建 `.bin` 失败。这次完整打包仍能成功
 APP="apps/desktop/.desktop-build/targets/mac-arm64/unsigned-artifacts/mac-arm64/DeepSeek Orb.app"
 ls -lh "$APP/Contents/Resources/app.asar.unpacked/lib/macos-sck-napi.node"
 ls -lh "$APP/Contents/Resources/app.asar.unpacked/lib/libmacos-sck-capture.dylib"
+ls -lh "$APP/Contents/Resources/app.asar.unpacked/lib/macos-selection-napi.node"
+ls -lh "$APP/Contents/Resources/app.asar.unpacked/lib/libmacos-selection.dylib"
 ls -lh "$APP/Contents/Resources/plugins/dshmarket-1.50.0.tgz"
 rg -n 'DESKTOP_HOST_PROTOCOL_VERSION = 8|"sck-capture"' \
   "$APP/Contents/Resources/dsh/node_modules/@deepseek-ai/dsh-desktop-host/lib"
 ```
 
-四项都在，再装到 `/Applications`。先 Cmd-Q，再打开，再测 Computer Use 截屏。
+六项都在，再装到 `/Applications`。先 Cmd-Q，再打开，再测 Computer Use 截屏与划词。

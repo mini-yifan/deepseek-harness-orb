@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-排除 overlay 的 ScreenCaptureKit 跑在 Electron 主进程里。Host 协议 8 承载带确认的 `sck-capture` / `sck-capture-ack`。`ComputerUseOverlayGuard.captureExcludedRegion` 是 Desktop 路径；CLI 仍 exec `macos-sck-capture`，授权落在 Terminal 或调用方上。Swift 捕获共用一份：CLI `@main` 入口仍把 `NSApplication` activation policy 设为 `.prohibited`；`@_cdecl` 库入口禁止改它，否则会把 Orb 从 Dock 拿掉。Desktop 编译 ABI 稳定的 N-API `.node` 和 `libmacos-sck-capture.dylib`，与 `macos-selection` 一起 unpack，并通过 `napi_create_async_work` 调用捕获，避免 MainActor 跳转与 Electron 主线程死锁。[桌面 overlay-guard IPC](2026-09-14-desktop-overlay-guard.zh.md) 拥有遮蔽区间、exclude id 和观察框彩带。
+排除 overlay 的 ScreenCaptureKit 跑在 Electron 主进程里。Host 协议 8 承载带确认的 `sck-capture` / `sck-capture-ack`。`ComputerUseOverlayGuard.captureExcludedRegion` 是 Desktop 路径；CLI 仍 exec `macos-sck-capture`，授权落在 Terminal 或调用方上。Swift 捕获共用一份：CLI `@main` 入口仍把 `NSApplication` activation policy 设为 `.prohibited`；`@_cdecl` 库入口禁止改它，否则会把 Orb 从 Dock 拿掉。Desktop 编译 ABI 稳定的 N-API `.node` 和 `libmacos-sck-capture.dylib`，与 `macos-selection-napi.node` 一起 unpack，并通过 `napi_create_async_work` 调用捕获，避免 MainActor 跳转与 Electron 主线程死锁。[桌面 overlay-guard IPC](2026-09-14-desktop-overlay-guard.zh.md) 拥有遮蔽区间、exclude id 和观察框彩带。
 
 装上在进程内捕获的包后，完全退出（Cmd-Q）再打开。系统设置里残留的 exec 行是旧 helper，可用「−」删掉。
 
@@ -28,4 +28,4 @@ Status: implemented
 
 ## 测试
 
-helper 源码仍含 CLI 的 `setActivationPolicy(.prohibited)`；cdecl 入口以 `startCliApplication: false` 调用 capture，不改 activation policy。省略 `captureExcludedRegion` 时 `macos.ts` 派生 helper，提供该方法时不派生。Host 与 Electron 测试钉住 sck-capture 成功、失败确认且 Host 不 fatal、超时、中止，以及协议 8。打包测试钉住 `.node` 与 dylib 和 `macos-selection` 一起 asarUnpack。
+helper 源码仍含 CLI 的 `setActivationPolicy(.prohibited)`；cdecl 入口以 `startCliApplication: false` 调用 capture，不改 activation policy。省略 `captureExcludedRegion` 时 `macos.ts` 派生 helper，提供该方法时不派生。Host 与 Electron 测试钉住 sck-capture 成功、失败确认且 Host 不 fatal、超时、中止，以及协议 8。打包测试钉住 `.node` 与 dylib 和 `macos-selection-napi.node` 一起 asarUnpack。

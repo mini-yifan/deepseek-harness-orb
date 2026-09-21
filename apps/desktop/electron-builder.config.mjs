@@ -61,14 +61,16 @@ export function createElectronBuilderConfig(
     files: [
       'lib/*.js',
       'lib/*.cjs',
-      'lib/macos-selection',
+      'lib/macos-selection-napi.node',
+      'lib/libmacos-selection.dylib',
       'lib/macos-sck-napi.node',
       'lib/libmacos-sck-capture.dylib',
       'renderer/**/*',
       'package.json',
     ],
     asarUnpack: [
-      'lib/macos-selection',
+      'lib/macos-selection-napi.node',
+      'lib/libmacos-selection.dylib',
       'lib/macos-sck-napi.node',
       'lib/libmacos-sck-capture.dylib',
     ],
