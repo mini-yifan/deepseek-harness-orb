@@ -5,6 +5,7 @@ vi.mock('electron', () => ({
   BrowserWindow: class FakeBrowserWindow { readonly kind = 'window' },
   Menu: { buildFromTemplate: vi.fn() },
   screen: { getDisplayNearestPoint: vi.fn(), getPrimaryDisplay: vi.fn() },
+  systemPreferences: { getAnimationSettings: () => ({ prefersReducedMotion: false }) },
 }))
 
 import {
@@ -14,6 +15,8 @@ import {
   clampFloatingWindow,
   clampedBallOrigin,
   defaultFloatingBallOrigin,
+  dockedTabBounds,
+  dockSideForBallOrigin,
   expandDirection,
   expandedOverlayBounds,
   floatingContextMenuTemplate,
@@ -21,12 +24,21 @@ import {
   FLOATING_BALL_SIZE,
   FLOATING_BALL_WINDOW_SIZE,
   FLOATING_CHROME_INSET,
+  FLOATING_DOCK_DRAG_OFF,
+  FLOATING_DOCK_HIT_HEIGHT,
+  FLOATING_DOCK_HIT_WIDTH,
+  FLOATING_DOCK_IN_PAD,
+  FLOATING_DOCK_OVERLAP,
+  FLOATING_DOCK_TAB_FILL,
+  FLOATING_DOCK_TAB_HEIGHT,
+  FLOATING_DOCK_TAB_WIDTH,
   FLOATING_PANEL_SIZE,
   FLOATING_PANEL_WINDOW_SIZE,
   moveFloatingBall,
   overlayWindowExcludeIds,
   resetFloatingOverlayGuard,
   setFloatingExpanded,
+  unsnapDockedBall,
 } from '../src/floating-window.ts'
 
 const workArea = { x: 100, y: 50, width: 1000, height: 800 }
@@ -43,13 +55,16 @@ const messages = {
   millifractionDisable: 'Disable millifraction coordinates',
 }
 
-describe('floating window expand geometry', () => {
-  const collapsedAt = (x: number, y: number) => ({
+function collapsedAt(x: number, y: number) {
+  return {
     x: x - FLOATING_CHROME_INSET,
     y: y - FLOATING_CHROME_INSET,
     width: FLOATING_BALL_WINDOW_SIZE,
     height: FLOATING_BALL_WINDOW_SIZE,
-  })
+  }
+}
+
+describe('floating window expand geometry', () => {
   const expandedAt = (ballX: number, ballY: number, horizontal: 'left' | 'right', vertical: 'up' | 'down') => ({
     x: horizontal === 'left'
       ? ballX - (FLOATING_PANEL_SIZE.width - FLOATING_BALL_SIZE) - FLOATING_CHROME_INSET
@@ -111,7 +126,10 @@ describe('floating window expand geometry', () => {
 
   it('resizes the overlay while keeping the ball origin and clamps without edge snap', async () => {
     const { screen } = await import('electron')
-    vi.mocked(screen.getDisplayNearestPoint).mockReturnValue({ workArea } as never)
+    vi.mocked(screen.getDisplayNearestPoint).mockReturnValue({
+      bounds: { x: 0, y: 0, width: 1440, height: 900 },
+      workArea,
+    } as never)
     const window = {
       getBounds: vi.fn(() => collapsedAt(900, 400)),
       setBounds: vi.fn(),
@@ -121,17 +139,21 @@ describe('floating window expand geometry', () => {
       expanded: true,
       horizontal: 'left',
       vertical: 'up',
+      docked: undefined,
     })
     expect(window.setBounds).toHaveBeenCalledWith(expandedAt(900, 400, 'left', 'up'))
     window.getBounds.mockReturnValue(collapsedAt(80, 40))
-    clampFloatingWindow(window as never)
+    await clampFloatingWindow(window as never)
     expect(window.setBounds).toHaveBeenCalledWith(collapsedAt(100, 50))
     expect(window.setPosition).not.toHaveBeenCalled()
   })
 
   it('moves an expanded overlay by ball origin without clamping the panel', async () => {
     const { screen } = await import('electron')
-    vi.mocked(screen.getDisplayNearestPoint).mockReturnValue({ workArea } as never)
+    vi.mocked(screen.getDisplayNearestPoint).mockReturnValue({
+      bounds: { x: 0, y: 0, width: 1440, height: 900 },
+      workArea,
+    } as never)
     const window = {
       bounds: collapsedAt(900, 400),
       getBounds() {
@@ -149,14 +171,119 @@ describe('floating window expand geometry', () => {
   })
 
   it('moves a collapsed overlay with setBounds around the ball origin', async () => {
+    const { screen } = await import('electron')
+    vi.mocked(screen.getDisplayNearestPoint).mockReturnValue({
+      bounds: { x: 0, y: 0, width: 1440, height: 900 },
+      workArea: { x: 0, y: 0, width: 1440, height: 900 },
+    } as never)
     const window = {
       getBounds: () => collapsedAt(400, 300),
       setBounds: vi.fn(),
       setPosition: vi.fn(),
     }
-    moveFloatingBall(window as never, 20, 30)
+    expect(moveFloatingBall(window as never, 20, 30)).toEqual({ docked: undefined })
     expect(window.setBounds).toHaveBeenCalledWith(collapsedAt(20, 30))
     expect(window.setPosition).not.toHaveBeenCalled()
+  })
+})
+
+describe('floating window edge dock', () => {
+  const screenBounds = { x: 0, y: 0, width: 1440, height: 900 }
+
+  function overlayAt(x: number, y: number) {
+    return {
+      bounds: collapsedAt(x, y),
+      getBounds() { return this.bounds },
+      setBounds(next: { x: number; y: number; width: number; height: number }) {
+        this.bounds = { ...next }
+      },
+    }
+  }
+
+  async function mockScreen() {
+    const { screen } = await import('electron')
+    vi.mocked(screen.getDisplayNearestPoint).mockReturnValue({
+      bounds: screenBounds,
+      workArea,
+    } as never)
+  }
+
+  it('paints a 6x72 gray dock tab and does not use body:not(.expanded) #ball', () => {
+    const css = readFileSync(new URL('../renderer/floating.css', import.meta.url), 'utf8')
+    expect(css).toContain('#dock-tab')
+    expect(css).toContain(`width: ${String(FLOATING_DOCK_TAB_WIDTH)}px`)
+    expect(css).toContain(`height: ${String(FLOATING_DOCK_TAB_HEIGHT)}px`)
+    expect(css).toContain(FLOATING_DOCK_TAB_FILL)
+    expect(css).toContain('dock-tab-breath')
+    expect(css).not.toContain('body:not(.expanded) #ball')
+  })
+
+  it('docks only after one-fifth of the ball sits past a left or right bounds edge', () => {
+    expect(dockSideForBallOrigin({ x: 0, y: 400 }, screenBounds)).toBeUndefined()
+    expect(dockSideForBallOrigin({ x: screenBounds.width - FLOATING_BALL_SIZE, y: 400 }, screenBounds)).toBeUndefined()
+    expect(dockSideForBallOrigin({ x: -FLOATING_DOCK_OVERLAP, y: 400 }, screenBounds)).toBe('left')
+    expect(dockSideForBallOrigin({
+      x: screenBounds.width - FLOATING_BALL_SIZE + FLOATING_DOCK_OVERLAP,
+      y: 400,
+    }, screenBounds)).toBe('right')
+    expect(dockSideForBallOrigin({ x: 400, y: -40 }, screenBounds)).toBeUndefined()
+    expect(dockSideForBallOrigin({ x: 400, y: 880 }, screenBounds)).toBeUndefined()
+  })
+
+  it('does not dock the default right-edge origin or a work-area clamp', async () => {
+    await mockScreen()
+    const origin = defaultFloatingBallOrigin(workArea)
+    expect(dockSideForBallOrigin(origin, screenBounds)).toBeUndefined()
+    const window = overlayAt(80, 40)
+    expect(await clampFloatingWindow(window as never)).toEqual({ docked: undefined })
+    expect(window.bounds).toEqual(collapsedAt(100, 50))
+  })
+
+  it('snaps on clamp, keeps clamp docked, unsnaps to a 5px inset, and undocks when pulled inward', async () => {
+    await mockScreen()
+    const window = overlayAt(400, 300)
+    const dockX = screenBounds.width - FLOATING_BALL_SIZE + FLOATING_DOCK_OVERLAP
+    expect(moveFloatingBall(window as never, dockX, 300)).toEqual({ docked: undefined })
+    expect(window.bounds).toEqual(collapsedAt(dockX, 300))
+    expect(await clampFloatingWindow(window as never)).toEqual({ docked: 'right' })
+    expect(window.bounds).toEqual(dockedTabBounds('right', 300, screenBounds))
+    expect(window.bounds.width).toBe(FLOATING_DOCK_HIT_WIDTH)
+    expect(window.bounds.height).toBe(FLOATING_DOCK_HIT_HEIGHT)
+    expect(await clampFloatingWindow(window as never)).toEqual({ docked: 'right' })
+    expect(window.bounds).toEqual(dockedTabBounds('right', 300, screenBounds))
+    expect(await unsnapDockedBall(window as never)).toEqual({ docked: undefined })
+    expect(window.bounds).toEqual(collapsedAt(
+      screenBounds.width - FLOATING_BALL_SIZE - FLOATING_DOCK_IN_PAD,
+      300,
+    ))
+    expect(moveFloatingBall(window as never, dockX, 300)).toEqual({ docked: undefined })
+    expect(await clampFloatingWindow(window as never)).toEqual({ docked: 'right' })
+    const inwardX = screenBounds.width - FLOATING_DOCK_DRAG_OFF - 1
+    expect(moveFloatingBall(window as never, inwardX, 300)).toEqual({ docked: undefined })
+    expect(window.bounds).toEqual(collapsedAt(inwardX, 300))
+  })
+
+  it('snaps to a left tab on clamp and expanding the panel clears dock', async () => {
+    await mockScreen()
+    const window = overlayAt(400, 300)
+    expect(moveFloatingBall(window as never, -FLOATING_DOCK_OVERLAP, 280)).toEqual({ docked: undefined })
+    expect(await clampFloatingWindow(window as never)).toEqual({ docked: 'left' })
+    expect(window.bounds).toEqual(dockedTabBounds('left', 280, screenBounds))
+    expect(setFloatingExpanded(window as never, true)).toMatchObject({
+      expanded: true,
+      docked: undefined,
+    })
+    expect(window.bounds.width).toBe(FLOATING_PANEL_WINDOW_SIZE.width)
+  })
+
+  it('does not dock while canDock is false', async () => {
+    await mockScreen()
+    const window = overlayAt(400, 300)
+    const dockX = screenBounds.width - FLOATING_BALL_SIZE + FLOATING_DOCK_OVERLAP
+    expect(moveFloatingBall(window as never, dockX, 300, false)).toEqual({ docked: undefined })
+    expect(window.bounds).toEqual(collapsedAt(dockX, 300))
+    expect(await clampFloatingWindow(window as never, false)).toEqual({ docked: undefined })
+    expect(window.bounds).toEqual(collapsedAt(workArea.x + workArea.width - FLOATING_BALL_SIZE, 300))
   })
 })
 

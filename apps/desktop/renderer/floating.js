@@ -2,6 +2,8 @@ const api = window.dshDesktop
 let gifSrc = 'deepseek-avatar-square.gif'
 const COLLAPSE_MS = 180
 const ANIMATION_MS = 300
+const DOCK_HOVER_DELAY_MS = 800
+const DOCK_DRAG_OFF_PX = 24
 const REMOTE_STREAM_URL = 'dsh-app://app/.dsh/remote-stream'
 const USER_QUESTION_CANCELLED = 'the user cancelled ask_user_question'
 const RECOMMENDED_SUFFIX = /\s*(?:\((?:recommended|推荐)\)|（(?:recommended|推荐)）)\s*$/i
@@ -182,6 +184,7 @@ async function main() {
   const permissionMenu = document.querySelector('#permission-menu')
   document.querySelector('#input-label').textContent = messages.floatingPlaceholder
   const ball = document.querySelector('#ball')
+  const dockTab = document.querySelector('#dock-tab')
   const panel = document.querySelector('#panel')
   const transcript = document.querySelector('#transcript')
   const questionRoot = document.querySelector('#question')
@@ -299,6 +302,12 @@ async function main() {
   let tccGateVisible = false
   let expanded = false
   let running = false
+  let docked = undefined
+  let dockHoverArmed = true
+  let dockHoverTimer = undefined
+  let dockPointerInside = false
+  let suppressExpand = false
+  let skipDockCommit = false
   let pointer = undefined
   let lastOrigin = undefined
   let collapseTimer = undefined
@@ -407,6 +416,60 @@ async function main() {
     document.body.classList.toggle('expand-down', state.vertical === 'down')
   }
 
+  function clearDockHoverTimer() {
+    if (dockHoverTimer === undefined) return
+    clearTimeout(dockHoverTimer)
+    dockHoverTimer = undefined
+  }
+
+  function applyDocked(side) {
+    const next = side === 'left' || side === 'right' ? side : undefined
+    const becameDocked = docked === undefined && next !== undefined
+    docked = next
+    document.body.classList.toggle('docked', next !== undefined)
+    document.body.classList.toggle('docked-left', next === 'left')
+    document.body.classList.toggle('docked-right', next === 'right')
+    clearDockHoverTimer()
+    if (next === undefined) {
+      dockTab.hidden = true
+      dockHoverArmed = true
+      return
+    }
+    if (becameDocked) {
+      dockHoverArmed = false
+      dockHoverTimer = setTimeout(() => {
+        dockHoverTimer = undefined
+        dockHoverArmed = true
+        if (dockPointerInside) void unsnapDocked()
+      }, DOCK_HOVER_DELAY_MS)
+    }
+    dockTab.hidden = false
+  }
+
+  function applyDockedFrom(result) {
+    if (result === undefined || result === null) return
+    applyDocked(result.docked)
+  }
+
+  async function moveBall(x, y) {
+    const canDock = !(running || asking() || gatingTcc())
+    applyDockedFrom(await api.floating.move(x, y, canDock))
+  }
+
+  async function clampBall() {
+    const canDock = !(running || asking() || gatingTcc())
+    applyDockedFrom(await api.floating.clamp(canDock))
+  }
+
+  async function unsnapDocked() {
+    if (docked === undefined) return
+    if (typeof api.floating.unsnap !== 'function') return
+    suppressExpand = true
+    if (dragging) skipDockCommit = true
+    applyDocked(undefined)
+    applyDockedFrom(await api.floating.unsnap())
+  }
+
   async function setExpanded(next, force = false) {
     if (pageClosed()) return
     if (collapseTimer !== undefined) {
@@ -419,6 +482,7 @@ async function main() {
     }
     if (next) {
       const state = await api.floating.setExpanded(true)
+      applyDocked(undefined)
       applyDirection(state)
       panel.hidden = false
       expanded = true
@@ -432,6 +496,7 @@ async function main() {
     if (!force && (pinned || running || asking() || gatingTcc() || hasSelectionChip())) return
     expanded = false
     document.body.classList.remove('expanded')
+    if (docked !== undefined) dockTab.hidden = false
     stop.hidden = true
     syncGif()
     if (force) {
@@ -1033,10 +1098,18 @@ async function main() {
   window.addEventListener('unload', stopRemoteEvents)
 
   document.body.addEventListener('pointerenter', () => {
+    dockPointerInside = true
     if (dragging || collapsing) return
+    if (docked !== undefined) {
+      if (dockHoverArmed) void unsnapDocked()
+      return
+    }
+    if (suppressExpand) return
     void setExpanded(true)
   })
   document.body.addEventListener('pointerleave', () => {
+    dockPointerInside = false
+    suppressExpand = false
     if (dragging || collapsing) return
     scheduleCollapse()
   })
@@ -1068,16 +1141,20 @@ async function main() {
     if (!dragging) {
       if (Math.hypot(event.screenX - pointer.startX, event.screenY - pointer.startY) <= 4) return
       dragging = true
+      if (running || asking() || gatingTcc()) {
+        void moveBall(lastOrigin.x, lastOrigin.y)
+        return
+      }
       collapsing = true
       pinned = false
       document.body.classList.remove('pinned')
       void setExpanded(false, true).then(() => {
         collapsing = false
-        if (dragging && lastOrigin !== undefined) void api.floating.move(lastOrigin.x, lastOrigin.y)
+        if (dragging && lastOrigin !== undefined) void moveBall(lastOrigin.x, lastOrigin.y)
       })
       return
     }
-    if (!collapsing) void api.floating.move(lastOrigin.x, lastOrigin.y)
+    if (!collapsing) void moveBall(lastOrigin.x, lastOrigin.y)
   })
   async function finishPointer(event) {
     if (dragging) {
@@ -1089,8 +1166,12 @@ async function main() {
         : { x: event.screenX - pointer.dx, y: event.screenY - pointer.dy }
       pointer = undefined
       lastOrigin = undefined
-      if (origin !== undefined) await api.floating.move(origin.x, origin.y)
-      await api.floating.clamp()
+      const skipDock = skipDockCommit
+      skipDockCommit = false
+      if (!skipDock) {
+        if (origin !== undefined) await moveBall(origin.x, origin.y)
+        await clampBall()
+      }
       return true
     }
     pointer = undefined
@@ -1116,6 +1197,39 @@ async function main() {
   })
   // Native overlay menus can swallow pointerup; lost capture must end the grab so hover cannot keep moving the window.
   ball.addEventListener('lostpointercapture', event => {
+    void finishPointer(event)
+  })
+
+  dockTab.addEventListener('pointerdown', event => {
+    if (!isPrimaryButton(event)) return
+    dragging = false
+    collapsing = false
+    skipClick = true
+    lastOrigin = undefined
+    pointer = { dx: 0, dy: 0, startX: event.screenX, startY: event.screenY }
+    dockTab.setPointerCapture(event.pointerId)
+  })
+  dockTab.addEventListener('pointermove', event => {
+    if (pointer === undefined || docked === undefined) return
+    if (!primaryButtonHeld(event)) {
+      void finishPointer(event)
+      return
+    }
+    lastOrigin = { x: event.screenX, y: event.screenY }
+    const inward = docked === 'right'
+      ? pointer.startX - event.screenX
+      : event.screenX - pointer.startX
+    if (inward <= DOCK_DRAG_OFF_PX) return
+    dragging = true
+    void unsnapDocked()
+  })
+  dockTab.addEventListener('pointerup', event => {
+    void finishPointer(event)
+  })
+  dockTab.addEventListener('pointercancel', event => {
+    void finishPointer(event)
+  })
+  dockTab.addEventListener('lostpointercapture', event => {
     void finishPointer(event)
   })
 

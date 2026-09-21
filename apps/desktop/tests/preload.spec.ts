@@ -15,6 +15,7 @@ it('exposes overlay expand, clamp, dsh_orb workspace, and selection IPC', async 
   expect(api.floating).toMatchObject({
     setExpanded: expect.any(Function),
     clamp: expect.any(Function),
+    unsnap: expect.any(Function),
     orbWorkspacePath: expect.any(Function),
     setSessionRunning: expect.any(Function),
     overlayModel: expect.any(Function),
@@ -44,6 +45,8 @@ it('exposes overlay expand, clamp, dsh_orb workspace, and selection IPC', async 
   expect(api.floating).not.toHaveProperty('dock')
   await api.floating.setExpanded(true)
   await api.floating.clamp()
+  await api.floating.unsnap()
+  await api.floating.move(20, 30, false)
   await api.floating.orbWorkspacePath()
   await api.floating.setSessionRunning(true)
   await api.floating.avatarUrl()
@@ -58,7 +61,9 @@ it('exposes overlay expand, clamp, dsh_orb workspace, and selection IPC', async 
   await api.selection.setContentSize({ width: 280, height: 120 })
   expect(electron.ipcRenderer.invoke.mock.calls).toEqual([
     [DESKTOP_IPC.floatingSetExpanded, true],
-    [DESKTOP_IPC.floatingClamp],
+    [DESKTOP_IPC.floatingClamp, undefined],
+    [DESKTOP_IPC.floatingUnsnap],
+    [DESKTOP_IPC.floatingMove, 20, 30, false],
     [DESKTOP_IPC.floatingOrbWorkspace],
     [DESKTOP_IPC.floatingRunning, true],
     [DESKTOP_IPC.floatingAvatarGet],

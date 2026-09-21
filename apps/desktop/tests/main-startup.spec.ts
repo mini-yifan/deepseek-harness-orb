@@ -4,7 +4,11 @@ import { DESKTOP_IPC } from '../src/ipc.ts'
 import {
   defaultFloatingBallOrigin,
   expandedOverlayBounds,
+  FLOATING_BALL_SIZE,
   FLOATING_CHROME_INSET,
+  FLOATING_DOCK_HIT_WIDTH,
+  FLOATING_DOCK_IN_PAD,
+  FLOATING_DOCK_OVERLAP,
 } from '../src/floating-window.ts'
 
 const harness = await vi.hoisted(async () => {
@@ -223,13 +227,20 @@ vi.mock('electron', () => ({
   Menu: { setApplicationMenu: vi.fn(), buildFromTemplate: vi.fn(() => ({ popup: vi.fn() })) },
   protocol: { registerSchemesAsPrivileged: vi.fn(), handle: vi.fn() },
   screen: {
-    getDisplayNearestPoint: () => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } }),
-    getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } }),
+    getDisplayNearestPoint: () => ({
+      bounds: { x: 0, y: 0, width: 1440, height: 900 },
+      workArea: { x: 0, y: 0, width: 1440, height: 900 },
+    }),
+    getPrimaryDisplay: () => ({
+      bounds: { x: 0, y: 0, width: 1440, height: 900 },
+      workArea: { x: 0, y: 0, width: 1440, height: 900 },
+    }),
   },
   shell: { openExternal: vi.fn() },
   systemPreferences: {
     isTrustedAccessibilityClient: vi.fn(() => false),
     getMediaAccessStatus: vi.fn(() => 'denied'),
+    getAnimationSettings: vi.fn(() => ({ prefersReducedMotion: false })),
   },
 }))
 vi.mock('../src/paths.ts', () => ({
@@ -649,10 +660,25 @@ describe('desktop floating overlay', () => {
       x: 20 - FLOATING_CHROME_INSET,
       y: 30 - FLOATING_CHROME_INSET,
     })
-    invokeFloating(DESKTOP_IPC.floatingClamp)
+    await invokeFloating(DESKTOP_IPC.floatingClamp)
     expect(overlay?.bounds).toMatchObject({
       x: 20 - FLOATING_CHROME_INSET,
       y: 30 - FLOATING_CHROME_INSET,
+    })
+    const dockX = 1440 - FLOATING_BALL_SIZE + FLOATING_DOCK_OVERLAP
+    expect(invokeFloating(DESKTOP_IPC.floatingMove, dockX, 400)).toEqual({ docked: undefined })
+    expect(overlay?.bounds).toMatchObject({
+      x: dockX - FLOATING_CHROME_INSET,
+      width: FLOATING_BALL_SIZE + 2 * FLOATING_CHROME_INSET,
+    })
+    expect(await invokeFloating(DESKTOP_IPC.floatingClamp)).toEqual({ docked: 'right' })
+    expect(overlay?.bounds).toMatchObject({
+      width: FLOATING_DOCK_HIT_WIDTH,
+    })
+    expect(await invokeFloating(DESKTOP_IPC.floatingUnsnap)).toEqual({ docked: undefined })
+    expect(overlay?.bounds).toMatchObject({
+      x: 1440 - FLOATING_BALL_SIZE - FLOATING_DOCK_IN_PAD - FLOATING_CHROME_INSET,
+      width: FLOATING_BALL_SIZE + 2 * FLOATING_CHROME_INSET,
     })
     const frameScript = frame?.webContents.executeJavaScript as ReturnType<typeof vi.fn>
     expect(frameScript).toHaveBeenCalled()

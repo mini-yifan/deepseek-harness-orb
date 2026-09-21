@@ -36,6 +36,7 @@ import {
   moveFloatingBall,
   OVERLAY_GUARD_INPUT_APPLY_MS,
   overlayWindowExcludeIds,
+  unsnapDockedBall,
   resetFloatingOverlayGuard,
   setFloatingExpanded,
 } from './floating-window.ts'
@@ -829,15 +830,18 @@ async function main(): Promise<void> {
     assertDesktopSender(event, ['shell'])
     await updates.install()
   })
-  ipcMain.handle(DESKTOP_IPC.floatingMove, (event, x: unknown, y: unknown) => {
+  ipcMain.handle(DESKTOP_IPC.floatingMove, (event, x: unknown, y: unknown, canDock: unknown) => {
     const window = requireFloatingWindow(event)
     if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) {
       throw new Error('dsh desktop: floating move requires finite coordinates')
     }
-    moveFloatingBall(window, x, y)
+    return moveFloatingBall(window, x, y, canDock !== false)
   })
-  ipcMain.handle(DESKTOP_IPC.floatingClamp, (event) => {
-    clampFloatingWindow(requireFloatingWindow(event))
+  ipcMain.handle(DESKTOP_IPC.floatingClamp, (event, canDock: unknown) => {
+    return clampFloatingWindow(requireFloatingWindow(event), canDock !== false)
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingUnsnap, (event) => {
+    return unsnapDockedBall(requireFloatingWindow(event))
   })
   ipcMain.handle(DESKTOP_IPC.floatingSetExpanded, (event, expanded: unknown) => {
     if (typeof expanded !== 'boolean') throw new Error('dsh desktop: floating expand requires a boolean')
