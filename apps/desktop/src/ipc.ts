@@ -3,7 +3,7 @@
 import type { DesktopPluginRecord } from './project-manager.ts'
 import type { DesktopLocale } from './locale.ts'
 import type { DesktopBackendState } from './backend-controller.ts'
-import type { FloatingExpandState } from './floating-window.ts'
+import type { FloatingDockState, FloatingExpandState } from './floating-window.ts'
 import type { OrbAgentModelSelection } from './orb-agent-models.ts'
 import type { OrbPermissionPreset } from './orb-permission.ts'
 import type { SelectionTranslateLanguage } from './selection-prompt.ts'
@@ -28,6 +28,7 @@ export const DESKTOP_IPC = {
   updatesState: 'dsh-desktop:updates-state',
   floatingMove: 'dsh-desktop:floating-move',
   floatingClamp: 'dsh-desktop:floating-clamp',
+  floatingUnsnap: 'dsh-desktop:floating-unsnap',
   floatingSetExpanded: 'dsh-desktop:floating-set-expanded',
   floatingSessionGet: 'dsh-desktop:floating-session-get',
   floatingSessionSet: 'dsh-desktop:floating-session-set',
@@ -110,8 +111,9 @@ export interface DshDesktopApi {
     subscribe(listener: (state: DesktopUpdateState) => void): () => void
   }
   readonly floating: {
-    move(x: number, y: number): Promise<void>
-    clamp(): Promise<void>
+    move(x: number, y: number, canDock?: boolean): Promise<FloatingDockState>
+    clamp(canDock?: boolean): Promise<FloatingDockState>
+    unsnap(): Promise<FloatingDockState>
     setExpanded(expanded: boolean): Promise<FloatingExpandState>
     sessionId(): Promise<string | undefined>
     setSessionId(sessionId: string): Promise<void>

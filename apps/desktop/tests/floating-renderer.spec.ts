@@ -401,7 +401,7 @@ it('collapses then moves by the ball grab offset instead of the window origin', 
     await expect.poll(() => setExpanded.mock.calls.some(call => call[0] === false)).toBe(true)
     expect(api.floating.move).not.toHaveBeenCalled()
     releaseCollapse?.()
-    await expect.poll(() => api.floating.move.mock.calls).toEqual([[980, 760]])
+    await expect.poll(() => api.floating.move.mock.calls).toEqual([[980, 760, true]])
     dispatchPointer(ball, 'pointerup', { pointerId: 1, button: 0, clientX: 268, clientY: 328, screenX: 1000, screenY: 760 })
     await expect.poll(() => api.floating.clamp.mock.calls.length).toBe(1)
     expect(document.body.classList.contains('pinned')).toBe(false)
@@ -411,7 +411,7 @@ it('collapses then moves by the ball grab offset instead of the window origin', 
   }
 })
 
-async function mountPointerOverlay(options?: { dark?: boolean }) {
+async function mountPointerOverlay(options?: { dark?: boolean; running?: boolean }) {
   const dom = new JSDOM(readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8'), {
     runScripts: 'outside-only',
     url: 'dsh-app://shell/floating.html',
@@ -435,7 +435,15 @@ async function mountPointerOverlay(options?: { dark?: boolean }) {
     if (body.method === 'session/create') value = { sessionId: 'session-orb', agentPreset: 'computer-use' }
     if (body.method === 'session/modelCatalog') value = { groups: [] }
     if (body.method === 'session/page') value = { records: [] }
-    if (body.method === 'session/list') value = { items: [{ sessionId: 'session-orb', running: false, projections: { asOfSeq: 0 } }] }
+    if (body.method === 'session/list') {
+      value = {
+        items: [{
+          sessionId: 'session-orb',
+          running: options?.running === true,
+          projections: { asOfSeq: 0 },
+        }],
+      }
+    }
     return {
       ok: true,
       json: async () => ({
@@ -447,7 +455,9 @@ async function mountPointerOverlay(options?: { dark?: boolean }) {
   })
   Object.defineProperty(dom.window, 'fetch', { value: fetchMock })
   Object.defineProperty(dom.window, 'crypto', { value: globalThis.crypto })
-  const setExpanded = vi.fn(async (expanded: boolean) => ({ expanded, horizontal: 'left', vertical: 'up' }))
+  const setExpanded = vi.fn(async (expanded: boolean) => ({
+    expanded, horizontal: 'left', vertical: 'up', docked: undefined,
+  }))
   const api = {
     locale: async () => resolveDesktopLocale('en'),
     backend: {
@@ -457,8 +467,9 @@ async function mountPointerOverlay(options?: { dark?: boolean }) {
     floating: {
       sessionId: async () => undefined,
       setSessionId: vi.fn(),
-      move: vi.fn(),
-      clamp: vi.fn(),
+      move: vi.fn(async () => ({ docked: undefined })),
+      clamp: vi.fn(async () => ({ docked: undefined })),
+      unsnap: vi.fn(async () => ({ docked: undefined })),
       setExpanded,
       orbWorkspacePath: async () => '/tmp/dsh_orb',
       setSessionRunning: vi.fn(),
@@ -527,6 +538,66 @@ it('ends a primary grab when the button is no longer down', async () => {
     overlay.dispatchPointer('lostpointercapture', { pointerId: 1, button: 0, clientX: 268, clientY: 368, screenX: 1000, screenY: 800 })
     overlay.dispatchPointer('pointermove', { pointerId: 1, buttons: 0, clientX: 268, clientY: 300, screenX: 1000, screenY: 700 })
     expect(overlay.api.floating.move).not.toHaveBeenCalled()
+  } finally {
+    overlay.dom.window.close()
+  }
+})
+
+async function dragUntilMove(overlay: Awaited<ReturnType<typeof mountPointerOverlay>>) {
+  overlay.dispatchPointer('pointerdown', {
+    pointerId: 1, button: 0, clientX: 268, clientY: 368, screenX: 1000, screenY: 800,
+  })
+  overlay.dispatchPointer('pointermove', {
+    pointerId: 1, buttons: 1, clientX: 268, clientY: 300, screenX: 1400, screenY: 700,
+  })
+  overlay.dispatchPointer('pointerup', {
+    pointerId: 1, button: 0, clientX: 268, clientY: 300, screenX: 1400, screenY: 700,
+  })
+}
+
+it('docks from clamp, ignores hover for 800ms, then unsnaps', async () => {
+  const overlay = await mountPointerOverlay()
+  const nativeSetTimeout = overlay.dom.window.setTimeout.bind(overlay.dom.window)
+  let hoverDelay: (() => void) | undefined
+  overlay.dom.window.setTimeout = ((fn: TimerHandler, ms?: number, ...args: unknown[]) => {
+    if (ms === 800 && typeof fn === 'function') {
+      hoverDelay = () => { fn() }
+      return 0
+    }
+    return nativeSetTimeout(fn, ms, ...args)
+  }) as typeof overlay.dom.window.setTimeout
+  try {
+    overlay.api.floating.move.mockResolvedValue({ docked: undefined })
+    overlay.api.floating.clamp.mockResolvedValue({ docked: 'right' })
+    overlay.api.floating.unsnap.mockResolvedValue({ docked: undefined })
+    dragUntilMove(overlay)
+    await expect.poll(() => overlay.document.body.classList.contains('docked')).toBe(true)
+    expect(overlay.document.body.classList.contains('docked-right')).toBe(true)
+    expect(overlay.document.querySelector<HTMLButtonElement>('#dock-tab')?.hidden).toBe(false)
+    overlay.document.body.dispatchEvent(new overlay.dom.window.Event('pointerenter', { bubbles: true }))
+    expect(overlay.api.floating.unsnap).not.toHaveBeenCalled()
+    hoverDelay?.()
+    await expect.poll(() => overlay.api.floating.unsnap.mock.calls.length).toBe(1)
+    expect(overlay.document.body.classList.contains('docked')).toBe(false)
+  } finally {
+    overlay.dom.window.close()
+  }
+})
+
+it('does not force-collapse or allow dock while the Computer Use session is running', async () => {
+  const overlay = await mountPointerOverlay({ running: true })
+  try {
+    await expect.poll(() => overlay.document.body.classList.contains('running')).toBe(true)
+    overlay.api.floating.setExpanded.mockClear()
+    overlay.dispatchPointer('pointerdown', {
+      pointerId: 1, button: 0, clientX: 268, clientY: 368, screenX: 1000, screenY: 800,
+    })
+    overlay.dispatchPointer('pointermove', {
+      pointerId: 1, buttons: 1, clientX: 268, clientY: 300, screenX: 1400, screenY: 700,
+    })
+    await expect.poll(() => overlay.api.floating.move.mock.calls.length).toBeGreaterThan(0)
+    expect(overlay.api.floating.setExpanded.mock.calls.some(call => call[0] === false)).toBe(false)
+    expect(overlay.api.floating.move.mock.calls[0]?.[2]).toBe(false)
   } finally {
     overlay.dom.window.close()
   }

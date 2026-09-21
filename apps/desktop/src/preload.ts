@@ -37,8 +37,9 @@ const api: DshDesktopApi = {
     },
   },
   floating: {
-    move: (x, y) => ipcRenderer.invoke(DESKTOP_IPC.floatingMove, x, y) as Promise<void>,
-    clamp: () => ipcRenderer.invoke(DESKTOP_IPC.floatingClamp) as Promise<void>,
+    move: (x, y, canDock) => ipcRenderer.invoke(DESKTOP_IPC.floatingMove, x, y, canDock) as ReturnType<DshDesktopApi['floating']['move']>,
+    clamp: canDock => ipcRenderer.invoke(DESKTOP_IPC.floatingClamp, canDock) as ReturnType<DshDesktopApi['floating']['clamp']>,
+    unsnap: () => ipcRenderer.invoke(DESKTOP_IPC.floatingUnsnap) as ReturnType<DshDesktopApi['floating']['unsnap']>,
     setExpanded: expanded => ipcRenderer.invoke(DESKTOP_IPC.floatingSetExpanded, expanded) as ReturnType<DshDesktopApi['floating']['setExpanded']>,
     sessionId: () => ipcRenderer.invoke(DESKTOP_IPC.floatingSessionGet) as Promise<string | undefined>,
     setSessionId: sessionId => ipcRenderer.invoke(DESKTOP_IPC.floatingSessionSet, sessionId) as Promise<void>,
