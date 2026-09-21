@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-20-desktop-sck-in-process-identity.md
-2026-09-20-desktop-sck-in-process-identity.md: a83971ffd77a567ef59a685ef17a51eafa9586b6
-2026-09-20-desktop-sck-in-process-identity.zh.md: 9fb34d7a2ed22c68a912cc97677d04e2723d79bd
+2026-09-20-desktop-sck-in-process-identity.md: 92ac517cc7843cf2c1d189ef929eb21c38c421ff
+2026-09-20-desktop-sck-in-process-identity.zh.md: 69b9d637d4177abdc6432a880574abe710271c0f

@@ -1,9 +1,6 @@
-/** Spawn and parse the Darwin selection helper that watches drag-selects. */
+/** Parse Darwin selection-monitor NDJSON and start the in-process Electron binding. */
 
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import { sep } from 'node:path'
+import { loadMacosSelectionBinding, type MacosSelectionNapiBinding } from './macos-selection-napi.ts'
 
 /** Selection rectangle in Electron screen coordinates (top-left origin). */
 export interface SelectionBounds {
@@ -111,60 +108,32 @@ export function parseSelectionHelperLine(line: string): SelectionHelperEvent | u
 }
 
 /**
- * Absolute path of the Darwin selection helper next to the bundled main script.
- * Packaged asar builds look in the matching `app.asar.unpacked` tree.
- * @returns a path that may or may not exist yet.
- */
-export function macosSelectionHelperPath(): string {
-  const adjacent = fileURLToPath(new URL('./macos-selection', import.meta.url))
-  if (existsSync(adjacent)) return adjacent
-  return adjacent.replace(`${sep}app.asar${sep}`, `${sep}app.asar.unpacked${sep}`)
-}
-
-/**
- * Spawn the Darwin selection helper when the binary exists.
+ * Start the Darwin selection monitor in this Electron process when the addon exists.
  * @param handlers - event sink.
- * @returns a running monitor, or undefined when the helper is missing or not Darwin.
+ * @returns a running monitor, or undefined when the addon is missing or not Darwin.
  */
 export function startSelectionMonitor(handlers: SelectionMonitorHandlers): SelectionMonitor | undefined {
   if (process.platform !== 'darwin') return undefined
-  const helper = macosSelectionHelperPath()
-  if (!existsSync(helper)) return undefined
-  const child: ChildProcessWithoutNullStreams = spawn(helper, [], {
-    stdio: ['pipe', 'pipe', 'pipe'],
-  })
-  let buffer = ''
-  child.stdout.setEncoding('utf8')
-  child.stdout.on('data', (chunk: string) => {
-    buffer += chunk
-    let newline = buffer.indexOf('\n')
-    while (newline !== -1) {
-      const line = buffer.slice(0, newline)
-      buffer = buffer.slice(newline + 1)
-      const event = parseSelectionHelperLine(line)
-      if (event !== undefined) handlers.onEvent(event)
-      newline = buffer.indexOf('\n')
-    }
+  let addon: MacosSelectionNapiBinding
+  try {
+    addon = loadMacosSelectionBinding()
+  } catch {
+    // Addon is not next to this module: unit tests import `src/`, and non-Darwin stubs are not loadable.
+    return undefined
+  }
+  addon.start((line) => {
+    const event = parseSelectionHelperLine(line)
+    if (event !== undefined) handlers.onEvent(event)
   })
   return {
     stop() {
-      if (child.killed) return
-      child.kill()
+      addon.stop()
     },
     setExcludePids(pids) {
-      writeHelperCommand(child, { type: 'exclude-pids', pids: [...pids] })
+      addon.excludePids(pids.map(String).join(','))
     },
     activatePid(pid) {
-      writeHelperCommand(child, { type: 'activate-pid', pid })
+      addon.activatePid(pid)
     },
-  }
-}
-
-function writeHelperCommand(child: ChildProcessWithoutNullStreams, command: unknown): void {
-  if (child.killed || child.stdin.destroyed) return
-  try {
-    child.stdin.write(`${JSON.stringify(command)}\n`)
-  } catch {
-    // Helper already exited; stop() owns teardown.
   }
 }

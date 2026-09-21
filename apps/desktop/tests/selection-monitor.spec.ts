@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { readFile } from 'node:fs/promises'
 import { parseSelectionHelperLine, startSelectionMonitor } from '../src/selection-monitor.ts'
 
 describe('selection helper protocol', () => {
@@ -42,7 +43,18 @@ describe('selection helper protocol', () => {
     expect(parseSelectionHelperLine('{"type":"mouse-up","x":"1","y":2}')).toBeUndefined()
   })
 
-  it('does not spawn a helper when the binary is missing', () => {
+  it('does not start a monitor when the addon is missing', () => {
     expect(startSelectionMonitor({ onEvent: () => undefined })).toBeUndefined()
+  })
+
+  it('monitors in the Electron process and never changes activation policy', async () => {
+    const napi = await readFile(new URL('../src/macos-selection-napi.c', import.meta.url), 'utf8')
+    const swift = await readFile(new URL('../src/macos-selection.swift', import.meta.url), 'utf8')
+    expect(napi).toContain('napi_create_threadsafe_function')
+    expect(napi).toContain('dsh_macos_selection_start')
+    expect(napi).not.toContain('activationPolicy')
+    expect(swift).toContain('@_cdecl("dsh_macos_selection_start")')
+    const library = swift.split('@_cdecl("dsh_macos_selection_start")')[1] ?? ''
+    expect(library).not.toContain('setActivationPolicy')
   })
 })

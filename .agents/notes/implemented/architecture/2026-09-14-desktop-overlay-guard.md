@@ -36,7 +36,7 @@ Computer Use stays Electron-agnostic: `wrapDesktopBackend` wraps `listScreens`, 
 
 ## Consequences
 
-Mixed Electron/Host shells fail at `ready` instead of on the first cloak. A lost `end` is recovered when the Host child exits. Concurrent Computer Use sessions share overlay refcounts. Keyboard focus can still land in the overlay outside an `input` interval; `open_app` and HID use `withInput` so the overlay blurs before activate or posted events. Web and CLI Computer Use stay uncloaked. Darwin Desktop extra copies include `lib/macos-sck-capture` when that helper was compiled. Packaged Electron unpacks `lib/macos-sck-napi.node` and `lib/libmacos-sck-capture.dylib` beside `macos-selection`, not under `signIgnore` `dsh/`.
+Mixed Electron/Host shells fail at `ready` instead of on the first cloak. A lost `end` is recovered when the Host child exits. Concurrent Computer Use sessions share overlay refcounts. Keyboard focus can still land in the overlay outside an `input` interval; `open_app` and HID use `withInput` so the overlay blurs before activate or posted events. Web and CLI Computer Use stay uncloaked. Darwin Desktop extra copies include `lib/macos-sck-capture` when that helper was compiled. Packaged Electron unpacks `lib/macos-sck-napi.node` and `lib/libmacos-sck-capture.dylib` beside `macos-selection-napi.node`, not under `signIgnore` `dsh/`.
 
 ## Testing
 

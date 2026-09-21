@@ -66,12 +66,14 @@ describe('desktop macOS release signature', () => {
       productName: 'DeepSeek Orb',
       files: expect.arrayContaining([
         'lib/*.js',
-        'lib/macos-selection',
+        'lib/macos-selection-napi.node',
+        'lib/libmacos-selection.dylib',
         'lib/macos-sck-napi.node',
         'lib/libmacos-sck-capture.dylib',
       ]),
       asarUnpack: [
-        'lib/macos-selection',
+        'lib/macos-selection-napi.node',
+        'lib/libmacos-selection.dylib',
         'lib/macos-sck-napi.node',
         'lib/libmacos-sck-capture.dylib',
       ],
@@ -94,6 +96,8 @@ describe('desktop macOS release signature', () => {
         url: 'https://desktop-updates.example.com/_/harness/desktop/stable/mac-arm64/',
       }],
     })
+    expect(config.files).not.toContain('lib/macos-selection')
+    expect(config.asarUnpack).not.toContain('lib/macos-selection')
     expect(typeof config.artifactBuildCompleted).toBe('function')
   })
 

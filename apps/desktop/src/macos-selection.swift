@@ -34,6 +34,7 @@ private final class SelectionMonitor: @unchecked Sendable {
   private var postedCommandCRemaining = 0
 
   func start() {
+    if eventMonitor != nil { return }
     let trusted = AXIsProcessTrustedWithOptions([
       kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: false,
     ] as CFDictionary)
@@ -48,6 +49,21 @@ private final class SelectionMonitor: @unchecked Sendable {
     eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
       self?.handle(event)
     }
+  }
+
+  func stop() {
+    if let eventMonitor {
+      NSEvent.removeMonitor(eventMonitor)
+    }
+    eventMonitor = nil
+    press = nil
+    dragged = false
+  }
+
+  func setExcludePids(_ pids: Set<pid_t>) {
+    lock.lock()
+    excludePids = pids
+    lock.unlock()
   }
 
   func readCommands() {
@@ -68,21 +84,24 @@ private final class SelectionMonitor: @unchecked Sendable {
         continue
       }
       if object["type"] as? String == "activate-pid", let number = object["pid"] as? NSNumber {
-        let pid = pid_t(truncatingIfNeeded: number.intValue)
-        lock.lock()
-        let excluded = excludePids
-        lock.unlock()
-        if excluded.contains(pid) { continue }
-        DispatchQueue.main.async {
-          guard let application = NSRunningApplication(processIdentifier: pid), !application.isTerminated else {
-            return
-          }
-          if #available(macOS 14.0, *) {
-            _ = application.activate()
-          } else {
-            _ = application.activate(options: [.activateIgnoringOtherApps])
-          }
-        }
+        activatePid(pid_t(truncatingIfNeeded: number.intValue))
+      }
+    }
+  }
+
+  func activatePid(_ pid: pid_t) {
+    lock.lock()
+    let excluded = excludePids
+    lock.unlock()
+    if excluded.contains(pid) { return }
+    DispatchQueue.main.async {
+      guard let application = NSRunningApplication(processIdentifier: pid), !application.isTerminated else {
+        return
+      }
+      if #available(macOS 14.0, *) {
+        _ = application.activate()
+      } else {
+        _ = application.activate(options: [.activateIgnoringOtherApps])
       }
     }
   }
@@ -285,6 +304,85 @@ private func emit(_ payload: [String: Any]) {
     let data = try? JSONSerialization.data(withJSONObject: payload, options: []),
     let line = String(data: data, encoding: .utf8)
   else { return }
+  libraryEmit.lock.lock()
+  let emitC = libraryEmit.emit
+  let context = libraryEmit.context
+  libraryEmit.lock.unlock()
+  if let emitC {
+    line.withCString { emitC($0, context) }
+    return
+  }
   fputs(line + "\n", stdout)
   fflush(stdout)
+}
+
+public typealias DshSelectionEmit = @convention(c) (UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Void
+
+private final class LibraryEmit: @unchecked Sendable {
+  let lock = NSLock()
+  var emit: DshSelectionEmit?
+  var context: UnsafeMutableRawPointer?
+}
+
+private let libraryEmit = LibraryEmit()
+private var libraryMonitor: SelectionMonitor?
+
+/// Selection monitor for the Desktop Electron process. Must not change NSApplication activation policy.
+/// @param callback NDJSON line callback; Electron owns the pointer for the life of the monitor.
+/// @param context Pointer passed back to `callback`.
+/// @returns 0 after the monitor is armed or `untrusted` has been emitted.
+@_cdecl("dsh_macos_selection_start")
+public func dsh_macos_selection_start(
+  callback: DshSelectionEmit?,
+  context: UnsafeMutableRawPointer?,
+) -> Int32 {
+  libraryEmit.lock.lock()
+  libraryEmit.emit = callback
+  libraryEmit.context = context
+  libraryEmit.lock.unlock()
+  let arm = {
+    if libraryMonitor == nil { libraryMonitor = SelectionMonitor() }
+    libraryMonitor?.start()
+    emit(["type": "ready"])
+  }
+  if Thread.isMainThread {
+    arm()
+  } else {
+    DispatchQueue.main.sync(execute: arm)
+  }
+  return 0
+}
+
+@_cdecl("dsh_macos_selection_stop")
+public func dsh_macos_selection_stop() {
+  let disarm = {
+    libraryMonitor?.stop()
+  }
+  if Thread.isMainThread {
+    disarm()
+  } else {
+    DispatchQueue.main.sync(execute: disarm)
+  }
+  libraryEmit.lock.lock()
+  libraryEmit.emit = nil
+  libraryEmit.context = nil
+  libraryEmit.lock.unlock()
+}
+
+@_cdecl("dsh_macos_selection_exclude_pids")
+public func dsh_macos_selection_exclude_pids(_ pids: UnsafePointer<CChar>?) {
+  var next: Set<pid_t> = [pid_t(getpid())]
+  if let pids {
+    for part in String(cString: pids).split(separator: ",") {
+      if let value = Int32(part.trimmingCharacters(in: .whitespaces)) {
+        next.insert(pid_t(value))
+      }
+    }
+  }
+  libraryMonitor?.setExcludePids(next)
+}
+
+@_cdecl("dsh_macos_selection_activate_pid")
+public func dsh_macos_selection_activate_pid(_ pid: Int32) {
+  libraryMonitor?.activatePid(pid_t(pid))
 }
