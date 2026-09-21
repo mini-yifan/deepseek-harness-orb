@@ -3,6 +3,7 @@ import { runInContext } from 'node:vm'
 import { JSDOM } from 'jsdom'
 import { expect, it, vi } from 'vitest'
 import { resolveDesktopLocale } from '../src/locale.ts'
+import type { FloatingDockState } from '../src/floating-window.ts'
 import { composeSelectionSendPrompt } from '../src/selection-prompt.ts'
 
 function isRemoteStream(input: string | URL): boolean {
@@ -467,9 +468,11 @@ async function mountPointerOverlay(options?: { dark?: boolean; running?: boolean
     floating: {
       sessionId: async () => undefined,
       setSessionId: vi.fn(),
-      move: vi.fn(async () => ({ docked: undefined })),
-      clamp: vi.fn(async () => ({ docked: undefined })),
-      unsnap: vi.fn(async () => ({ docked: undefined })),
+      move: vi.fn(async (_x: number, _y: number, _canDock?: boolean): Promise<FloatingDockState> => (
+        { docked: undefined }
+      )),
+      clamp: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
+      unsnap: vi.fn(async (): Promise<FloatingDockState> => ({ docked: undefined })),
       setExpanded,
       orbWorkspacePath: async () => '/tmp/dsh_orb',
       setSessionRunning: vi.fn(),
