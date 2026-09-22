@@ -532,7 +532,7 @@ it('restores the front app on a running overlay click outside a text field', asy
     }
     pointerup(history)
     expect(overlay.api.floating.restoreFrontApp).toHaveBeenCalledTimes(1)
-    const prompt = overlay.document.querySelector('#prompt')
+    const prompt = overlay.document.querySelector<HTMLElement>('#prompt')
     if (prompt === null) throw new Error('missing prompt')
     prompt.focus()
     expect(overlay.api.floating.setTextEditing).toHaveBeenCalledWith(true)
