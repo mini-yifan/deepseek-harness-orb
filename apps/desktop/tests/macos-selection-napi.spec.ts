@@ -7,6 +7,7 @@ describe('macos selection Electron binding', () => {
     const source = await readFile(new URL('../src/macos-selection-napi.c', import.meta.url), 'utf8')
     expect(source).toContain('napi_create_threadsafe_function')
     expect(source).toContain('dsh_macos_selection_start')
+    expect(source).toContain('dsh_macos_selection_last_front_pid')
     expect(source).not.toContain('activationPolicy')
   })
 

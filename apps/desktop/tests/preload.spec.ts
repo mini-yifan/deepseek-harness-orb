@@ -18,6 +18,8 @@ it('exposes overlay expand, clamp, dsh_orb workspace, and selection IPC', async 
     unsnap: expect.any(Function),
     orbWorkspacePath: expect.any(Function),
     setSessionRunning: expect.any(Function),
+    setTextEditing: expect.any(Function),
+    restoreFrontApp: expect.any(Function),
     overlayModel: expect.any(Function),
     onOverlayModel: expect.any(Function),
     avatarUrl: expect.any(Function),
@@ -49,6 +51,8 @@ it('exposes overlay expand, clamp, dsh_orb workspace, and selection IPC', async 
   await api.floating.move(20, 30, false)
   await api.floating.orbWorkspacePath()
   await api.floating.setSessionRunning(true)
+  await api.floating.setTextEditing(true)
+  await api.floating.restoreFrontApp()
   await api.floating.avatarUrl()
   await api.floating.overlayModel()
   await api.floating.overlayPermission()
@@ -66,6 +70,8 @@ it('exposes overlay expand, clamp, dsh_orb workspace, and selection IPC', async 
     [DESKTOP_IPC.floatingMove, 20, 30, false],
     [DESKTOP_IPC.floatingOrbWorkspace],
     [DESKTOP_IPC.floatingRunning, true],
+    [DESKTOP_IPC.floatingEditing, true],
+    [DESKTOP_IPC.floatingRestoreFront],
     [DESKTOP_IPC.floatingAvatarGet],
     [DESKTOP_IPC.floatingOverlayModelGet],
     [DESKTOP_IPC.floatingOverlayPermissionGet],

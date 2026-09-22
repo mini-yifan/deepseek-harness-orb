@@ -145,6 +145,12 @@ function delay(ms, signal) {
   })
 }
 
+function editableTarget(node) {
+  const element = node?.nodeType === 1 ? node : node?.parentElement
+  if (element === null || element === undefined || typeof element.closest !== 'function') return false
+  return element.closest('input, textarea, [contenteditable="true"]') !== null
+}
+
 function isComposing(event) {
   return event.isComposing === true || event.keyCode === 229
 }
@@ -1121,6 +1127,17 @@ async function main() {
   function primaryButtonHeld(event) {
     return (event.buttons & 1) === 1
   }
+
+  document.addEventListener('focusin', event => {
+    void api.floating.setTextEditing?.(editableTarget(event.target))
+  })
+  document.addEventListener('focusout', event => {
+    void api.floating.setTextEditing?.(editableTarget(event.relatedTarget))
+  })
+  document.addEventListener('pointerup', event => {
+    if (!isPrimaryButton(event) || !running || editableTarget(event.target)) return
+    void api.floating.restoreFrontApp?.()
+  })
 
   ball.addEventListener('pointerdown', event => {
     if (!isPrimaryButton(event)) return

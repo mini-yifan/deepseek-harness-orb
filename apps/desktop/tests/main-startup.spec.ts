@@ -67,6 +67,7 @@ const harness = await vi.hoisted(async () => {
       width?: number
       height?: number
       focusable?: boolean
+      roundedCorners?: boolean
       x?: number
       y?: number
     }) {
@@ -179,18 +180,23 @@ const harness = await vi.hoisted(async () => {
   const selectionMonitor = {
     onEvent: undefined as ((event: { type: string; text?: string; x?: number; y?: number; pid?: number }) => void) | undefined,
     activatePid: vi.fn(),
+    lastFrontPid: vi.fn(() => 42 as number | undefined),
     start(handlers: { onEvent: (event: { type: string; text?: string; x?: number; y?: number; pid?: number }) => void }) {
       selectionMonitor.onEvent = handlers.onEvent
       selectionMonitor.activatePid.mockReset()
+      selectionMonitor.lastFrontPid.mockReset()
+      selectionMonitor.lastFrontPid.mockReturnValue(42)
       return {
         stop: vi.fn(),
         setExcludePids: vi.fn(),
         activatePid: selectionMonitor.activatePid,
+        lastFrontPid: selectionMonitor.lastFrontPid,
       }
     },
   }
   return {
     windows, hosts, handlers, app, FakeWindow, FakeHost, selectionMonitor,
+    cursor: { x: 0, y: 0 },
     dialog: { showErrorBox: vi.fn(), showMessageBox: vi.fn() },
     applyRelease: vi.fn(() => { preparing.resolve(); return prepared.promise }),
     assertProfileRuntime: vi.fn(),
@@ -208,6 +214,10 @@ const harness = await vi.hoisted(async () => {
       nextMediaSourceId = 4242
       selectionMonitor.onEvent = undefined
       selectionMonitor.activatePid.mockReset()
+      selectionMonitor.lastFrontPid.mockReset()
+      selectionMonitor.lastFrontPid.mockReturnValue(42)
+      this.cursor.x = 0
+      this.cursor.y = 0
       preparing = deferred(); prepared = deferred(); hostStarted = deferred()
       navigated = deferred(); errorPublished = deferred(); quitCompleted = deferred()
     },
@@ -235,6 +245,7 @@ vi.mock('electron', () => ({
       bounds: { x: 0, y: 0, width: 1440, height: 900 },
       workArea: { x: 0, y: 0, width: 1440, height: 900 },
     }),
+    getCursorScreenPoint: () => ({ x: harness.cursor.x, y: harness.cursor.y }),
   },
   shell: { openExternal: vi.fn() },
   systemPreferences: {
@@ -555,6 +566,7 @@ describe('desktop floating overlay', () => {
     await harness.navigated.promise
     const overlay = harness.windows.find(window => window.options.type === 'panel')
     expect(overlay).toBeDefined()
+    expect(overlay?.options.roundedCorners).toBe(false)
     expect(overlay?.urls).toEqual(['dsh-app://shell/floating.html'])
     const primaryWorkArea = { x: 0, y: 0, width: 1440, height: 900 }
     const origin = defaultFloatingBallOrigin(primaryWorkArea)
@@ -789,6 +801,81 @@ describe('desktop floating overlay', () => {
     harness.app.emit('activate')
     expect(main.show).toHaveBeenCalled()
     expect(main.focus).toHaveBeenCalled()
+  })
+
+  it('does not raise the main window when the pointer is over the overlay', async () => {
+    vi.setSystemTime(1_000)
+    vi.stubGlobal('process', { ...process, platform: 'darwin', resourcesPath: 'desktop-test-resources' })
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    harness.prepared.resolve()
+    await harness.hostStarted.promise
+    harness.hosts[0]!.ready.resolve()
+    await harness.navigated.promise
+    const main = appWindows()[0]!
+    const overlay = harness.windows.find(window => window.urls.includes('dsh-app://shell/floating.html'))
+    if (overlay === undefined) throw new Error('missing overlay')
+    const bounds = overlay.getBounds()
+    harness.cursor.x = bounds.x + 8
+    harness.cursor.y = bounds.y + 8
+    main.show.mockClear()
+    main.focus.mockClear()
+    harness.app.emit('activate')
+    expect(main.show).not.toHaveBeenCalled()
+    expect(main.focus).not.toHaveBeenCalled()
+    expect(harness.selectionMonitor.activatePid).not.toHaveBeenCalled()
+    vi.setSystemTime(3_500)
+    harness.cursor.x = 12
+    harness.cursor.y = 12
+    harness.app.emit('activate')
+    expect(main.show).toHaveBeenCalled()
+    expect(main.focus).toHaveBeenCalled()
+
+    main.show.mockClear()
+    main.focus.mockClear()
+    main.blur.mockClear()
+    harness.selectionMonitor.activatePid.mockClear()
+    harness.cursor.x = bounds.x + 8
+    harness.cursor.y = bounds.y + 8
+    main.focus()
+    await invokeFloating(DESKTOP_IPC.floatingRunning, true)
+    harness.app.emit('activate')
+    expect(main.show).not.toHaveBeenCalled()
+    expect(main.focus).toHaveBeenCalledTimes(1)
+    expect(main.blur).toHaveBeenCalled()
+    expect(harness.selectionMonitor.activatePid).toHaveBeenCalledWith(42)
+
+    vi.setSystemTime(6_000)
+    harness.selectionMonitor.activatePid.mockClear()
+    main.blur.mockClear()
+    main.focus()
+    await invokeFloating(DESKTOP_IPC.floatingEditing, true)
+    harness.app.emit('activate')
+    expect(main.blur).toHaveBeenCalled()
+    expect(harness.selectionMonitor.activatePid).not.toHaveBeenCalled()
+    await invokeFloating(DESKTOP_IPC.floatingRestoreFront)
+    expect(harness.selectionMonitor.activatePid).not.toHaveBeenCalled()
+
+    await invokeFloating(DESKTOP_IPC.floatingEditing, false)
+    main.focus()
+    main.blur.mockClear()
+    harness.selectionMonitor.activatePid.mockClear()
+    await invokeFloating(DESKTOP_IPC.floatingRestoreFront)
+    expect(main.blur).toHaveBeenCalled()
+    expect(harness.selectionMonitor.activatePid).toHaveBeenCalledWith(42)
+
+    harness.selectionMonitor.activatePid.mockClear()
+    main.blur.mockClear()
+    main.focus()
+    await invokeFloating(DESKTOP_IPC.floatingEditing, true)
+    void harness.hosts[0]!.onOverlayGuard?.({
+      type: 'overlay-guard',
+      requestId: 9,
+      action: 'begin',
+      mode: 'input',
+    })
+    expect(main.blur).toHaveBeenCalled()
+    expect(harness.selectionMonitor.activatePid).toHaveBeenCalledWith(42)
   })
 
   it('publishes overlay TCC status and opens the matching System Settings pane', async () => {

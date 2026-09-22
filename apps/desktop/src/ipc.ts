@@ -40,6 +40,8 @@ export const DESKTOP_IPC = {
   floatingFocusMain: 'dsh-desktop:floating-focus-main',
   floatingQuit: 'dsh-desktop:floating-quit',
   floatingRunning: 'dsh-desktop:floating-running',
+  floatingEditing: 'dsh-desktop:floating-editing',
+  floatingRestoreFront: 'dsh-desktop:floating-restore-front',
   floatingAvatarGet: 'dsh-desktop:floating-avatar-get',
   floatingAvatar: 'dsh-desktop:floating-avatar',
   floatingTccGet: 'dsh-desktop:floating-tcc-get',
@@ -125,6 +127,8 @@ export interface DshDesktopApi {
     focusMain(): Promise<void>
     quit(): Promise<void>
     setSessionRunning(running: boolean): Promise<void>
+    setTextEditing(editing: boolean): Promise<void>
+    restoreFrontApp(): Promise<void>
     avatarUrl(): Promise<string>
     onAvatar(listener: (url: string) => void): () => void
     onSelectionPrompt(listener: (payload: SelectionPromptPayload) => void): () => void

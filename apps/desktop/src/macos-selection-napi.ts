@@ -9,6 +9,8 @@ export interface MacosSelectionNapiBinding {
   stop(): void
   excludePids(pids: string): void
   activatePid(pid: number): void
+  /** @returns the last non-Electron frontmost pid, or `0` when none is recorded. */
+  lastFrontPid(): number
 }
 
 let binding: MacosSelectionNapiBinding | undefined

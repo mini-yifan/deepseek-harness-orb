@@ -34,6 +34,7 @@ function fakeToolbar() {
       bounds.height = next.height
     }),
     showInactive: vi.fn(() => { window.visible = true }),
+    setAlwaysOnTop: vi.fn(),
     hide: vi.fn(() => { window.visible = false }),
     once: vi.fn(),
   }
@@ -62,6 +63,7 @@ describe('selection toolbar controller', () => {
         stop: vi.fn(),
         setExcludePids: (pids: readonly number[]) => { exclude.push([...pids]) },
         activatePid,
+        lastFrontPid: () => undefined,
       }),
     })
     const toolbar = fakeToolbar()
@@ -130,7 +132,7 @@ describe('selection toolbar controller', () => {
       requestAccessibility: () => false,
       startMonitor: () => {
         starts.push(1)
-        return { stop, setExcludePids: vi.fn(), activatePid: vi.fn() }
+        return { stop, setExcludePids: vi.fn(), activatePid: vi.fn(), lastFrontPid: () => undefined }
       },
     })
     controller.setEnabled(true)
@@ -153,12 +155,54 @@ describe('selection toolbar controller', () => {
       promptOverlay: vi.fn(),
       attachOverlay: vi.fn(),
       requestAccessibility: () => false,
-      startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid }),
+      startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid, lastFrontPid: () => undefined }),
     })
     controller.setToolbarWindow(fakeToolbar() as never)
     controller.start()
     controller.onHelperEvent({ type: 'selection', text: 'self', pid: 99, x: 1, y: 1 })
     controller.translate()
+    expect(activatePid).not.toHaveBeenCalled()
+  })
+
+  it('restores the last non-Electron front app and skips this process', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dsh-selection-front-pid-'))
+    roots.push(root)
+    const activatePid = vi.fn()
+    const controller = new SelectionToolbarController(root, {
+      electronPid: 99,
+      openExternal: async () => undefined,
+      promptOverlay: vi.fn(),
+      attachOverlay: vi.fn(),
+      requestAccessibility: () => false,
+      startMonitor: () => ({
+        stop: vi.fn(),
+        setExcludePids: vi.fn(),
+        activatePid,
+        lastFrontPid: () => 7,
+      }),
+    })
+    controller.start()
+    expect(controller.isSessionRunning()).toBe(false)
+    controller.setSessionRunning(true)
+    expect(controller.isSessionRunning()).toBe(true)
+    controller.restoreLastFrontApp()
+    expect(activatePid).toHaveBeenCalledWith(7)
+    activatePid.mockClear()
+    const self = new SelectionToolbarController(root, {
+      electronPid: 99,
+      openExternal: async () => undefined,
+      promptOverlay: vi.fn(),
+      attachOverlay: vi.fn(),
+      requestAccessibility: () => false,
+      startMonitor: () => ({
+        stop: vi.fn(),
+        setExcludePids: vi.fn(),
+        activatePid,
+        lastFrontPid: () => 99,
+      }),
+    })
+    self.start()
+    self.restoreLastFrontApp()
     expect(activatePid).not.toHaveBeenCalled()
   })
 
@@ -173,7 +217,7 @@ describe('selection toolbar controller', () => {
       promptOverlay: vi.fn(),
       attachOverlay,
       requestAccessibility: () => false,
-      startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid }),
+      startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid, lastFrontPid: () => undefined }),
     })
     controller.setToolbarWindow(fakeToolbar() as never)
     controller.start()
@@ -192,7 +236,7 @@ describe('selection toolbar controller', () => {
       promptOverlay: vi.fn(),
       attachOverlay: vi.fn(),
       requestAccessibility: () => false,
-      startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid: vi.fn() }),
+      startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid: vi.fn(), lastFrontPid: () => undefined }),
     })
     const toolbar = fakeToolbar()
     controller.setToolbarWindow(toolbar as never)
@@ -226,7 +270,7 @@ describe('selection toolbar controller', () => {
       promptOverlay: vi.fn(),
       attachOverlay: vi.fn(),
       requestAccessibility: () => false,
-      startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid: vi.fn() }),
+      startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid: vi.fn(), lastFrontPid: () => undefined }),
     })
     const toolbar = fakeToolbar()
     controller.setToolbarWindow(toolbar as never)
@@ -267,7 +311,7 @@ describe('selection toolbar controller', () => {
       promptOverlay: vi.fn(),
       attachOverlay: vi.fn(),
       requestAccessibility: () => false,
-      startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid: vi.fn() }),
+      startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid: vi.fn(), lastFrontPid: () => undefined }),
     })
     const toolbar = fakeToolbar()
     controller.setToolbarWindow(toolbar as never)

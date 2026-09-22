@@ -11,6 +11,7 @@ import {
   ipcMain,
   Menu,
   protocol,
+  screen,
   shell,
   systemPreferences,
   type IpcMainInvokeEvent,
@@ -253,6 +254,7 @@ async function main(): Promise<void> {
   let floatingWindow: BrowserWindow | undefined
   let observationFrameWindow: BrowserWindow | undefined
   let selection: SelectionToolbarController | undefined
+  let overlayTextEditing = false
   let shellInstallerOwnsQuit = false
   let updateState: DesktopUpdateState = { phase: 'idle' }
   const locale = resolveDesktopLocale(app.getLocale())
@@ -492,6 +494,8 @@ async function main(): Promise<void> {
         if (event.mode === 'input') selection?.setHidInput(event.action === 'begin')
         const ids = overlayWindowExcludeIds(floatingWindow, selection?.window(), observationFrameWindow)
         if (event.mode === 'input' && event.action === 'begin') {
+          blurMainIfFocused()
+          selection?.restoreLastFrontApp()
           return overlayGuardInputApplyDelay().then(() => ids)
         }
         return ids
@@ -902,6 +906,15 @@ async function main(): Promise<void> {
     if (typeof running !== 'boolean') throw new Error('dsh desktop: floating running requires a boolean')
     selection?.setSessionRunning(running)
   })
+  ipcMain.handle(DESKTOP_IPC.floatingEditing, (event, editing: unknown) => {
+    requireFloatingWindow(event)
+    if (typeof editing !== 'boolean') throw new Error('dsh desktop: floating editing requires a boolean')
+    overlayTextEditing = editing
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingRestoreFront, (event) => {
+    requireFloatingWindow(event)
+    restoreRunningFrontApp()
+  })
   ipcMain.handle(DESKTOP_IPC.floatingAvatarGet, (event) => {
     requireFloatingWindow(event)
     return orbAvatarUrl('shell', orbAvatarCacheToken(activeProject))
@@ -1133,10 +1146,37 @@ async function main(): Promise<void> {
     window.focus()
   }
 
+  const pointInOverlay = (window: BrowserWindow): boolean => {
+    if (window.isDestroyed() || !window.isVisible()) return false
+    const point = screen.getCursorScreenPoint()
+    const bounds = window.getBounds()
+    return point.x >= bounds.x && point.x < bounds.x + bounds.width
+      && point.y >= bounds.y && point.y < bounds.y + bounds.height
+  }
+  const blurMainIfFocused = (): void => {
+    const window = mainWindow
+    if (window === undefined || window.isDestroyed() || !window.isFocused()) return
+    window.blur()
+  }
+  const restoreRunningFrontApp = (): void => {
+    if (selection?.isSessionRunning() !== true || overlayTextEditing) return
+    blurMainIfFocused()
+    selection.restoreLastFrontApp()
+  }
+
   app.on('activate', () => {
     publishTcc()
     if (overlayOwnedActivationActive()) return
-    focusPrimaryWindow()
+    const overlay = floatingWindow
+    // Dock clicks land outside the panel, including when the overlay is already key.
+    if (overlay === undefined || !pointInOverlay(overlay)) {
+      focusPrimaryWindow()
+      return
+    }
+    noteOverlayOwnedActivation()
+    if (selection?.isSessionRunning() !== true) return
+    blurMainIfFocused()
+    if (!overlayTextEditing) selection.restoreLastFrontApp()
   })
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()
