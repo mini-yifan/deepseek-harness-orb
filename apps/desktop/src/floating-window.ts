@@ -640,6 +640,8 @@ export function createFloatingWindow(
     fullscreenable: false,
     minimizable: false,
     maximizable: false,
+    // A frameless panel keeps a hidden titlebar unless corners are square. That strip activates the app.
+    roundedCorners: false,
     webPreferences: {
       preload,
       nodeIntegration: false,

@@ -476,6 +476,8 @@ async function mountPointerOverlay(options?: { dark?: boolean; running?: boolean
       setExpanded,
       orbWorkspacePath: async () => '/tmp/dsh_orb',
       setSessionRunning: vi.fn(),
+      setTextEditing: vi.fn(),
+      restoreFrontApp: vi.fn(),
       overlayModel: async () => ({
         provider: 'deepseek-official',
         model: 'deepseek-flash',
@@ -516,6 +518,28 @@ async function mountPointerOverlay(options?: { dark?: boolean; running?: boolean
   }
   return { dom, document, api, dispatchPointer }
 }
+
+it('restores the front app on a running overlay click outside a text field', async () => {
+  const overlay = await mountPointerOverlay({ running: true })
+  try {
+    await expect.poll(() => overlay.document.body.classList.contains('running')).toBe(true)
+    const history = overlay.document.querySelector('#history')
+    if (history === null) throw new Error('missing history button')
+    const pointerup = (target: EventTarget) => {
+      const event = new overlay.dom.window.Event('pointerup', { bubbles: true })
+      Object.assign(event, { button: 0 })
+      target.dispatchEvent(event)
+    }
+    pointerup(history)
+    expect(overlay.api.floating.restoreFrontApp).toHaveBeenCalledTimes(1)
+    const prompt = overlay.document.querySelector('#prompt')
+    if (prompt === null) throw new Error('missing prompt')
+    prompt.focus()
+    expect(overlay.api.floating.setTextEditing).toHaveBeenCalledWith(true)
+    pointerup(prompt)
+    expect(overlay.api.floating.restoreFrontApp).toHaveBeenCalledTimes(1)
+  } finally { overlay.dom.window.close() }
+})
 
 it('ignores a secondary-button press so later hover cannot move the ball', async () => {
   const overlay = await mountPointerOverlay()

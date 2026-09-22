@@ -30,10 +30,13 @@ private final class SelectionMonitor: @unchecked Sendable {
   private var press: NSPoint?
   private var dragged = false
   private var eventMonitor: Any?
+  private var frontObserver: NSObjectProtocol?
+  private var frontPid: pid_t = 0
   // Posted clipboard-fallback Command+C keyDown events still to ignore.
   private var postedCommandCRemaining = 0
 
   func start() {
+    observeFrontmost()
     if eventMonitor != nil { return }
     let trusted = AXIsProcessTrustedWithOptions([
       kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: false,
@@ -56,8 +59,44 @@ private final class SelectionMonitor: @unchecked Sendable {
       NSEvent.removeMonitor(eventMonitor)
     }
     eventMonitor = nil
+    if let frontObserver {
+      NSWorkspace.shared.notificationCenter.removeObserver(frontObserver)
+    }
+    frontObserver = nil
     press = nil
     dragged = false
+  }
+
+  /// Last frontmost pid that is not in `excludePids`. Electron stays excluded so an overlay click can return to the previous app.
+  func lastFrontPid() -> pid_t {
+    lock.lock()
+    let pid = frontPid
+    let excluded = excludePids
+    lock.unlock()
+    if pid <= 0 || excluded.contains(pid) { return 0 }
+    return pid
+  }
+
+  private func observeFrontmost() {
+    if frontObserver != nil { return }
+    rememberFront(NSWorkspace.shared.frontmostApplication)
+    frontObserver = NSWorkspace.shared.notificationCenter.addObserver(
+      forName: NSWorkspace.didActivateApplicationNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] notification in
+      let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+      self?.rememberFront(application)
+    }
+  }
+
+  private func rememberFront(_ application: NSRunningApplication?) {
+    guard let pid = application?.processIdentifier, pid > 0 else { return }
+    lock.lock()
+    if !excludePids.contains(pid) {
+      frontPid = pid
+    }
+    lock.unlock()
   }
 
   func setExcludePids(_ pids: Set<pid_t>) {
@@ -385,4 +424,9 @@ public func dsh_macos_selection_exclude_pids(_ pids: UnsafePointer<CChar>?) {
 @_cdecl("dsh_macos_selection_activate_pid")
 public func dsh_macos_selection_activate_pid(_ pid: Int32) {
   libraryMonitor?.activatePid(pid_t(pid))
+}
+
+@_cdecl("dsh_macos_selection_last_front_pid")
+public func dsh_macos_selection_last_front_pid() -> Int32 {
+  libraryMonitor?.lastFrontPid() ?? 0
 }

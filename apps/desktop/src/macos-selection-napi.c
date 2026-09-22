@@ -10,6 +10,7 @@ extern int dsh_macos_selection_start(dsh_selection_emit emit, void *ctx);
 extern void dsh_macos_selection_stop(void);
 extern void dsh_macos_selection_exclude_pids(const char *pids);
 extern void dsh_macos_selection_activate_pid(int pid);
+extern int dsh_macos_selection_last_front_pid(void);
 
 static napi_threadsafe_function tsfn;
 
@@ -136,18 +137,31 @@ static napi_value activate_pid(napi_env env, napi_callback_info info) {
   return undefined;
 }
 
+static napi_value last_front_pid(napi_env env, napi_callback_info info) {
+  (void)info;
+  napi_value result;
+  if (napi_create_int32(env, dsh_macos_selection_last_front_pid(), &result) != napi_ok) {
+    napi_throw_error(env, NULL, "dsh desktop: selection lastFrontPid failed");
+    return NULL;
+  }
+  return result;
+}
+
 NAPI_MODULE_INIT() {
   napi_value start_fn;
   napi_value stop_fn;
   napi_value exclude_fn;
   napi_value activate_fn;
+  napi_value last_front_fn;
   napi_create_function(env, "start", NAPI_AUTO_LENGTH, start, NULL, &start_fn);
   napi_create_function(env, "stop", NAPI_AUTO_LENGTH, stop, NULL, &stop_fn);
   napi_create_function(env, "excludePids", NAPI_AUTO_LENGTH, exclude_pids, NULL, &exclude_fn);
   napi_create_function(env, "activatePid", NAPI_AUTO_LENGTH, activate_pid, NULL, &activate_fn);
+  napi_create_function(env, "lastFrontPid", NAPI_AUTO_LENGTH, last_front_pid, NULL, &last_front_fn);
   napi_set_named_property(env, exports, "start", start_fn);
   napi_set_named_property(env, exports, "stop", stop_fn);
   napi_set_named_property(env, exports, "excludePids", exclude_fn);
   napi_set_named_property(env, exports, "activatePid", activate_fn);
+  napi_set_named_property(env, exports, "lastFrontPid", last_front_fn);
   return exports;
 }

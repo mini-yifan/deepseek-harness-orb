@@ -54,6 +54,8 @@ describe('selection helper protocol', () => {
     expect(napi).toContain('dsh_macos_selection_start')
     expect(napi).not.toContain('activationPolicy')
     expect(swift).toContain('@_cdecl("dsh_macos_selection_start")')
+    expect(swift).toContain('NSWorkspace.didActivateApplicationNotification')
+    expect(swift).toContain('@_cdecl("dsh_macos_selection_last_front_pid")')
     const library = swift.split('@_cdecl("dsh_macos_selection_start")')[1] ?? ''
     expect(library).not.toContain('setActivationPolicy')
   })

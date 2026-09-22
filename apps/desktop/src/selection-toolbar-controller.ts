@@ -157,6 +157,31 @@ export class SelectionToolbarController {
     if (running) hideSelectionToolbar(this.toolbar)
   }
 
+  /** @returns whether the overlay Computer Use session is running. */
+  isSessionRunning(): boolean {
+    return this.sessionRunning
+  }
+
+  /**
+   * Last frontmost process that is not this Electron app.
+   * @returns the pid, or undefined when the monitor has not seen another app.
+   */
+  lastFrontPid(): number | undefined {
+    const pid = this.monitor?.lastFrontPid()
+    if (pid === undefined || pid === this.host.electronPid) return undefined
+    return pid
+  }
+
+  /**
+   * Re-activate the app that was frontmost before this Electron app.
+   * A running overlay click uses this so Computer Use does not observe the main window.
+   */
+  restoreLastFrontApp(): void {
+    const pid = this.lastFrontPid()
+    if (pid === undefined) return
+    this.monitor?.activatePid(pid)
+  }
+
   /**
    * Hide and skip reads during overlay-guard HID so Cmd+C cannot fight `input_text`.
    * @param active - whether an `input` begin is still unmatched.

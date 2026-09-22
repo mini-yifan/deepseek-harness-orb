@@ -43,6 +43,11 @@ export interface SelectionMonitor {
    * @param pid - target process id. Electron and helper pids are ignored by the helper.
    */
   activatePid(pid: number): void
+  /**
+   * Last frontmost process that is not Electron.
+   * @returns the pid, or undefined when the monitor has not seen another app.
+   */
+  lastFrontPid(): number | undefined
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -134,6 +139,10 @@ export function startSelectionMonitor(handlers: SelectionMonitorHandlers): Selec
     },
     activatePid(pid) {
       addon.activatePid(pid)
+    },
+    lastFrontPid() {
+      const pid = addon.lastFrontPid()
+      return pid > 0 ? pid : undefined
     },
   }
 }
