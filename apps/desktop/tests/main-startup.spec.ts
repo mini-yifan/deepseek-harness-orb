@@ -194,9 +194,10 @@ const harness = await vi.hoisted(async () => {
       }
     },
   }
+  const cursor = { x: 0, y: 0 }
   return {
     windows, hosts, handlers, app, FakeWindow, FakeHost, selectionMonitor,
-    cursor: { x: 0, y: 0 },
+    cursor,
     dialog: { showErrorBox: vi.fn(), showMessageBox: vi.fn() },
     applyRelease: vi.fn(() => { preparing.resolve(); return prepared.promise }),
     assertProfileRuntime: vi.fn(),
@@ -216,8 +217,8 @@ const harness = await vi.hoisted(async () => {
       selectionMonitor.activatePid.mockReset()
       selectionMonitor.lastFrontPid.mockReset()
       selectionMonitor.lastFrontPid.mockReturnValue(42)
-      this.cursor.x = 0
-      this.cursor.y = 0
+      cursor.x = 0
+      cursor.y = 0
       preparing = deferred(); prepared = deferred(); hostStarted = deferred()
       navigated = deferred(); errorPublished = deferred(); quitCompleted = deferred()
     },
