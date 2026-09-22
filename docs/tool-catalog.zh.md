@@ -2139,7 +2139,7 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 ### `code_agent`
 
-把后台编码和文档工作委派给标准模式的 Code agent，它会像用户创建的会话一样出现在桌面侧栏。可见 GUI 工作不要调用此工具，例如打开微信或在 Pages 里点击按钮——改用 GUI 工具。短查询不要调用此工具，例如今天的天气或当前新闻标题——改用本对话里的 web_search 或 web_fetch。省略 session_id 以新建空白 standard 会话：写一份 Word、做一个五子棋、写一份 HTML 调研报告，或任何不是先前 code_agent 结果之续写的任务。续写同一产物时传入先前 code_agent 结果返回的 id，例如把那份 Word 的字体改成绿色。新工作无关时不要传入先前 id。session_id 必须是这个 Computer Use agent 启动过的会话。task 是要入队的用户消息。调用在 standard 会话接受该消息后返回；不等待该会话完成。告诉用户后台 Code agent 正在运行，然后结束本回合。不要调用 wait、long_wait 或 bash sleep 去轮询该会话。之后当该会话空闲且本会话也空闲时会到达一条插件通知；然后告诉用户 Code agent 做成了什么。用户点名了路径或说了这个文件夹且存在 <frontmost_folder> 时传入 cwd。省略 cwd 会在本会话工作区下新建子目录。session_id 不能指向本 Computer Use 会话、subagent 子会话或非 standard 会话。
+把一段文件查找或文件制作委派给标准模式的 Code agent，它会像用户创建的会话一样出现在桌面侧栏。这一段是可见 GUI，或一次搜索、一条命令就能回答或供下一步点击使用时，留在本对话做。判断再搜一次就能落到要点的第二次搜索也留在这里。可见 GUI 工作不要调用此工具，例如打开微信或在 Pages 里点击按钮——改用 GUI 工具。短查询不要调用此工具，例如今天的天气或当前新闻标题——改用本对话里的 web_search 或 web_fetch。还在连续翻文件、搜索或跑命令，或用户要的是文件、文档、表格或网站时，调用此工具。最后一步是点击，不把这段查找留在这里。省略 session_id 以新建空白 standard 会话：写一份 Word、做一个五子棋、写一份 HTML 调研报告，或任何不是先前 code_agent 结果之续写的任务。续写同一产物时传入先前 code_agent 结果返回的 id，例如把那份 Word 的字体改成绿色，或同一段查找的下一段。新工作无关时不要传入先前 id。session_id 必须是这个 Computer Use agent 启动过的会话。task 是要入队的这一段。调用在 standard 会话接受该消息后返回；不等待该会话完成。告诉用户后台 Code agent 正在运行。仅当本轮 GUI 不依赖该结果时继续，否则结束本回合。不要调用 wait、long_wait 或 bash sleep 去轮询该会话。之后当该会话空闲且本会话也空闲时会到达一条插件通知；然后重新决定：做剩下的 GUI，或用该 session_id 再交一段，并用几句话告诉用户。不要复述长报告。用户点名了路径或说了这个文件夹且存在 <frontmost_folder> 时传入 cwd。省略 cwd 会在本会话工作区下新建子目录。session_id 不能指向本 Computer Use 会话、subagent 子会话或非 standard 会话。
 
 ```json
 {

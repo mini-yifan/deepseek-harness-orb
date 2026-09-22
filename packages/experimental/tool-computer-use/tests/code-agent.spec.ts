@@ -6,7 +6,7 @@ import type { UserMessage } from '@deepseek-ai/dsh-session'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
-import { apply, inject, name, slugFromTask, STATUS_TOOL_NAME, STOP_TOOL_NAME, TOOL_NAME, uniqueDirectory } from '../src/code-agent.ts'
+import { apply, BACKGROUND_ROLE, inject, name, queuedTaskText, slugFromTask, STATUS_TOOL_NAME, STOP_TOOL_NAME, TOOL_NAME, uniqueDirectory } from '../src/code-agent.ts'
 import {
   COMPLETION_BODY_MAX_CHARS,
   COMPLETION_PLUGIN,
@@ -423,7 +423,7 @@ describe('code_agent plugin', () => {
     expect(prompted[0]).toMatchObject({
       sessionId: STANDARD,
       mode: 'queue',
-      content: [{ type: 'text', text: 'Write a Word document' }],
+      content: [{ type: 'text', text: queuedTaskText('Write a Word document') }],
     })
     expect(result.value).toEqual({ accepted: true, created: true, session_id: STANDARD })
     expect(text(result)).toContain(STANDARD)
@@ -608,6 +608,10 @@ describe('code_agent plugin', () => {
     expect(POLICY).toContain('today\'s weather')
     expect(POLICY).toContain('research report')
     expect(POLICY).toContain('write the report as HTML')
+    expect(POLICY).toContain('A second search that you expect will hit the point stays here')
+    expect(POLICY).toContain('still digging through files, searches, or commands')
+    expect(POLICY).toContain('does not need the background result')
+    expect(POLICY).toContain('Do not recite a long report')
     expect(POLICY).toContain('<frontmost_folder> is absent')
     expect(POLICY).toContain('Do not guess')
     expect(POLICY).toContain('code_agent_status')
@@ -619,6 +623,8 @@ describe('code_agent plugin', () => {
     expect(schema?.description).toContain('Do not pass a previous id')
     expect(schema?.description).toContain('Do not call wait, long_wait, or bash sleep')
     expect(schema?.description).toContain('plugin notice')
+    expect(schema?.description).toContain('still digging')
+    expect(schema?.description).toContain('Do not recite a long report')
     expect(ctx.tools.get(TOOL_NAME)?.presentCall?.({ task: 'Write a Word document' })).toMatchObject({
       card: 'generic',
       title: 'Code agent',
@@ -658,6 +664,7 @@ describe('code_agent plugin', () => {
     })
     expect(text({ content: caller.followups[0]!.content })).toContain('Wrote the Word document.')
     expect(text({ content: caller.followups[0]!.content })).toContain('Write a Word document')
+    expect(text({ content: caller.followups[0]!.content })).not.toContain(BACKGROUND_ROLE)
   })
 
   it('parks the notice until the Computer Use caller is idle', async () => {

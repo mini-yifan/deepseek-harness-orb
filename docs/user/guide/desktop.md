@@ -55,19 +55,19 @@ The ball’s Computer Use bash and filesystem, and new background `code_agent` s
 The Computer Use agent on the ball decides how to handle the current sentence. There is no extra runtime classifier:
 
 - Visible GUI (open WeChat, click a button in Pages) uses GUI tools (click, input_text, scroll, hotkey, wait, long_wait, screenshot, long_press, drag, open_in_browser, open_in_finder) and does not call the background agent.
-- Short lookup (today's weather, current headlines) uses web_search or web_fetch in the ball chat. It does not start a background agent or click around the GUI.
-- Long work (Word, PPT, Excel, a website, or a research report written as HTML) starts a background Code agent. The ball tells you it is running and ends the turn.
+- Short lookup (today's weather, current headlines) uses web_search or web_fetch in the ball chat. A second search that the agent expects will hit the point stays there too. It does not start a background agent or click around the GUI.
+- A stretch of file search, or a requested file (Word, PPT, Excel, a website, or a research report written as HTML), starts a background Code agent. The ball tells you it is running. It may still do a click that does not need that result, then ends the turn. A click that needs the result waits for the finish notice.
 - Asking for a screenshot file uses screenshot: it writes the capture onto Desktop and copies it to the clipboard.
-- A follow-up on the same artifact (after writing a Word document, make the font green) sends another message on that existing standard session, even if it is still running.
+- A follow-up on the same artifact (after writing a Word document, make the font green), or another stretch of the same investigation, sends another message on that existing standard session, even if it is still running.
 - Unrelated new background work (after the Word document, make a gobang game) creates another standard session.
 
 When you name a folder (Desktop, a home path), that background session uses it. When you say here / this folder / the current window and Finder is frontmost, it uses that Finder folder. When you say those words and Finder is not frontmost, the ball asks you to click that Finder window or give a path. Otherwise it creates a new subdirectory under `dsh_orb`. If you name a folder or window that does not match what the ball sees, it asks instead of guessing.
 
 Ask the ball what is running, and it lists only the background agents this Computer Use chat started (count, latest task, folder, running or idle). New chat starts with an empty list. Ask it to stop one, and that session's current turn and queued follow-ups die; the session stays so you can continue the same artifact later. Overlay Stop still cancels only Computer Use.
 
-After enqueue, the Computer Use agent tells you the background session is running and ends its turn, so you can keep chatting or give it new GUI work. When that standard session finishes and the ball is idle, Computer Use reports what the background agent produced.
+After enqueue, the Computer Use agent tells you the background session is running. It continues a click in that turn only when the click does not need the background result; otherwise it ends the turn, so you can keep chatting. When that standard session finishes and the ball is idle, Computer Use decides the next stretch: remaining clicks, another background stretch on the same session, then a short conclusion. The queued task tells the background agent to answer in a few sentences and stop, unless the task asked for a file.
 
-Those background sessions are the same kind as a session you type in the main window. Files and the terminal stay with that standard agent’s bash/fs. The ball’s own bash is only for short commands inside a GUI loop.
+Those background sessions are the same kind as a session you type in the main window. Files and the terminal stay with that standard agent’s bash/fs. The ball’s own bash is for a command that answers you or feeds the next click. A stretch of file search goes to the background agent.
 
 ## Limits
 

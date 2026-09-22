@@ -16,7 +16,7 @@ The Code interval runs from that prompt's durable `rpcId` through the next whole
 
 When the Code session is idle, the watch reads the last assistant text from `deriveMessages()`, waits until the Computer Use caller is idle, re-checks `agents.get(caller.id) === caller`, and `followup`s a `source.kind: 'plugin'` notice (`plugin: 'tool-code-agent'`, `form: 'notice'`). It does not `inject` into a running Computer Use turn. A missing live Code agent after accept, a disposed caller, or a replacement agent at the same id drops the notice without failing the tool.
 
-Policy, the `code_agent` description, the tool result envelope, and the Computer Use persona tell the model to report that the background agent is running, end the turn, and not poll with `wait` or bash sleep; a later plugin notice is what it reports to the user.
+Policy, the `code_agent` description, the tool result envelope, and the Computer Use persona tell the model to report that the background agent is running, continue a GUI action in that turn only when it does not need the result, otherwise end the turn, and not poll with `wait` or bash sleep. A later plugin notice is where the model decides the next stretch. [Computer Use background role](2026-09-22-computer-use-background-role.md) owns that split.
 
 [Experimental Computer Use](2026-09-13-experimental-computer-use.md) still owns the GUI tools and the Computer Use preset. [Desktop floating orb](2026-09-14-desktop-floating-orb.md) still owns overlay construction and first-class `code_agent` sessions.
 
@@ -32,7 +32,7 @@ Policy, the `code_agent` description, the tool result envelope, and the Computer
 
 ## Consequences
 
-The overlay composer returns when Computer Use ends its turn after enqueue, so the user can send more GUI or chat work while the Code session runs. The completion notice is a synthetic user message on the Computer Use log; the model then tells the user the outcome. A Code session the user keeps chatting with in the sidebar delays that notice. A Code session that never returns to idle never delivers. Policy cannot stop a model that still calls `wait`.
+When the next click needs the background result, Computer Use ends its turn after enqueue, so the overlay composer returns and the user can send more GUI or chat work while the Code session runs. The completion notice is a synthetic user message on the Computer Use log; the model then decides the next stretch and tells the user the short conclusion. A Code session the user keeps chatting with in the sidebar delays that notice. A Code session that never returns to idle never delivers. Policy cannot stop a model that still calls `wait`.
 
 ## Testing
 

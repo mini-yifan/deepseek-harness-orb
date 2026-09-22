@@ -14,7 +14,7 @@ import type {} from '@deepseek-ai/dsh-user-approval'
 import type {} from '@deepseek-ai/dsh-user-questions'
 
 /** Custom answer when a Code agent asks a free-text question. */
-export const UNATTENDED_CUSTOM_ANSWER = 'Proceed with your best judgment and continue.'
+export const UNATTENDED_CUSTOM_ANSWER = 'Stop. Return the short result you already have. Do not expand the task.'
 
 /**
  * Pick answers so a background Code agent never waits for a human.
