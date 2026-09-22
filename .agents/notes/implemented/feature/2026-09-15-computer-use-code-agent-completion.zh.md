@@ -16,7 +16,7 @@ Code 区间从该提示词的持久 `rpcId` 起到下一次整 agent 空闲。�
 
 Code 会话空闲后，监视从 `deriveMessages()` 读取最后一条助手文本，等到 Computer Use 调用方空闲，再检查 `agents.get(caller.id) === caller`，然后 `followup` 一条 `source.kind: 'plugin'` 通知（`plugin: 'tool-code-agent'`，`form: 'notice'`）。它不会 `inject` 进正在运行的 Computer Use 回合。接受之后找不到活的 Code agent、调用方已销毁、或同一 id 上的替换 agent，都会丢掉通知，且不让工具失败。
 
-策略、`code_agent` 描述、工具结果信封和 Computer Use 人设要求模型汇报后台 agent 正在运行、结束本回合，并且不要用 `wait` 或 bash sleep 去轮询；之后的插件通知才是它对用户汇报的内容。
+策略、`code_agent` 描述、工具结果信封和 Computer Use 人设要求模型汇报后台 agent 正在运行，仅当本轮 GUI 不依赖该结果时继续，否则结束本回合，并且不要用 `wait` 或 bash sleep 去轮询。之后的插件通知是模型决定下一段的时机。[Computer Use 后台职能](2026-09-22-computer-use-background-role.zh.md) 拥有这一划分。
 
 [实验性 Computer Use](2026-09-13-experimental-computer-use.zh.md) 仍拥有 GUI 工具和 Computer Use preset。[桌面悬浮球](2026-09-14-desktop-floating-orb.zh.md) 仍拥有 overlay 构造和一等 `code_agent` 会话。
 
@@ -32,7 +32,7 @@ Code 会话空闲后，监视从 `deriveMessages()` 读取最后一条助手文�
 
 ## 影响
 
-Computer Use 在入队后结束回合，overlay 输入会回来，用户就可以在 Code 会话运行时继续发 GUI 或聊天。完成通知是 Computer Use 日志上的合成用户消息；模型再把结果告诉用户。用户若在侧栏继续和那条 Code 会话聊天，通知会推迟。Code 会话若再也不回到空闲，就不会投递。策略拦不住仍然调用 `wait` 的模型。
+下一步点击依赖后台结果时，Computer Use 在入队后结束回合，overlay 输入会回来，用户就可以在 Code 会话运行时继续发 GUI 或聊天。完成通知是 Computer Use 日志上的合成用户消息；模型再决定下一段，并用几句话告诉用户。用户若在侧栏继续和那条 Code 会话聊天，通知会推迟。Code 会话若再也不回到空闲，就不会投递。策略拦不住仍然调用 `wait` 的模型。
 
 ## 测试
 

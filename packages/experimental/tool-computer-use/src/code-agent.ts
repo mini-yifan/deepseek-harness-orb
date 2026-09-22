@@ -1,6 +1,6 @@
 /**
  * Computer Use-only tools that create, continue, list, and stop first-class
- * standard Sessions for background coding and documents.
+ * standard Sessions for one stretch of file search or file production.
  * @module @deepseek-ai/dsh-experimental-tool-computer-use/src/code-agent
  */
 
@@ -50,19 +50,41 @@ export const STATUS_TOOL_NAME = 'code_agent_status'
 /** Model-visible tool that stops one of this Computer Use caller's Code sessions. */
 export const STOP_TOOL_NAME = 'code_agent_stop'
 
-const DESCRIPTION = 'Delegate background coding and document work to a standard-mode Code agent that appears in the desktop sidebar like a user-created session. '
+const DESCRIPTION = 'Delegate one stretch of file search or file production to a standard-mode Code agent that appears in the desktop sidebar like a user-created session. '
+  + 'Do the stretch in this chat when it is visible GUI or when one search or one command will answer or feed the next click. A second search that you expect will hit the point stays here. '
   + 'Do not call this tool for visible GUI work such as opening WeChat or clicking a button in Pages — use the GUI tools instead. '
   + 'Do not call this tool for a short lookup such as today\'s weather or current headlines — use web_search or web_fetch in this chat. '
+  + 'Call this tool when you are still digging through files, searches, or commands, or when the user asked for a file, document, spreadsheet, or site. The last step being a click does not keep the investigation here. '
   + 'Omit session_id to create a new blank standard session: write a Word document, make a gobang game, write an HTML research report, or any task that is not a follow-up to a previous code_agent result. '
-  + 'Pass session_id with the id returned by an earlier code_agent result when continuing the same artifact, for example making that Word document\'s font green. '
+  + 'Pass session_id with the id returned by an earlier code_agent result when continuing the same artifact, for example making that Word document\'s font green, or another stretch of the same investigation. '
   + 'Do not pass a previous id when the new work is unrelated. '
   + 'session_id must be a session this Computer Use agent started. '
-  + 'task is the user message to enqueue. The call returns after the standard session accepts the message; it does not wait for that session to finish. '
-  + 'Tell the user the background Code agent is running, then end the turn. Do not call wait, long_wait, or bash sleep to poll that session. '
-  + 'A plugin notice arrives later when that session is idle and this session is idle; then tell the user what the Code agent produced. '
+  + 'task is the stretch to enqueue. The call returns after the standard session accepts the message; it does not wait for that session to finish. '
+  + 'Tell the user the background Code agent is running. Continue with a GUI action in this turn only when it does not need this result; otherwise end the turn. Do not call wait, long_wait, or bash sleep to poll that session. '
+  + 'A plugin notice arrives later when that session is idle and this session is idle; then decide again: do remaining GUI, or call code_agent with that session_id for another stretch, and tell the user the short conclusion. Do not recite a long report. '
   + 'Pass cwd when the user named a path or said this folder and <frontmost_folder> is present. '
   + 'Omit cwd to create a new subdirectory under this session\'s workspace. '
   + 'session_id cannot target this Computer Use session, a subagent child, or a non-standard session.'
+
+/**
+ * Role text appended to every queued `code_agent` task.
+ * The completion notice keeps the model task only.
+ */
+export const BACKGROUND_ROLE = 'You are the background worker for a Computer Use session. You do not see the screen and you do not talk to the user. '
+  + 'If this task asks for a file, document, spreadsheet, or site, produce it, reply with its path, and stop. '
+  + 'Otherwise search or run commands only until you can answer, including a second search when the first missed the point. '
+  + 'Reply in a few sentences with the paths or results that matter, then stop. Do not write a report or create extra files.'
+
+const RUNNING_RESULT = 'Tell the user the background Code agent is running. Continue with a GUI action in this turn only when it does not need this result; otherwise end the turn.'
+
+/**
+ * User message queued on the standard session.
+ * @param task - trimmed model task. The completion notice quotes this text, not the role.
+ * @returns the task plus {@link BACKGROUND_ROLE}.
+ */
+export function queuedTaskText(task: string): string {
+  return `${task}\n\n${BACKGROUND_ROLE}`
+}
 
 const STATUS_DESCRIPTION = 'List background Code agent sessions this Computer Use agent started. '
   + 'Returns the count plus each task name, working directory, and running or idle status. '
@@ -273,8 +295,8 @@ export function apply(ctx: Context): void {
       render: (_args, value) => [{
         type: 'text',
         text: value.created
-          ? `Started a new standard session ${value.session_id}. Tell the user the background Code agent is running, then end the turn. Pass this session_id to continue the same artifact.`
-          : `Queued on standard session ${value.session_id}. Tell the user the background Code agent is running, then end the turn.`,
+          ? `Started a new standard session ${value.session_id}. ${RUNNING_RESULT} Pass this session_id to continue the same artifact.`
+          : `Queued on standard session ${value.session_id}. ${RUNNING_RESULT}`,
       }],
     },
     isConcurrencySafe: () => true,
@@ -354,7 +376,7 @@ export function apply(ctx: Context): void {
         requestId,
         sessionId,
         mode: 'queue',
-        content: [{ type: 'text', text: task }],
+        content: [{ type: 'text', text: queuedTaskText(task) }],
       }, exec.signal)
       const agents = ctx.get('agents')
       const liveCaller = agents?.get(caller.id)
