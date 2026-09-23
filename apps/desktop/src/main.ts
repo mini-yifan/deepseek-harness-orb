@@ -504,7 +504,12 @@ async function main(): Promise<void> {
         const ids = overlayWindowExcludeIds(floatingWindow, selection?.window(), observationFrameWindow)
         if (event.mode === 'input' && event.action === 'begin') {
           blurMainIfFocused()
-          selection?.restoreLastFrontApp()
+          try {
+            selection?.restoreLastFrontApp()
+          } catch (error: unknown) {
+            // Restoring the previous app is separate from the cloak. A throw must not fail the Host.
+            console.error('dsh desktop: restore front app failed', error)
+          }
           return overlayGuardInputApplyDelay().then(() => ids)
         }
         return ids

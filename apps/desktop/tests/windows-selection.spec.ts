@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { dispatchWindowsSelectionMessage, startWindowsSelectionMonitor } from '../src/windows-selection.ts'
+import { activateWindowsPid } from '../src/windows-selection-native.ts'
 import type { SelectionHelperEvent } from '../src/selection-monitor.ts'
 
 describe('windows selection monitor', () => {
@@ -71,5 +72,11 @@ describe('windows selection monitor', () => {
     expect(events.at(-1)).toEqual({ type: 'ready' })
     expect(monitor.lastFrontPid()).toBeUndefined()
     monitor.stop()
+  })
+
+  it('restores a missing pid twice without redefining the enum callback', () => {
+    if (process.platform !== 'win32') return
+    expect(() => { activateWindowsPid(0) }).not.toThrow()
+    expect(() => { activateWindowsPid(0) }).not.toThrow()
   })
 })

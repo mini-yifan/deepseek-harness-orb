@@ -30,6 +30,33 @@ const MSLLHOOKSTRUCT = koffi.struct('DSH_SEL_MSLL', {
 })
 
 const HOOKPROC = koffi.proto('intptr __stdcall DshSelHookProc(int nCode, uintptr wParam, intptr lParam)')
+/**
+ * `koffi.proto` keeps this name for the process.
+ * Defining it again throws `Duplicate type name 'DshSelEnumProc'`.
+ */
+const ENUM_WINDOWS_PROC = koffi.proto('int __stdcall DshSelEnumProc(void *hwnd, intptr lParam)')
+
+interface WindowsActivationApi {
+  readonly SetForegroundWindow: (hwnd: unknown) => number
+  readonly IsWindowVisible: (hwnd: unknown) => number
+  readonly GetWindowThreadProcessId: (hwnd: unknown, pid: number[]) => number
+  readonly EnumWindows: (callback: unknown, param: number) => number
+}
+
+let activationApi: WindowsActivationApi | undefined
+
+function windowsActivationApi(): WindowsActivationApi {
+  if (activationApi !== undefined) return activationApi
+  const user32 = koffi.load('user32.dll')
+  const created: WindowsActivationApi = {
+    SetForegroundWindow: user32.func('int __stdcall SetForegroundWindow(void *hWnd)') as WindowsActivationApi['SetForegroundWindow'],
+    IsWindowVisible: user32.func('int __stdcall IsWindowVisible(void *hWnd)') as WindowsActivationApi['IsWindowVisible'],
+    GetWindowThreadProcessId: user32.func('uint32 __stdcall GetWindowThreadProcessId(void *hWnd, _Out_ uint32 *pid)') as WindowsActivationApi['GetWindowThreadProcessId'],
+    EnumWindows: user32.func('int __stdcall EnumWindows(DshSelEnumProc *cb, intptr lParam)') as WindowsActivationApi['EnumWindows'],
+  }
+  activationApi = created
+  return created
+}
 
 const SELECTION_SCRIPT = `
 $ErrorActionPreference = 'Stop'
@@ -111,27 +138,24 @@ export function readWindowsSelection(): Promise<Awaited<ReturnType<WindowsSelect
 
 /**
  * Activate a top-level window owned by `pid`.
+ * Win32 bindings and `DshSelEnumProc` are created once for the process.
  * @param pid - process to bring forward.
  */
 export function activateWindowsPid(pid: number): void {
-  const user32 = koffi.load('user32.dll')
-  const SetForegroundWindow = user32.func('int __stdcall SetForegroundWindow(void *hWnd)')
-  const IsWindowVisible = user32.func('int __stdcall IsWindowVisible(void *hWnd)')
-  const GetWindowThreadProcessId = user32.func('uint32 __stdcall GetWindowThreadProcessId(void *hWnd, _Out_ uint32 *pid)')
-  const enumProc = koffi.proto('int __stdcall DshSelEnumProc(void *hwnd, intptr lParam)')
+  const api = windowsActivationApi()
   let found = false
   const callback = koffi.register((hwnd: unknown) => {
-    if (found || IsWindowVisible(hwnd) === 0) return 1
+    if (found || api.IsWindowVisible(hwnd) === 0) return 1
     const slot = [0]
-    GetWindowThreadProcessId(hwnd, slot)
+    api.GetWindowThreadProcessId(hwnd, slot)
     if (slot[0] === pid) {
-      SetForegroundWindow(hwnd)
+      api.SetForegroundWindow(hwnd)
       found = true
     }
     return 1
-  }, koffi.pointer(enumProc))
+  }, koffi.pointer(ENUM_WINDOWS_PROC))
   try {
-    user32.func('int __stdcall EnumWindows(DshSelEnumProc *cb, intptr lParam)')(callback, 0)
+    api.EnumWindows(callback, 0)
   } finally {
     koffi.unregister(callback)
   }
