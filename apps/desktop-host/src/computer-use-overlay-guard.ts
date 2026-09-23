@@ -52,7 +52,8 @@ export interface SckCaptureIpcEvent extends OverlayExcludedRegionCaptureInput {
 export type OverlayGuardTransportEvent = OverlayGuardIpcEvent | ObservationFrameIpcEvent | SckCaptureIpcEvent
 
 /**
- * Overlay CGWindowIDs to omit from one ScreenCaptureKit display capture.
+ * Overlay window ids to omit from one capture.
+ * macOS values are CGWindowIDs for ScreenCaptureKit. Windows values are HWNDs.
  * Electron fills this on overlay-guard ack; an empty list means no overlay window.
  */
 export interface OverlayCaptureSession {
@@ -179,7 +180,7 @@ export function clearOverlayGuardTransport(error: Error): void {
 /**
  * Complete one Electron overlay-guard acknowledgement.
  * @param requestId - id from the matching Host `overlay-guard` event.
- * @param excludeWindowIds - overlay CGWindowIDs from the ack; empty when no overlay exists.
+ * @param excludeWindowIds - overlay window ids from the ack; empty when no overlay exists.
  * @returns whether a waiter existed.
  */
 export function completeOverlayGuardAck(

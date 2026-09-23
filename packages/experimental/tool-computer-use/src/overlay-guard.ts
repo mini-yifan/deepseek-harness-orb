@@ -7,8 +7,8 @@ import type { DesktopBackend } from './backend.ts'
 import { runWithCaptureExcludeWindowIds } from './capture-exclude.ts'
 
 /**
- * Overlay CGWindowIDs to omit from one ScreenCaptureKit window capture.
- * Desktop Host fills this from Electron's overlay-guard ack; CLI leaves it empty.
+ * Overlay window ids to omit from one capture.
+ * macOS values are CGWindowIDs. Windows values are HWNDs. Desktop Host fills this from Electron's overlay-guard ack; CLI leaves it empty.
  */
 export interface OverlayCaptureSession {
   readonly excludeWindowIds: readonly number[]

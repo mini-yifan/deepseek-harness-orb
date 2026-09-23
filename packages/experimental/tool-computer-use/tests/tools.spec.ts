@@ -779,7 +779,7 @@ describe('computer-use tools', () => {
     expect(ctx.tools.schemas()).toEqual([])
   })
 
-  it('apply registers tools that fail at execute off macOS', async () => {
+  it('apply registers tools that fail at execute on an unsupported platform', async () => {
     const host = new Context()
     contexts.push(host)
     const home = await mkdtemp(join(tmpdir(), 'dsh-cu-host-'))
@@ -797,7 +797,7 @@ describe('computer-use tools', () => {
       'open_app', 'open_in_browser', 'open_in_finder', 'screenshot', 'scroll', 'wait',
     ])
     expect(host.tools.schemas().map(schema => schema.name)).not.toContain('code_agent')
-    if (process.platform === 'darwin') return
+    if (process.platform === 'darwin' || process.platform === 'win32') return
     const result = await host.tools.execute({
       signal: SIGNAL,
       callId: ToolCallId('host-click'),

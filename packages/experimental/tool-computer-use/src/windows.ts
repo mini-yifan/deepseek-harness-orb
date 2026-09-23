@@ -1,5 +1,6 @@
 /**
  * Windows desktop capture (GDI) and HID input (`SendInput`).
+ * Observation bounds, capture, and pointer input share physical pixels.
  * Production loads `user32` / `gdi32` through koffi on the first call.
  * Tests inject {@link WindowsDesktopOps} and never post real input.
  * @module @deepseek-ai/dsh-experimental-tool-computer-use/src/windows
@@ -24,8 +25,14 @@ import type {
   TypeInput,
 } from './backend.ts'
 import { FOCUS_FALLBACK_FOREGROUND } from './backend.ts'
+import { activeCaptureExcludeWindowIds } from './capture-exclude.ts'
 import { mapNormalizedToGlobal } from './coordinates.ts'
 import { delay } from './wait.ts'
+import {
+  selectWindowsObservation,
+  type WindowsDesktopSnapshot,
+  type WindowsObservationSelection,
+} from './windows-foreground.ts'
 
 /** Logical screen rectangle in virtual-screen pixels. */
 export interface WindowsRect {
@@ -35,36 +42,45 @@ export interface WindowsRect {
   readonly height: number
 }
 
-/** Frontmost window facts the Windows backend maps into {@link DesktopForeground}. */
-export interface WindowsForeground {
-  readonly appName: string
-  readonly windowTitle: string
-  readonly bounds: WindowsRect
-  readonly scale: number
-  /** Explorer address path when the frontmost window is File Explorer. */
-  readonly explorerFolder?: string
-}
-
 /**
  * Host operations behind the Windows backend.
  * Production uses Win32. Tests supply fakes.
+ * `listWindows` returns physical pixels. Capture and pointer input use that same space.
  */
 export interface WindowsDesktopOps {
-  foreground(): WindowsForeground | undefined
+  /** Z-order snapshot in physical pixels, including the foreground hwnd. */
+  listWindows(): WindowsDesktopSnapshot
   capturePng(bounds: WindowsRect): Uint8Array
   /** True when the foreground window is elevated above this process (UIPI). */
   targetBlocksInput(): boolean
   movePointer(x: number, y: number): void
   mouseButton(button: 'left' | 'right', down: boolean): void
   scrollWheel(x: number, y: number, delta: number): void
-  key(virtualKey: number, down: boolean): void
+  /**
+   * Post one key transition.
+   * @param virtualKey - Win32 virtual-key code.
+   * @param down - true for key down, false for key up.
+   * @param extended - true for the extended navigation keys (`KEYEVENTF_EXTENDEDKEY`).
+   */
+  key(virtualKey: number, down: boolean, extended?: boolean): void
   readClipboardText(): string
   setClipboardText(text: string): void
   copyImageFile(path: string): void
   listWindowApps(): readonly string[]
-  /** Bring a running app forward. False when no window matches `name`. */
+  /**
+   * Bring a running app forward.
+   * @param name - process base name or a substring of the window title.
+   * @returns false when no window matches `name`.
+   * @throws when a window matches but does not become foreground.
+   */
   activateApp(name: string): boolean
   launch(target: string, parameters?: string): void
+  /**
+   * Explorer address path for one Explorer window.
+   * @param hwnd - Explorer window handle.
+   * @returns the folder path, or undefined when it cannot be read.
+   */
+  explorerFolder(hwnd: number): string | undefined
 }
 
 const ELEVATED_WINDOW = 'computer-use: the foreground window is running elevated, so this process cannot click or type into it'
@@ -98,6 +114,42 @@ const KEY_NAMES: Readonly<Record<string, number>> = {
   end: 0x23,
   pageup: 0x21,
   pagedown: 0x22,
+  insert: 0x2D,
+}
+
+/** Navigation keys whose scan code is the extended set. Numpad names are not in this map. */
+const EXTENDED_KEY_NAMES = new Set([
+  'up',
+  'down',
+  'left',
+  'right',
+  'home',
+  'end',
+  'pageup',
+  'pagedown',
+  'insert',
+  'delete',
+  'del',
+])
+
+const MODIFIER_VKS = new Set([0x10, 0x11, 0x12, 0x5B, 0x5C])
+
+/** Same settle the macOS HID script uses after a move, before the button goes down. */
+const POINTER_MOVE_SETTLE_MS = 80
+const BUTTON_HOLD_MS = 50
+const DOUBLE_CLICK_GAP_MS = 100
+const DRAG_STEPS = 10
+const DRAG_STEP_MS = 20
+const SCROLL_NOTCH = 120
+const SCROLL_STEP_MS = 20
+const MODIFIER_GAP_MS = 20
+const CLIPBOARD_SETTLE_MS = 30
+/** Wait after Ctrl+V before restoring the clipboard, so the target reads the pasted text. */
+const PASTE_SETTLE_MS = 80
+
+interface PostedKey {
+  readonly vk: number
+  readonly extended: boolean
 }
 
 /**
@@ -115,6 +167,23 @@ export function windowsVirtualKey(key: string): number {
   const fn = /^f([1-9]|1[0-2])$/u.exec(token)
   if (fn !== null) return 0x70 + Number(fn[1]) - 1
   throw new Error(`computer-use: unknown key ${JSON.stringify(key)}`)
+}
+
+/**
+ * Whether a hotkey token needs `KEYEVENTF_EXTENDEDKEY`.
+ * @param key - model-supplied key name.
+ * @returns true for arrows, editing, and navigation keys. Letters and digits return false.
+ */
+export function windowsKeyIsExtended(key: string): boolean {
+  return EXTENDED_KEY_NAMES.has(key.trim().toLowerCase())
+}
+
+function postedKey(key: string): PostedKey {
+  return { vk: windowsVirtualKey(key), extended: windowsKeyIsExtended(key) }
+}
+
+function postedVk(vk: number): PostedKey {
+  return { vk, extended: false }
 }
 
 /**
@@ -185,17 +254,41 @@ async function clickAt(
   signal: AbortSignal,
 ): Promise<void> {
   ops.movePointer(point.x, point.y)
+  await delay(POINTER_MOVE_SETTLE_MS, signal)
   for (let index = 0; index < count; index += 1) {
-    await delay(20, signal)
     ops.mouseButton(button, true)
-    await delay(20, signal)
+    await delay(BUTTON_HOLD_MS, signal)
     ops.mouseButton(button, false)
+    if (index + 1 < count) await delay(DOUBLE_CLICK_GAP_MS, signal)
   }
 }
 
-function chord(ops: WindowsDesktopOps, keys: readonly number[]): void {
-  for (const key of keys) ops.key(key, true)
-  for (const key of [...keys].reverse()) ops.key(key, false)
+async function chord(
+  ops: WindowsDesktopOps,
+  keys: readonly PostedKey[],
+  signal: AbortSignal,
+): Promise<void> {
+  const modifiers = keys.filter(key => MODIFIER_VKS.has(key.vk))
+  const rest = keys.filter(key => !MODIFIER_VKS.has(key.vk))
+  for (const key of modifiers) ops.key(key.vk, true, key.extended)
+  if (modifiers.length > 0) await delay(MODIFIER_GAP_MS, signal)
+  for (const key of rest) ops.key(key.vk, true, key.extended)
+  for (const key of [...rest].reverse()) ops.key(key.vk, false, key.extended)
+  for (const key of [...modifiers].reverse()) ops.key(key.vk, false, key.extended)
+}
+
+function observationOf(ops: WindowsDesktopOps): WindowsObservationSelection | undefined {
+  return selectWindowsObservation(ops.listWindows(), activeCaptureExcludeWindowIds())
+}
+
+function screenFromObservation(selected: WindowsObservationSelection): ScreenInfo {
+  return {
+    index: 0,
+    bounds: selected.bounds,
+    scale: selected.scale,
+    windowId: selected.windowId,
+    ...selected.transientWindowIds.length === 0 ? {} : { transientWindowIds: selected.transientWindowIds },
+  }
 }
 
 let productionOps: WindowsDesktopOps | undefined
@@ -218,10 +311,9 @@ export function createWindowsDesktopBackend(ops?: WindowsDesktopOps): DesktopBac
 
     async listScreens(signal) {
       signal?.throwIfAborted()
-      const front = (await use()).foreground()
-      if (front === undefined) return []
-      const screen: ScreenInfo = { index: 0, bounds: front.bounds, scale: front.scale }
-      return [screen]
+      const selected = observationOf(await use())
+      if (selected === undefined) return []
+      return [screenFromObservation(selected)]
     },
 
     async capture(screen, signal): Promise<CapturedScreen> {
@@ -237,12 +329,16 @@ export function createWindowsDesktopBackend(ops?: WindowsDesktopOps): DesktopBac
 
     async inspectForeground(signal) {
       signal?.throwIfAborted()
-      const front = (await use()).foreground()
-      if (front === undefined) return FOCUS_FALLBACK_FOREGROUND
+      const host = await use()
+      const selected = observationOf(host)
+      if (selected === undefined) return FOCUS_FALLBACK_FOREGROUND
+      const folder = selected.appName.toLowerCase() === 'explorer'
+        ? host.explorerFolder(selected.windowId)
+        : undefined
       const foreground: DesktopForeground = {
-        appName: front.appName,
-        ...front.windowTitle === '' ? {} : { windowTitle: front.windowTitle },
-        ...front.explorerFolder === undefined ? {} : { finderFolder: front.explorerFolder },
+        appName: selected.appName,
+        ...selected.windowTitle === '' ? {} : { windowTitle: selected.windowTitle },
+        ...folder === undefined ? {} : { finderFolder: folder },
       }
       return foreground
     },
@@ -271,15 +367,16 @@ export function createWindowsDesktopBackend(ops?: WindowsDesktopOps): DesktopBac
       assertInput(host)
       const abort = liveSignal(signal)
       await clickAt(host, 'left', 1, pointOf(input.position, input.screen), abort)
-      if (input.replace) chord(host, [0x11, 0x41])
+      if (input.replace) await chord(host, [postedVk(0x11), postedVk(0x41)], abort)
       const previous = host.readClipboardText()
       try {
         host.setClipboardText(input.text)
-        await delay(30, abort)
-        chord(host, [0x11, 0x56])
+        await delay(CLIPBOARD_SETTLE_MS, abort)
+        await chord(host, [postedVk(0x11), postedVk(0x56)], abort)
+        await delay(PASTE_SETTLE_MS, abort)
         if (input.submit) {
-          await delay(30, abort)
-          chord(host, [0x0D])
+          await delay(CLIPBOARD_SETTLE_MS, abort)
+          await chord(host, [postedVk(0x0D)], abort)
         }
       } finally {
         host.setClipboardText(previous)
@@ -290,16 +387,19 @@ export function createWindowsDesktopBackend(ops?: WindowsDesktopOps): DesktopBac
       const host = await use()
       assertInput(host)
       const point = pointOf(input.position, input.screen)
-      const delta = (input.direction === 'up' ? 1 : -1) * input.scrollLevel * 120
-      host.scrollWheel(point.x, point.y, delta)
-      signal?.throwIfAborted()
+      const abort = liveSignal(signal)
+      const step = (input.direction === 'up' ? 1 : -1) * SCROLL_NOTCH
+      for (let index = 0; index < input.scrollLevel; index += 1) {
+        host.scrollWheel(point.x, point.y, step)
+        await delay(SCROLL_STEP_MS, abort)
+      }
     },
 
     async hotkey(input: HotkeyInput, signal) {
       signal?.throwIfAborted()
       const host = await use()
       assertInput(host)
-      chord(host, input.keys.map(windowsVirtualKey))
+      await chord(host, input.keys.map(postedKey), liveSignal(signal))
     },
 
     async longPress(input: LongPressInput, signal) {
@@ -308,7 +408,7 @@ export function createWindowsDesktopBackend(ops?: WindowsDesktopOps): DesktopBac
       const point = pointOf(input.position, input.screen)
       const abort = liveSignal(signal)
       host.movePointer(point.x, point.y)
-      await delay(20, abort)
+      await delay(POINTER_MOVE_SETTLE_MS, abort)
       host.mouseButton('left', true)
       try {
         await delay(Math.round(input.durationSeconds * 1000), abort)
@@ -324,11 +424,17 @@ export function createWindowsDesktopBackend(ops?: WindowsDesktopOps): DesktopBac
       const end = pointOf(input.endPosition, input.endScreen)
       const abort = liveSignal(signal)
       host.movePointer(start.x, start.y)
-      await delay(20, abort)
+      await delay(POINTER_MOVE_SETTLE_MS, abort)
       host.mouseButton('left', true)
-      await delay(20, abort)
-      host.movePointer(end.x, end.y)
-      await delay(20, abort)
+      await delay(BUTTON_HOLD_MS, abort)
+      for (let step = 1; step <= DRAG_STEPS; step += 1) {
+        const t = step / DRAG_STEPS
+        host.movePointer(
+          Math.round(start.x + (end.x - start.x) * t),
+          Math.round(start.y + (end.y - start.y) * t),
+        )
+        await delay(DRAG_STEP_MS, abort)
+      }
       host.mouseButton('left', false)
     },
 
