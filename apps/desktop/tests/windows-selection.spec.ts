@@ -38,6 +38,22 @@ describe('windows selection monitor', () => {
     expect(events).toEqual([{ type: 'mouse-up', x: 10, y: 20 }])
   })
 
+  it('remembers the last selection pid for overlay focus restore', async () => {
+    const events: SelectionHelperEvent[] = []
+    let dispatch: (message: { type: 'mouse-up'; x: number; y: number; button: 'left' }) => void = () => undefined
+    const monitor = startWindowsSelectionMonitor(
+      { onEvent: (event) => { events.push(event) } },
+      { readSelection: async () => ({ text: 'hello', pid: 9 }), activatePid: () => undefined },
+      (next) => {
+        dispatch = next
+        return () => undefined
+      },
+    )
+    dispatch({ type: 'mouse-up', x: 1, y: 2, button: 'left' })
+    await vi.waitFor(() => { expect(monitor.lastFrontPid()).toBe(9) })
+    monitor.stop()
+  })
+
   it('dismisses right-clicks and reports ready without installing a failed hook', () => {
     const events: SelectionHelperEvent[] = []
     dispatchWindowsSelectionMessage(
@@ -53,6 +69,7 @@ describe('windows selection monitor', () => {
       () => { throw new Error('hook unavailable') },
     )
     expect(events.at(-1)).toEqual({ type: 'ready' })
+    expect(monitor.lastFrontPid()).toBeUndefined()
     monitor.stop()
   })
 })

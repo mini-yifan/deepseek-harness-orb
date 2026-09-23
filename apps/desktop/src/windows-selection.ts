@@ -82,10 +82,18 @@ export function startWindowsSelectionMonitor(
   install: (dispatch: (message: WindowsSelectionMessage) => void) => () => void,
 ): SelectionMonitor {
   const excluded = new Set<number>()
+  let lastFront: number | undefined
+  const tracking: WindowsSelectionProbe = {
+    readSelection: () => probe.readSelection().then((selection) => {
+      if (selection?.pid !== undefined && !excluded.has(selection.pid)) lastFront = selection.pid
+      return selection
+    }),
+    activatePid: (pid) => { probe.activatePid(pid) },
+  }
   handlers.onEvent({ type: 'ready' })
   let unhook = (): void => undefined
   try {
-    unhook = install((message) => { dispatchWindowsSelectionMessage(message, handlers, probe, excluded) })
+    unhook = install((message) => { dispatchWindowsSelectionMessage(message, handlers, tracking, excluded) })
   } catch (error: unknown) {
     console.error('dsh desktop: selection hook failed', error)
   }
@@ -98,6 +106,9 @@ export function startWindowsSelectionMonitor(
     activatePid(pid) {
       if (excluded.has(pid)) return
       probe.activatePid(pid)
+    },
+    lastFrontPid() {
+      return lastFront
     },
   }
 }
