@@ -76,7 +76,7 @@ pnpm run package:desktop:mac:arm64:unsigned
 | `Resources/plugins/dshmarket-1.50.0.tgz` | 首次启动 seed 插件市场 |
 | `Resources/dsh/node_modules/@deepseek-ai/dsh-experimental-tool-computer-use/lib/macos-sck-capture` | **仅 CLI / 无 overlay-guard 时**用的 helper；Desktop 截屏不再 spawn 它 |
 | `Resources/dsh/.../dsh-desktop-host/lib` 里协议 **8**、字符串 `sck-capture` | Host ↔ Electron 排除 overlay 的捕获 IPC |
-| Dock / Finder 图标 | `build/icon.png`（悬浮球 GIF 第一帧做成的圆角矩形） |
+| Dock / Finder 图标 | `build/icon.png`（`build/icon-source.png` 去掉白边后的圆角矩形） |
 
 `dsh/` 整棵树在 `signIgnore` 里，即使以后打**签名包**，helper 也不会变成 `ai.deepseek.orb`。所以 Desktop 排除 overlay 的截屏必须走 asarUnpack 里的 N-API，不能再 spawn helper。
 
