@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-22-windows-floating-orb.md
+2026-09-22-windows-floating-orb.md: 8f4e2559f0dfbed18f118e2f8fbb7e77f31405bd
+2026-09-22-windows-floating-orb.zh.md: 121670b999056747f4cf0538266b5d74568f86a2

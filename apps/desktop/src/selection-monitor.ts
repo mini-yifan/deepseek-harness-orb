@@ -1,6 +1,8 @@
-/** Parse Darwin selection-monitor NDJSON and start the in-process Electron binding. */
+/** Parse selection-monitor NDJSON and start the in-process Electron or Windows hook binding. */
 
 import { loadMacosSelectionBinding, type MacosSelectionNapiBinding } from './macos-selection-napi.ts'
+import { installWindowsSelectionHooks, productionSelectionProbe } from './windows-selection-native.ts'
+import { startWindowsSelectionMonitor } from './windows-selection.ts'
 
 /** Selection rectangle in Electron screen coordinates (top-left origin). */
 export interface SelectionBounds {
@@ -118,6 +120,9 @@ export function parseSelectionHelperLine(line: string): SelectionHelperEvent | u
  * @returns a running monitor, or undefined when the addon is missing or not Darwin.
  */
 export function startSelectionMonitor(handlers: SelectionMonitorHandlers): SelectionMonitor | undefined {
+  if (process.platform === 'win32') {
+    return startWindowsSelectionMonitor(handlers, productionSelectionProbe(), installWindowsSelectionHooks)
+  }
   if (process.platform !== 'darwin') return undefined
   let addon: MacosSelectionNapiBinding
   try {

@@ -10,7 +10,7 @@ export default defineConfig([
     fixedExtension: false,
     dts: false,
     clean: false,
-    deps: { neverBundle: ['electron'] },
+    deps: { neverBundle: ['electron', 'koffi'] },
   },
   ...(['preload', 'preload-app'] as const).map(name => ({
     // Sandboxed Electron preloads run as CommonJS even though the application package is ESM.

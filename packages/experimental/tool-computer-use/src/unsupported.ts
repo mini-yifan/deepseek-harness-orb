@@ -1,12 +1,12 @@
 /**
- * Desktop backend used when Computer Use is loaded off macOS.
+ * Desktop backend used when Computer Use is loaded off macOS and Windows.
  * @module @deepseek-ai/dsh-experimental-tool-computer-use/src/unsupported
  */
 
 import type { DesktopBackend } from './backend.ts'
 
-/** Fixed execute-time error for non-macOS hosts. */
-export const UNSUPPORTED_DESKTOP_MESSAGE = 'computer-use: desktop control is implemented only on macOS'
+/** Fixed execute-time error for hosts other than macOS and Windows. */
+export const UNSUPPORTED_DESKTOP_MESSAGE = 'computer-use: desktop control is implemented only on macOS and Windows'
 
 /**
  * Construct a backend whose methods fail at execute time so Linux CI can still load the plugin.

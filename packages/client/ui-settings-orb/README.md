@@ -1,5 +1,5 @@
 ---
-description: "Desktop Settings page for the macOS floating ball: custom avatar, Floating-ball Agent and background Agent models, the selection toolbar, millifraction coordinates, and Screen Recording / Accessibility status."
+description: "Desktop Settings page for the macOS and Windows floating ball: custom avatar, Floating-ball Agent and background Agent models, the selection toolbar, millifraction coordinates, and macOS Screen Recording / Accessibility status."
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-This package adds a **Floating ball** page to Desktop Settings. Users change the ball image (GIF, PNG, or WebP, suggested 2 MB cap, with restore-to-default), the Floating-ball Agent model, the background `code_agent` model, whether the selection toolbar is enabled, whether new overlay chats use millifraction coordinates, and — on macOS — Screen Recording and Accessibility status. Avatar, models, and the selection toolbar write the Desktop profile immediately. Millifraction coordinates confirm in Electron main, then persist and create a new overlay conversation. `dsh web` never shows the page. Windows still lists it, with every control disabled.
+This package adds a **Floating ball** page to Desktop Settings. Users change the ball image (GIF, PNG, or WebP, suggested 2 MB cap, with restore-to-default), the Floating-ball Agent model, the background `code_agent` model, whether the selection toolbar is enabled, whether new overlay chats use millifraction coordinates, and — on macOS — Screen Recording and Accessibility status. Avatar, models, and the selection toolbar write the Desktop profile immediately. Millifraction coordinates confirm in Electron main, then persist and create a new overlay conversation. `dsh web` never shows the page. Linux lists it with every control disabled. macOS and Windows receive `supported: true`.
 
 ## Table of Contents
 
@@ -35,7 +35,7 @@ The Desktop Host overlay inserts this plugin. Open Settings in the main window a
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The node half is an empty `apply` so the Loader can list the plugin. The browser half registers `settings.section` id `orb` at order 25. Catalog reads go through `ctx.remote.session.modelCatalog()`. Preference writes go through `window.dshDesktop.orb` on `dsh-app://app` (the app preload, not the shell startup bridge). Custom avatars live as profile `orb-avatar` plus `orb-avatar.json`; `dsh-app://app/orb-avatar` and `dsh-app://shell/orb-avatar` serve that file or the packaged GIF. The millifraction switch does not set `busy` while the native dialog is open; confirm, persist, Host push, and overlay New live in Electron main. Windows receives the same page with `supported: false`. The [Desktop orb Settings Agent Note](../../../.agents/notes/implemented/feature/2026-09-18-desktop-orb-settings.md) owns composition, the app preload, and the profile avatar. [Overlay Computer Use millifraction and pixel coordinate modes](../../../.agents/notes/implemented/feature/2026-09-19-computer-use-session-coordinate-modes.md) owns the millifraction confirm path. [Desktop Orb TCC gate](../../../.agents/notes/implemented/feature/2026-09-20-desktop-orb-tcc-gate.md) owns the macOS permission card and overlay cover.
+The node half is an empty `apply` so the Loader can list the plugin. The browser half registers `settings.section` id `orb` at order 25. Catalog reads go through `ctx.remote.session.modelCatalog()`. Preference writes go through `window.dshDesktop.orb` on `dsh-app://app` (the app preload, not the shell startup bridge). Custom avatars live as profile `orb-avatar` plus `orb-avatar.json`; `dsh-app://app/orb-avatar` and `dsh-app://shell/orb-avatar` serve that file or the packaged GIF. The millifraction switch does not set `busy` while the native dialog is open; confirm, persist, Host push, and overlay New live in Electron main. Linux receives the same page with `supported: false`. macOS and Windows receive `supported: true`. The [Desktop orb Settings Agent Note](../../../.agents/notes/implemented/feature/2026-09-18-desktop-orb-settings.md) owns composition, the app preload, and the profile avatar. [Overlay Computer Use millifraction and pixel coordinate modes](../../../.agents/notes/implemented/feature/2026-09-19-computer-use-session-coordinate-modes.md) owns the millifraction confirm path. [Desktop Orb TCC gate](../../../.agents/notes/implemented/feature/2026-09-20-desktop-orb-tcc-gate.md) owns the macOS permission card and overlay cover.
 
 </details>
 
@@ -68,7 +68,7 @@ None; this package neither assembles nor sends a provider request.
 These limits define the Desktop-only Settings page. They are current package constraints, not a floating-ball backlog.
 
 - **Desktop composition only** — `dsh web` does not insert this plugin, so the nav row never appears there.
-- **macOS writes** — Windows lists the page and disables every control; the native ball is not created.
+- **macOS and Windows writes** — Linux lists the page and disables every control; the native ball is not created there.
 - **No Access, Open Main, or Quit** — those remain on the ball's right-click menu.
 
 <a id="dev-note"></a>

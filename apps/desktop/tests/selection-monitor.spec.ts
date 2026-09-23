@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
 import { readFile } from 'node:fs/promises'
+import { describe, expect, it, vi } from 'vitest'
 import { parseSelectionHelperLine, startSelectionMonitor } from '../src/selection-monitor.ts'
 
 describe('selection helper protocol', () => {
@@ -43,8 +43,10 @@ describe('selection helper protocol', () => {
     expect(parseSelectionHelperLine('{"type":"mouse-up","x":"1","y":2}')).toBeUndefined()
   })
 
-  it('does not start a monitor when the addon is missing', () => {
+  it('does not start a monitor off macOS and Windows', () => {
+    vi.stubGlobal('process', { ...process, platform: 'linux' })
     expect(startSelectionMonitor({ onEvent: () => undefined })).toBeUndefined()
+    vi.unstubAllGlobals()
   })
 
   it('monitors in the Electron process and never changes activation policy', async () => {

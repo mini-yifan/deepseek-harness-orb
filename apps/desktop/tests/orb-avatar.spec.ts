@@ -85,13 +85,15 @@ describe('orb avatar persistence', () => {
     })
   })
 
-  it('builds cache-busted custom-protocol URLs and gates writes to macOS', () => {
+  it('builds cache-busted custom-protocol URLs and gates writes to macOS and Windows', () => {
     expect(orbAvatarUrl('app', 12.9)).toBe('dsh-app://app/orb-avatar?v=12')
     expect(orbAvatarUrl('shell', 0)).toBe('dsh-app://shell/orb-avatar?v=0')
     expect(orbSettingsSupported('darwin')).toBe(true)
-    expect(orbSettingsSupported('win32')).toBe(false)
+    expect(orbSettingsSupported('win32')).toBe(true)
+    expect(orbSettingsSupported('linux')).toBe(false)
     expect(() => { assertOrbSettingsWritable('linux') }).toThrow(ORB_SETTINGS_MACOS_ONLY)
     expect(() => { assertOrbSettingsWritable('darwin') }).not.toThrow()
+    expect(() => { assertOrbSettingsWritable('win32') }).not.toThrow()
   })
 
   it('rejects non-GET methods and falls back when stored bytes are not an image', async () => {
