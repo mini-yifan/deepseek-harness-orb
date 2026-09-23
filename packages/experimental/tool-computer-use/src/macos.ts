@@ -24,6 +24,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { activeCaptureExcludeWindowIds } from './capture-exclude.ts'
+import { CROSS_PID_TRANSIENT_PAD, MIN_LAYER0_WINDOW_EDGE } from './observation-limits.ts'
 import {
   FOCUS_FALLBACK_FOREGROUND,
   type CapturedScreen,
@@ -128,8 +129,7 @@ export function sanitizeExcludeWindowIds(excludeWindowIds: readonly number[]): n
   return excludeWindowIds.filter(id => Number.isInteger(id) && id > 0)
 }
 
-/** Smallest logical edge, in points, for a layer-0 window that can be the observation. */
-export const MIN_LAYER0_WINDOW_EDGE = 64
+export { CROSS_PID_TRANSIENT_PAD, MIN_LAYER0_WINDOW_EDGE }
 
 /**
  * Popup-menu layer included from an unrelated PID when it intersects the owner window.
@@ -139,9 +139,6 @@ export const CROSS_PID_TRANSIENT_LAYERS = [101] as const
 
 /** Dock and menu-bar layers omitted from observation. Status-item layer 25 is not chrome. */
 export const CHROME_WINDOW_LAYERS = [20, 24] as const
-
-/** Extra points around the owner window when matching an unrelated layer-101 WindowServer menu. */
-export const CROSS_PID_TRANSIENT_PAD = 48
 
 /** Owner names that are never menus of the frontmost app. */
 export const CHROME_WINDOW_OWNERS = [

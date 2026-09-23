@@ -650,16 +650,25 @@ describe('desktop floating overlay', () => {
     expect(harness.app.dock.show).not.toHaveBeenCalled()
     expect(harness.app.setActivationPolicy).not.toHaveBeenCalled()
     expect(overlay?.contentProtection).toBe(false)
-    harness.hosts[0]!.onOverlayGuard?.({
+    void harness.hosts[0]!.onOverlayGuard?.({
       type: 'overlay-guard', requestId: 1, action: 'begin', mode: 'capture',
     })
     expect(overlay?.contentProtection).toBe(true)
     expect(toolbar?.contentProtection).toBe(true)
-    harness.hosts[0]!.onOverlayGuard?.({
+    void harness.hosts[0]!.onOverlayGuard?.({
       type: 'overlay-guard', requestId: 2, action: 'end', mode: 'capture',
     })
     expect(overlay?.contentProtection).toBe(false)
     expect(toolbar?.contentProtection).toBe(false)
+    void harness.hosts[0]!.onOverlayGuard?.({
+      type: 'overlay-guard', requestId: 3, action: 'begin', mode: 'input',
+    })
+    expect(overlay?.contentProtection).toBe(true)
+    expect(toolbar?.contentProtection).toBe(true)
+    void harness.hosts[0]!.onOverlayGuard?.({
+      type: 'overlay-guard', requestId: 4, action: 'end', mode: 'input',
+    })
+    expect(overlay?.contentProtection).toBe(false)
   })
 
   it('does not create a floating overlay on Linux', async () => {

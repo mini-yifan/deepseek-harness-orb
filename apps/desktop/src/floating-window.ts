@@ -514,9 +514,10 @@ function countsOf(window: BrowserWindow): OverlayGuardCounts {
 }
 
 /**
- * Parse the overlay's `desktopCapturer` source id into a CGWindowID.
- * @param sourceId - `BrowserWindow.getMediaSourceId()` value (`window:<id>:…`).
- * @returns the CGWindowID ScreenCaptureKit excludes.
+ * Parse the overlay's `desktopCapturer` source id into a window id.
+ * The number is a CGWindowID on macOS and an HWND on Windows. Both use `window:<id>:…`.
+ * @param sourceId - `BrowserWindow.getMediaSourceId()` value.
+ * @returns the window id Computer Use excludes from the observation.
  * @throws when the id is not a positive window source.
  */
 export function cgWindowIdFromMediaSourceId(sourceId: string): number {
@@ -532,12 +533,12 @@ export function cgWindowIdFromMediaSourceId(sourceId: string): number {
 }
 
 /**
- * Overlay window ids Computer Use must omit from the next ScreenCaptureKit capture.
- * Pass every Desktop overlay that must stay out of the shot.
+ * Overlay window ids Computer Use must omit from the next capture.
+ * macOS passes them to ScreenCaptureKit. Windows skips those HWNDs when choosing the foreground window.
  * Hidden windows are omitted: ScreenCaptureKit `onScreenWindowsOnly` cannot see them,
- * and a missing exclude id fails capture.
+ * and a missing exclude id fails macOS capture.
  * @param windows - floating ball, selection toolbar, or other capture-excluded chrome.
- * @returns CGWindowIDs, omitting destroyed or hidden windows.
+ * @returns window ids, omitting destroyed or hidden windows.
  */
 export function overlayWindowExcludeIds(...windows: Array<BrowserWindow | undefined>): number[] {
   const ids: number[] = []
@@ -553,8 +554,10 @@ export const OVERLAY_GUARD_INPUT_APPLY_MS = 80
 
 function syncOverlayGuard(window: BrowserWindow, counts: OverlayGuardCounts): void {
   if (window.isDestroyed()) return
-  // Windows capture APIs honor WDA_EXCLUDEFROMCAPTURE. macOS exclusion stays on ScreenCaptureKit ids.
-  window.setContentProtection(process.platform === 'win32' && counts.capture > 0)
+  // Windows GDI honors WDA_EXCLUDEFROMCAPTURE. Hold it for capture and for HID,
+  // because the post-action screenshot runs inside the input cloak and does not send a second capture begin.
+  // macOS exclusion stays on ScreenCaptureKit ids.
+  window.setContentProtection(process.platform === 'win32' && (counts.capture > 0 || counts.input > 0))
   const clickThrough = counts.input > 0
   if (overlayClickThrough.get(window) === clickThrough) return
   overlayClickThrough.set(window, clickThrough)
@@ -570,7 +573,7 @@ function syncOverlayGuard(window: BrowserWindow, counts: OverlayGuardCounts): vo
  * Apply or restore overlay click-through for one Computer Use HID interval.
  * Capture begin still refcounts so overlapping sessions stay paired with their ends.
  * macOS omits the overlay with {@link overlayWindowExcludeIds}. Windows sets
- * `contentProtection` for the same capture interval.
+ * `contentProtection` for capture and for the HID interval that wraps recapture.
  * HID click-through does not forward mouse events into the overlay renderer.
  * Overlapping begins are refcounted. Click-through and blur apply only when the
  * input count crosses zero, so nested capture IPC during a HID turn does not flash the overlay.

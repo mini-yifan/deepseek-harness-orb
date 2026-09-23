@@ -12,9 +12,9 @@ Status: implemented
 
 Windows 在 Host 就绪后创建同一套 overlay。窗口是无边框透明置顶窗口，置顶级别为 screen-saver。它不用 `type: 'panel'` 或 `setVisibleOnAllWorkspaces`，这两项只属于 Darwin。`app.setActivationPolicy` 与 `app.dock.show()` 仍只在 macOS 调用。Linux 仍然不创建球。设置写入在 macOS 和 Windows 上允许。
 
-Computer Use 捕获区间打开时，Windows 对球和划词条设置 `contentProtection`，让遵守 `WDA_EXCLUDEFROMCAPTURE` 的捕获 API 省略它们。macOS 仍用 ScreenCaptureKit 窗口 id 排除这些窗口。HID 期间的点击穿透不变。
+Computer Use 的捕获或 HID 区间打开时，Windows 对球和划词条设置 `contentProtection`，让遵守 `WDA_EXCLUDEFROMCAPTURE` 的捕获 API 省略它们。动作后的截图跑在 HID 区间里。macOS 仍用 ScreenCaptureKit 窗口 id 排除这些窗口。HID 期间的点击穿透不变。
 
-`createPlatformBackend('win32')` 返回 Windows 后端。它用 GDI 把前台窗口截成 PNG，并用 `SendInput` 发送点击、滚动、热键、长按和拖拽。`input_text` 用 Ctrl+V 粘贴，并恢复先前的字符串剪贴板。`open_in_finder` 打开资源管理器。前台进程完整性高于本进程时，输入会抛错，而不是被静默丢掉。测试注入 `WindowsDesktopOps`，不发送真实输入。
+`createPlatformBackend('win32')` 返回 Windows 后端。捕获、前台选择和 `SendInput` 共用每监视器物理像素。[Windows Computer Use 每监视器坐标](../architecture/2026-09-23-windows-computer-use-per-monitor-dpi.zh.md) 负责这项决定。`open_in_finder` 打开资源管理器。前台进程完整性高于本进程时，输入会抛错，而不是被静默丢掉。测试注入 `WindowsDesktopOps`，不发送真实输入。
 
 划词工具条保持原来的控制器和页面。Windows 在 Electron 主进程安装 `WH_MOUSE_LL` 与 `WH_KEYBOARD_LL`，并用 UI Automation 读取焦点处的选区。事件与 Darwin helper 相同。钩子安装失败时记录日志并仍然发出 `ready`，球仍可使用。
 
@@ -32,4 +32,4 @@ Computer Use 捕获区间打开时，Windows 对球和划词条设置 `contentPr
 
 ## 测试
 
-`apps/desktop/tests/main-startup.spec.ts` 创建 Win32 overlay 和划词条，检查 screen-saver 置顶，并检查 content protection 只在捕获期间打开。Linux 仍然两者都不创建。`windows.spec.ts` 通过注入的操作驱动后端。`windows-selection.spec.ts` 在不安装钩子的情况下检查选区事件。
+`apps/desktop/tests/main-startup.spec.ts` 创建 Win32 overlay 和划词条，检查 screen-saver 置顶，并检查 content protection 在捕获期间和 HID 期间打开。Linux 仍然两者都不创建。`windows.spec.ts` 通过注入的操作驱动后端。`windows-selection.spec.ts` 在不安装钩子的情况下检查选区事件。

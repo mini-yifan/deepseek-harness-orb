@@ -1,12 +1,17 @@
 /**
  * Win32 capture and input used by {@link createWindowsDesktopBackend}.
  * Loaded only on Windows, and only when a method runs without injected operations.
+ * Each coordinate-bearing call sets this thread to per-monitor DPI awareness so
+ * window rectangles, `BitBlt`, and `SendInput` share physical pixels, then restores
+ * the previous awareness. `.agents/notes/implemented/architecture/2026-09-23-windows-computer-use-per-monitor-dpi.md`
+ * owns that decision.
  * @module @deepseek-ai/dsh-experimental-tool-computer-use/src/windows-native
  */
 
 import { execFileSync } from 'node:child_process'
 import koffi from 'koffi'
-import { encodeBgraPng, type WindowsDesktopOps, type WindowsForeground, type WindowsRect } from './windows.ts'
+import type { WindowsDesktopSnapshot, WindowsWindowFact } from './windows-foreground.ts'
+import { encodeBgraPng, type WindowsDesktopOps, type WindowsRect } from './windows.ts'
 
 const SRCCOPY = 0x00CC0020
 const MOUSEEVENTF_MOVE = 0x0001
@@ -19,6 +24,7 @@ const MOUSEEVENTF_ABSOLUTE = 0x8000
 const MOUSEEVENTF_VIRTUALDESK = 0x4000
 const INPUT_MOUSE = 0
 const INPUT_KEYBOARD = 1
+const KEYEVENTF_EXTENDEDKEY = 0x0001
 const KEYEVENTF_KEYUP = 0x0002
 const CF_UNICODETEXT = 13
 const GMEM_MOVEABLE = 0x0002
@@ -30,12 +36,32 @@ const PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 const TOKEN_QUERY = 0x0008
 const TokenIntegrityLevel = 25
 const SW_SHOWNORMAL = 1
+const SW_RESTORE = 9
+const GW_OWNER = 4
+const GWL_STYLE = -16
+const GWL_EXSTYLE = -20
+const WS_POPUP = 0x80000000
+const WS_EX_TOOLWINDOW = 0x00000080
+const DWMWA_EXTENDED_FRAME_BOUNDS = 9
+const DWMWA_CLOAKED = 14
+const MONITOR_DEFAULTTONEAREST = 2
+const MDT_EFFECTIVE_DPI = 0
+const VK_MENU = 0x12
+/** Per-monitor v2, then per-monitor. `SetThreadDpiAwarenessContext` returns NULL when the context is unsupported. */
+const DPI_PER_MONITOR_V2 = -4
+const DPI_PER_MONITOR = -3
+const FOREGROUND_RETRY_MS = 50
 
 const RECT = koffi.struct('DSH_CU_RECT', {
   left: 'int32',
   top: 'int32',
   right: 'int32',
   bottom: 'int32',
+})
+
+const POINT = koffi.struct('DSH_CU_POINT', {
+  x: 'int32',
+  y: 'int32',
 })
 
 const BITMAPINFOHEADER = koffi.struct('DSH_CU_BITMAPINFOHEADER', {
@@ -79,8 +105,8 @@ const INPUT = koffi.struct('DSH_CU_INPUT', {
   u: INPUT_UNION,
 })
 
-// String prototypes below refer to these registered layouts by name.
 void RECT
+void POINT
 void BITMAPINFOHEADER
 
 interface NativeRect {
@@ -90,22 +116,46 @@ interface NativeRect {
   bottom: number
 }
 
+interface NativePoint {
+  x: number
+  y: number
+}
+
 interface NativeBindings {
   readonly user32: ReturnType<typeof koffi.load>
   readonly gdi32: ReturnType<typeof koffi.load>
   readonly kernel32: ReturnType<typeof koffi.load>
   readonly shell32: ReturnType<typeof koffi.load>
   readonly advapi32: ReturnType<typeof koffi.load>
+  readonly dwmapi: ReturnType<typeof koffi.load>
 }
+
+type DpiContext = number | bigint
 
 function isNull(value: unknown): boolean {
   return value === null || value === undefined || value === 0 || value === 0n
+}
+
+function dpiContext(value: unknown): DpiContext | undefined {
+  if (typeof value === 'bigint') return value === 0n ? undefined : value
+  if (typeof value === 'number' && value !== 0) return value
+  return undefined
 }
 
 function hwndId(value: unknown): number | undefined {
   const id = typeof value === 'bigint' ? Number(value) : typeof value === 'number' ? value : Number.NaN
   if (!Number.isSafeInteger(id) || id === 0) return undefined
   return id
+}
+
+function low32(value: unknown): number {
+  if (typeof value === 'bigint') return Number(BigInt.asIntN(32, value))
+  if (typeof value === 'number' && Number.isFinite(value)) return value | 0
+  return 0
+}
+
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 }
 
 function bind(libraries: NativeBindings): {
@@ -115,9 +165,21 @@ function bind(libraries: NativeBindings): {
   GetWindowTextW: (hwnd: unknown, buffer: Buffer, max: number) => number
   GetWindowThreadProcessId: (hwnd: unknown, pid: number[]) => number
   IsWindowVisible: (hwnd: unknown) => number
+  IsIconic: (hwnd: unknown) => number
   EnumWindows: (callback: unknown, param: number) => number
-  GetDpiForWindow: (hwnd: unknown) => number
+  EnumChildWindows: (hwnd: unknown, callback: unknown, param: number) => number
+  GetClassNameW: (hwnd: unknown, buffer: Buffer, max: number) => number
+  GetWindow: (hwnd: unknown, command: number) => unknown
+  GetWindowLongPtrW: (hwnd: unknown, index: number) => unknown
+  ShowWindow: (hwnd: unknown, command: number) => number
+  SetForegroundWindow: (hwnd: unknown) => number
+  MonitorFromWindow: (hwnd: unknown, flags: number) => unknown
+  GetMonitorInfoW: (monitor: unknown, info: Buffer) => number
   GetSystemMetrics: (index: number) => number
+  GetCursorPos: (point: NativePoint) => number
+  SetCursorPos: (x: number, y: number) => number
+  SetThreadDpiAwarenessContext: ((context: DpiContext) => unknown) | undefined
+  GetDpiForMonitor: ((monitor: unknown, type: number, dpiX: number[], dpiY: number[]) => number) | undefined
   GetDC: (hwnd: unknown) => unknown
   ReleaseDC: (hwnd: unknown, hdc: unknown) => number
   CreateCompatibleDC: (hdc: unknown) => unknown
@@ -144,7 +206,7 @@ function bind(libraries: NativeBindings): {
   GlobalAlloc: (flags: number, bytes: number) => unknown
   GlobalLock: (memory: unknown) => unknown
   GlobalUnlock: (memory: unknown) => number
-  GlobalSize: (memory: unknown) => number
+  GlobalSize: (memory: unknown) => unknown
   RtlMoveMemory: (dest: unknown, source: unknown, bytes: number) => void
   OpenProcess: (access: number, inherit: number, pid: number) => unknown
   CloseHandle: (handle: unknown) => number
@@ -154,10 +216,30 @@ function bind(libraries: NativeBindings): {
   GetSidSubAuthorityCount: (sid: unknown) => unknown
   GetSidSubAuthority: (sid: unknown, index: number) => unknown
   ShellExecuteW: (hwnd: unknown, verb: string | null, file: string, params: string | null, dir: string | null, show: number) => unknown
+  DwmGetWindowAttribute: (hwnd: unknown, attribute: number, buffer: Buffer, size: number) => number
   enumProc: ReturnType<typeof koffi.proto>
+  childProc: ReturnType<typeof koffi.proto>
 } {
-  const { user32, gdi32, kernel32, shell32, advapi32 } = libraries
+  const { user32, gdi32, kernel32, shell32, advapi32, dwmapi } = libraries
   const enumProc = koffi.proto('int __stdcall DshCuEnumWindowsProc(void *hwnd, intptr lParam)')
+  const childProc = koffi.proto('int __stdcall DshCuEnumChildProc(void *hwnd, intptr lParam)')
+  let setThreadDpi: ((context: DpiContext) => unknown) | undefined
+  try {
+    setThreadDpi = user32.func('intptr __stdcall SetThreadDpiAwarenessContext(intptr dpiContext)')
+  } catch {
+    // Windows 10 before 1607 has no per-thread DPI context. Calls stay on the process awareness.
+    setThreadDpi = undefined
+  }
+  let getDpiForMonitor: ((monitor: unknown, type: number, dpiX: number[], dpiY: number[]) => number) | undefined
+  try {
+    const shcore = koffi.load('shcore.dll')
+    getDpiForMonitor = shcore.func(
+      'int __stdcall GetDpiForMonitor(void *hmonitor, int dpiType, _Out_ uint32 *dpiX, _Out_ uint32 *dpiY)',
+    )
+  } catch {
+    // shcore is absent. Monitor scale stays 1; rectangles still come from the thread awareness.
+    getDpiForMonitor = undefined
+  }
   return {
     GetForegroundWindow: user32.func('void * __stdcall GetForegroundWindow()'),
     GetWindowRect: user32.func('int __stdcall GetWindowRect(void *hWnd, _Out_ DSH_CU_RECT *lpRect)'),
@@ -165,9 +247,21 @@ function bind(libraries: NativeBindings): {
     GetWindowTextW: user32.func('int __stdcall GetWindowTextW(void *hWnd, uint16_t *lpString, int nMaxCount)'),
     GetWindowThreadProcessId: user32.func('uint32 __stdcall GetWindowThreadProcessId(void *hWnd, _Out_ uint32 *lpdwProcessId)'),
     IsWindowVisible: user32.func('int __stdcall IsWindowVisible(void *hWnd)'),
+    IsIconic: user32.func('int __stdcall IsIconic(void *hWnd)'),
     EnumWindows: user32.func('int __stdcall EnumWindows(DshCuEnumWindowsProc *lpEnumFunc, intptr lParam)'),
-    GetDpiForWindow: user32.func('uint32 __stdcall GetDpiForWindow(void *hwnd)'),
+    EnumChildWindows: user32.func('int __stdcall EnumChildWindows(void *hWndParent, DshCuEnumChildProc *lpEnumFunc, intptr lParam)'),
+    GetClassNameW: user32.func('int __stdcall GetClassNameW(void *hWnd, uint16_t *lpClassName, int nMaxCount)'),
+    GetWindow: user32.func('void * __stdcall GetWindow(void *hWnd, uint32 uCmd)'),
+    GetWindowLongPtrW: user32.func('intptr __stdcall GetWindowLongPtrW(void *hWnd, int nIndex)'),
+    ShowWindow: user32.func('int __stdcall ShowWindow(void *hWnd, int nCmdShow)'),
+    SetForegroundWindow: user32.func('int __stdcall SetForegroundWindow(void *hWnd)'),
+    MonitorFromWindow: user32.func('void * __stdcall MonitorFromWindow(void *hwnd, uint32 dwFlags)'),
+    GetMonitorInfoW: user32.func('int __stdcall GetMonitorInfoW(void *hMonitor, _Inout_ uint8_t *lpmi)'),
     GetSystemMetrics: user32.func('int __stdcall GetSystemMetrics(int nIndex)'),
+    GetCursorPos: user32.func('int __stdcall GetCursorPos(_Out_ DSH_CU_POINT *lpPoint)'),
+    SetCursorPos: user32.func('int __stdcall SetCursorPos(int X, int Y)'),
+    SetThreadDpiAwarenessContext: setThreadDpi,
+    GetDpiForMonitor: getDpiForMonitor,
     GetDC: user32.func('void * __stdcall GetDC(void *hWnd)'),
     ReleaseDC: user32.func('int __stdcall ReleaseDC(void *hWnd, void *hDC)'),
     CreateCompatibleDC: gdi32.func('void * __stdcall CreateCompatibleDC(void *hdc)'),
@@ -216,7 +310,11 @@ function bind(libraries: NativeBindings): {
       'intptr __stdcall ShellExecuteW(void *hwnd, str16 lpOperation, str16 lpFile, '
       + 'str16 lpParameters, str16 lpDirectory, int nShowCmd)',
     ),
+    DwmGetWindowAttribute: dwmapi.func(
+      'int __stdcall DwmGetWindowAttribute(void *hwnd, uint32 dwAttribute, _Out_ uint8_t *pvAttribute, uint32 cbAttribute)',
+    ),
     enumProc,
+    childProc,
   }
 }
 
@@ -227,6 +325,13 @@ function windowText(api: Bindings, hwnd: unknown): string {
   if (length <= 0) return ''
   const buffer = Buffer.alloc((length + 1) * 2)
   api.GetWindowTextW(hwnd, buffer, length + 1)
+  return buffer.toString('utf16le', 0, length * 2)
+}
+
+function classNameOf(api: Bindings, hwnd: unknown): string {
+  const buffer = Buffer.alloc(256 * 2)
+  const length = api.GetClassNameW(hwnd, buffer, 256)
+  if (length <= 0) return ''
   return buffer.toString('utf16le', 0, length * 2)
 }
 
@@ -257,6 +362,7 @@ function integrityRid(api: Bindings, pid: number): number | undefined {
   try {
     return integrityRidUnchecked(api, pid)
   } catch {
+    // Token or SID queries can throw when koffi cannot decode an inaccessible process.
     return undefined
   }
 }
@@ -324,7 +430,7 @@ function sendMouse(api: Bindings, flags: number, x: number, y: number, data = 0)
       mi: {
         dx: absolute ? Math.round(((x - left) * 65535) / Math.max(1, width - 1)) : x,
         dy: absolute ? Math.round(((y - top) * 65535) / Math.max(1, height - 1)) : y,
-        mouseData: data,
+        mouseData: data >>> 0,
         dwFlags: flags,
         time: 0,
         dwExtraInfo: 0,
@@ -336,6 +442,24 @@ function sendMouse(api: Bindings, flags: number, x: number, y: number, data = 0)
   }
 }
 
+function postKey(api: Bindings, virtualKey: number, down: boolean, extended: boolean): void {
+  const input = {
+    type: INPUT_KEYBOARD,
+    u: {
+      ki: {
+        wVk: virtualKey,
+        wScan: 0,
+        dwFlags: (down ? 0 : KEYEVENTF_KEYUP) | (extended ? KEYEVENTF_EXTENDEDKEY : 0),
+        time: 0,
+        dwExtraInfo: 0,
+      },
+    },
+  }
+  if (api.SendInput(1, [input], INPUT.size) !== 1) {
+    throw new Error('computer-use: keyboard input failed')
+  }
+}
+
 function withClipboard(api: Bindings, write: () => void): void {
   if (api.OpenClipboard(null) === 0) throw new Error('computer-use: OpenClipboard failed')
   try {
@@ -343,6 +467,92 @@ function withClipboard(api: Bindings, write: () => void): void {
   } finally {
     api.CloseClipboard()
   }
+}
+
+function enumTopLevel(api: Bindings): unknown[] {
+  const hwnds: unknown[] = []
+  const callback = koffi.register((hwnd: unknown) => {
+    hwnds.push(hwnd)
+    return 1
+  }, koffi.pointer(api.enumProc))
+  try {
+    api.EnumWindows(callback, 0)
+  } finally {
+    koffi.unregister(callback)
+  }
+  return hwnds
+}
+
+function coreWindowPid(api: Bindings, hwnd: unknown): number | undefined {
+  let found = 0
+  const callback = koffi.register((child: unknown) => {
+    if (classNameOf(api, child) !== 'Windows.UI.Core.CoreWindow') return 1
+    found = pidOf(api, child)
+    return 0
+  }, koffi.pointer(api.childProc))
+  try {
+    api.EnumChildWindows(hwnd, callback, 0)
+  } finally {
+    koffi.unregister(callback)
+  }
+  return found === 0 ? undefined : found
+}
+
+function frameOf(api: Bindings, hwnd: unknown): WindowsRect | undefined {
+  const extended = Buffer.alloc(16)
+  if (api.DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, extended, 16) === 0) {
+    const left = extended.readInt32LE(0)
+    const top = extended.readInt32LE(4)
+    const right = extended.readInt32LE(8)
+    const bottom = extended.readInt32LE(12)
+    return { x: left, y: top, width: right - left, height: bottom - top }
+  }
+  const rect: NativeRect = { left: 0, top: 0, right: 0, bottom: 0 }
+  if (api.GetWindowRect(hwnd, rect) === 0) return undefined
+  return { x: rect.left, y: rect.top, width: rect.right - rect.left, height: rect.bottom - rect.top }
+}
+
+function cloaked(api: Bindings, hwnd: unknown): boolean {
+  const flag = Buffer.alloc(4)
+  if (api.DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, flag, 4) !== 0) return false
+  return flag.readUInt32LE(0) !== 0
+}
+
+function monitorOf(api: Bindings, hwnd: unknown, fallback: WindowsRect): { monitor: WindowsRect; dpi: number } {
+  const handle = api.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)
+  if (isNull(handle)) return { monitor: fallback, dpi: 96 }
+  const info = Buffer.alloc(40)
+  info.writeUInt32LE(40, 0)
+  if (api.GetMonitorInfoW(handle, info) === 0) return { monitor: fallback, dpi: 96 }
+  const left = info.readInt32LE(4)
+  const top = info.readInt32LE(8)
+  const right = info.readInt32LE(12)
+  const bottom = info.readInt32LE(16)
+  const monitor = { x: left, y: top, width: right - left, height: bottom - top }
+  const readDpi = api.GetDpiForMonitor
+  if (readDpi === undefined) return { monitor, dpi: 96 }
+  const dpiX = [0]
+  const dpiY = [0]
+  if (readDpi(handle, MDT_EFFECTIVE_DPI, dpiX, dpiY) !== 0) return { monitor, dpi: 96 }
+  const dpi = dpiX[0] ?? 0
+  return { monitor, dpi: dpi > 0 ? dpi : 96 }
+}
+
+function stylesOf(api: Bindings, hwnd: unknown): { popup: boolean; toolWindow: boolean } {
+  const style = low32(api.GetWindowLongPtrW(hwnd, GWL_STYLE))
+  const extended = low32(api.GetWindowLongPtrW(hwnd, GWL_EXSTYLE))
+  return {
+    popup: (style & WS_POPUP) !== 0,
+    toolWindow: (extended & WS_EX_TOOLWINDOW) !== 0,
+  }
+}
+
+function cachedAppName(api: Bindings, cache: Map<number, string>, pid: number): string {
+  const cached = cache.get(pid)
+  if (cached !== undefined) return cached
+  const name = processBaseName(api, pid) ?? 'unknown'
+  cache.set(pid, name)
+  return name
 }
 
 /**
@@ -359,74 +569,114 @@ export function createProductionWindowsOps(): WindowsDesktopOps {
     kernel32: koffi.load('kernel32.dll'),
     shell32: koffi.load('shell32.dll'),
     advapi32: koffi.load('advapi32.dll'),
+    dwmapi: koffi.load('dwmapi.dll'),
   }
   const api = bind(libraries)
   const selfRid = integrityRid(api, process.pid)
 
-  function foreground(): WindowsForeground | undefined {
-    const hwnd = api.GetForegroundWindow()
-    if (isNull(hwnd)) return undefined
-    const rect: NativeRect = { left: 0, top: 0, right: 0, bottom: 0 }
-    if (api.GetWindowRect(hwnd, rect) === 0) return undefined
-    const bounds: WindowsRect = {
-      x: rect.left,
-      y: rect.top,
-      width: rect.right - rect.left,
-      height: rect.bottom - rect.top,
-    }
-    if (bounds.width <= 0 || bounds.height <= 0) return undefined
-    const pid = pidOf(api, hwnd)
-    const appName = processBaseName(api, pid) ?? 'unknown'
-    const dpi = api.GetDpiForWindow(hwnd)
-    const id = hwndId(hwnd)
-    const folder = appName.toLowerCase() === 'explorer' && id !== undefined ? explorerFolder(id) : undefined
-    return {
-      appName,
-      windowTitle: windowText(api, hwnd),
-      bounds,
-      scale: dpi > 0 ? dpi / 96 : 1,
-      ...folder === undefined ? {} : { explorerFolder: folder },
+  function perMonitor<T>(fn: () => T): T {
+    const set = api.SetThreadDpiAwarenessContext
+    if (set === undefined) return fn()
+    const first = dpiContext(set(DPI_PER_MONITOR_V2))
+    const restore = first ?? dpiContext(set(DPI_PER_MONITOR))
+    if (restore === undefined) return fn()
+    try {
+      return fn()
+    } finally {
+      set(restore)
     }
   }
 
-  return {
-    foreground,
-    capturePng(bounds) {
-      const width = Math.max(1, Math.round(bounds.width))
-      const height = Math.max(1, Math.round(bounds.height))
-      const screenDc = api.GetDC(null)
-      if (isNull(screenDc)) throw new Error('computer-use: screen capture failed')
-      const memory = api.CreateCompatibleDC(screenDc)
-      const bitmap = api.CreateCompatibleBitmap(screenDc, width, height)
-      const previous = api.SelectObject(memory, bitmap)
-      try {
-        if (api.BitBlt(memory, 0, 0, width, height, screenDc, Math.round(bounds.x), Math.round(bounds.y), SRCCOPY) === 0) {
-          throw new Error('computer-use: screen capture failed')
-        }
-        const header = {
-          biSize: 40,
-          biWidth: width,
-          biHeight: height,
-          biPlanes: 1,
-          biBitCount: 32,
-          biCompression: 0,
-          biSizeImage: width * height * 4,
-          biXPelsPerMeter: 0,
-          biYPelsPerMeter: 0,
-          biClrUsed: 0,
-          biClrImportant: 0,
-        }
-        const pixels = Buffer.alloc(width * height * 4)
-        if (api.GetDIBits(memory, bitmap, 0, height, pixels, header, 0) === 0) {
-          throw new Error('computer-use: screen capture failed')
-        }
-        return encodeBgraPng(width, height, pixels, true)
-      } finally {
-        api.SelectObject(memory, previous)
-        api.DeleteObject(bitmap)
-        api.DeleteDC(memory)
-        api.ReleaseDC(null, screenDc)
+  function placePointer(x: number, y: number): void {
+    sendMouse(api, MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK, x, y)
+    const pos: NativePoint = { x: 0, y: 0 }
+    if (api.GetCursorPos(pos) === 0 || pos.x !== x || pos.y !== y) {
+      if (api.SetCursorPos(x, y) === 0) throw new Error('computer-use: pointer input failed')
+    }
+  }
+
+  function listWindows(): WindowsDesktopSnapshot {
+    return perMonitor(() => {
+      const names = new Map<number, string>()
+      const windows: WindowsWindowFact[] = []
+      for (const hwnd of enumTopLevel(api)) {
+        const id = hwndId(hwnd)
+        if (id === undefined) continue
+        const frame = frameOf(api, hwnd)
+        if (frame === undefined) continue
+        const className = classNameOf(api, hwnd)
+        const pid = pidOf(api, hwnd)
+        const appPid = className === 'ApplicationFrameWindow' ? coreWindowPid(api, hwnd) ?? pid : pid
+        const styles = stylesOf(api, hwnd)
+        const display = monitorOf(api, hwnd, frame)
+        windows.push({
+          hwnd: id,
+          pid: appPid,
+          ownerHwnd: hwndId(api.GetWindow(hwnd, GW_OWNER)) ?? 0,
+          className,
+          appName: cachedAppName(api, names, appPid),
+          title: windowText(api, hwnd),
+          visible: api.IsWindowVisible(hwnd) !== 0,
+          iconic: api.IsIconic(hwnd) !== 0,
+          cloaked: cloaked(api, hwnd),
+          toolWindow: styles.toolWindow,
+          popup: styles.popup,
+          frame,
+          monitor: display.monitor,
+          monitorDpi: display.dpi,
+        })
       }
+      return {
+        foregroundHwnd: hwndId(api.GetForegroundWindow()) ?? 0,
+        windows,
+      }
+    })
+  }
+
+  function isForeground(hwnd: unknown): boolean {
+    return hwndId(api.GetForegroundWindow()) === hwndId(hwnd)
+  }
+
+  return {
+    listWindows,
+    capturePng(bounds) {
+      return perMonitor(() => {
+        const width = Math.max(1, Math.round(bounds.width))
+        const height = Math.max(1, Math.round(bounds.height))
+        const screenDc = api.GetDC(null)
+        if (isNull(screenDc)) throw new Error('computer-use: screen capture failed')
+        const memory = api.CreateCompatibleDC(screenDc)
+        const bitmap = api.CreateCompatibleBitmap(screenDc, width, height)
+        const previous = api.SelectObject(memory, bitmap)
+        try {
+          if (api.BitBlt(memory, 0, 0, width, height, screenDc, Math.round(bounds.x), Math.round(bounds.y), SRCCOPY) === 0) {
+            throw new Error('computer-use: screen capture failed')
+          }
+          const header = {
+            biSize: 40,
+            biWidth: width,
+            biHeight: height,
+            biPlanes: 1,
+            biBitCount: 32,
+            biCompression: 0,
+            biSizeImage: width * height * 4,
+            biXPelsPerMeter: 0,
+            biYPelsPerMeter: 0,
+            biClrUsed: 0,
+            biClrImportant: 0,
+          }
+          const pixels = Buffer.alloc(width * height * 4)
+          if (api.GetDIBits(memory, bitmap, 0, height, pixels, header, 0) === 0) {
+            throw new Error('computer-use: screen capture failed')
+          }
+          return encodeBgraPng(width, height, pixels, true)
+        } finally {
+          api.SelectObject(memory, previous)
+          api.DeleteObject(bitmap)
+          api.DeleteDC(memory)
+          api.ReleaseDC(null, screenDc)
+        }
+      })
     },
     targetBlocksInput() {
       const hwnd = api.GetForegroundWindow()
@@ -435,34 +685,22 @@ export function createProductionWindowsOps(): WindowsDesktopOps {
       return rid !== undefined && rid > selfRid
     },
     movePointer(x, y) {
-      sendMouse(api, MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK, x, y)
+      perMonitor(() => { placePointer(x, y) })
     },
     mouseButton(button, down) {
       const flags = button === 'right'
         ? (down ? MOUSEEVENTF_RIGHTDOWN : MOUSEEVENTF_RIGHTUP)
         : (down ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP)
-      sendMouse(api, flags, 0, 0)
+      perMonitor(() => { sendMouse(api, flags, 0, 0) })
     },
     scrollWheel(x, y, delta) {
-      sendMouse(api, MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK, x, y)
-      sendMouse(api, MOUSEEVENTF_WHEEL, 0, 0, delta)
+      perMonitor(() => {
+        placePointer(x, y)
+        sendMouse(api, MOUSEEVENTF_WHEEL, 0, 0, delta)
+      })
     },
-    key(virtualKey, down) {
-      const input = {
-        type: INPUT_KEYBOARD,
-        u: {
-          ki: {
-            wVk: virtualKey,
-            wScan: 0,
-            dwFlags: down ? 0 : KEYEVENTF_KEYUP,
-            time: 0,
-            dwExtraInfo: 0,
-          },
-        },
-      }
-      if (api.SendInput(1, [input], INPUT.size) !== 1) {
-        throw new Error('computer-use: keyboard input failed')
-      }
+    key(virtualKey, down, extended = false) {
+      postKey(api, virtualKey, down, extended)
     },
     readClipboardText() {
       let text = ''
@@ -475,7 +713,7 @@ export function createProductionWindowsOps(): WindowsDesktopOps {
           const size = Number(api.GlobalSize(handle))
           if (!Number.isFinite(size) || size < 2) return
           const bytes = Buffer.alloc(size)
-          api.RtlMoveMemory(bytes, locked as Buffer, size)
+          api.RtlMoveMemory(bytes, locked, size)
           text = bytes.toString('utf16le').replace(/\0[\s\S]*$/u, '')
         } finally {
           api.GlobalUnlock(handle)
@@ -512,39 +750,41 @@ try { [System.Windows.Forms.Clipboard]::SetImage($image) } finally { $image.Disp
     },
     listWindowApps() {
       const names = new Set<string>()
-      const callback = koffi.register((hwnd: unknown) => {
-        if (api.IsWindowVisible(hwnd) === 0) return 1
+      for (const hwnd of enumTopLevel(api)) {
+        if (api.IsWindowVisible(hwnd) === 0) continue
         const name = processBaseName(api, pidOf(api, hwnd))
         if (name !== undefined && name !== '') names.add(name)
-        return 1
-      }, koffi.pointer(api.enumProc))
-      try {
-        api.EnumWindows(callback, 0)
-      } finally {
-        koffi.unregister(callback)
       }
       return [...names]
     },
     activateApp(name) {
       const wanted = name.trim().toLowerCase()
       if (wanted === '') return false
-      let found = false
-      const callback = koffi.register((hwnd: unknown) => {
-        if (found || api.IsWindowVisible(hwnd) === 0) return 1
-        const app = (processBaseName(api, pidOf(api, hwnd)) ?? '').toLowerCase()
-        const title = windowText(api, hwnd).toLowerCase()
-        if (app === wanted || title.includes(wanted)) {
-          libraries.user32.func('int __stdcall SetForegroundWindow(void *hWnd)')(hwnd)
-          found = true
+      return perMonitor(() => {
+        let target: unknown
+        for (const hwnd of enumTopLevel(api)) {
+          if (api.IsWindowVisible(hwnd) === 0) continue
+          const app = (processBaseName(api, pidOf(api, hwnd)) ?? '').toLowerCase()
+          const title = windowText(api, hwnd).toLowerCase()
+          if (app === wanted || title.includes(wanted)) {
+            target = hwnd
+            break
+          }
         }
-        return 1
-      }, koffi.pointer(api.enumProc))
-      try {
-        api.EnumWindows(callback, 0)
-      } finally {
-        koffi.unregister(callback)
-      }
-      return found
+        if (target === undefined) return false
+        if (api.IsIconic(target) !== 0) api.ShowWindow(target, SW_RESTORE)
+        postKey(api, VK_MENU, true, false)
+        try {
+          api.SetForegroundWindow(target)
+          if (!isForeground(target)) {
+            sleepSync(FOREGROUND_RETRY_MS)
+            if (!isForeground(target)) throw new Error(`computer-use: failed to activate ${name}`)
+          }
+          return true
+        } finally {
+          postKey(api, VK_MENU, false, false)
+        }
+      })
     },
     launch(target, parameters) {
       const result = Number(api.ShellExecuteW(null, 'open', target, parameters ?? null, null, SW_SHOWNORMAL))
@@ -552,5 +792,6 @@ try { [System.Windows.Forms.Clipboard]::SetImage($image) } finally { $image.Disp
         throw new Error(`computer-use: failed to open ${target}`)
       }
     },
+    explorerFolder,
   }
 }

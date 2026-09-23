@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-23-windows-computer-use-per-monitor-dpi.md
+2026-09-23-windows-computer-use-per-monitor-dpi.md: 8a1aee8d433367402ae9d2dfe55fcddc58d2fc4f
+2026-09-23-windows-computer-use-per-monitor-dpi.zh.md: 789af9e7560440d45a9d0ca0a7a405a1848765b7
