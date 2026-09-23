@@ -44,7 +44,8 @@ export interface CapturedScreen {
  * OS metadata attached once per observation, after skipping overlay window ids.
  * `windowTitle` is present when the remaining window has a nonempty title.
  * `finderFolder` is present only when the remaining frontmost app is Finder.
- * `focusNote` is present only when no remaining window has an owner name.
+ * `focusNote` is present when no remaining window has an owner name.
+ * On Windows it is also present when the reported window is not the keyboard foreground.
  */
 export interface DesktopForeground {
   readonly appName: string
@@ -70,6 +71,13 @@ export interface OpenAppResult {
 /** Model-facing copy when inspect finds no remaining window after overlay skip. */
 export const FOCUS_NOTE =
   'Keyboard focus is not on an operable app. Click the target window first if the next step needs focus.'
+
+/**
+ * Model-facing copy when the reported Windows window is not the keyboard foreground.
+ * `hotkey` brings that window forward before posting keys.
+ */
+export const UNFOCUSED_WINDOW_NOTE =
+  'Keyboard focus is on another window. hotkey brings this window forward first; click inside it if focus must land on a specific control.'
 
 /** Observation payload for {@link FOCUS_NOTE}. */
 export const FOCUS_FALLBACK_FOREGROUND: DesktopForeground = {

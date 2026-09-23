@@ -61,6 +61,11 @@ export interface WindowsObservationSelection {
   readonly scale: number
   readonly windowId: number
   readonly transientWindowIds: readonly number[]
+  /**
+   * True when `foregroundHwnd` is this owner or one of `transientWindowIds`.
+   * False when that hwnd was skipped and this owner is the next operable window.
+   */
+  readonly focused: boolean
 }
 
 function excludeSet(ids: readonly number[]): Set<number> {
@@ -137,6 +142,7 @@ function includeTransient(
  * Overlay hwnds in `excludeWindowIds` are skipped. Shell classes and system menus are not owners.
  * Same-process windows join when they are owned by that window or are an intersecting popup.
  * Another process joins only for an intersecting system menu or combo dropdown.
+ * `focused` is true only when the foreground hwnd is the owner or one of those transients.
  * @param snapshot - physical-pixel z-order snapshot.
  * @param excludeWindowIds - overlay hwnds from the capture cloak. Non-positive and non-integer ids are ignored.
  * @returns the observation, or undefined when no operable window remains.
@@ -176,5 +182,6 @@ export function selectWindowsObservation(
     scale: owner.monitorDpi > 0 ? owner.monitorDpi / 96 : 1,
     windowId: owner.hwnd,
     transientWindowIds,
+    focused: snapshot.foregroundHwnd === owner.hwnd || transientWindowIds.includes(snapshot.foregroundHwnd),
   }
 }

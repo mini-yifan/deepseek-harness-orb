@@ -69,7 +69,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 | `click` | `screen_index`（0）、`position: [x,y]`（默认 0–1000 千分比；overlay 像素会话使用附件 WxH）、可选 `button`（`left`/`right`）、可选 `count`（1 或 2）、可选 `modifiers`（`shift` / `cmd` / `option` / `control`，仅在该次单击期间按住） | 点击、等待、重新截屏 |
 | `input_text` | `screen_index`、`position`、`text`、可选 `replace`、可选 `submit` | 点击聚焦、输入、可选 Enter、等待、重新截屏 |
 | `scroll` | `screen_index`、`position`、`direction`（`up`/`down`）、`scroll_level` 1–10 | 滚动、等待、重新截屏 |
-| `hotkey` | `keys: string[]` | 组合键；系统截屏快捷键会被拒绝；等待、重新截屏 |
+| `hotkey` | `keys: string[]` | 组合键；Windows 上若上次观察的窗口不是前台则先把它带到前台；系统截屏快捷键会被拒绝；等待、重新截屏 |
 | `wait` | 无 | 暂停 1 秒、重新截屏 |
 | `long_wait` | 必填 `wait_seconds`：10、30、60 或 120 | 暂停、重新截屏 |
 | `screenshot` | 无 | 保存到桌面、复制该窗口到剪贴板、返回该窗口 |
@@ -83,7 +83,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 | `code_agent_status` | 无 | 列出这条 Computer Use 对话的后台会话（数量、最新任务、cwd、running 或 idle） |
 | `code_agent_stop` | `session_id` | 取消该会话当前回合和已排队的追加；会话保持 idle，仍可续写 |
 
-十三个 GUI 工具的 HID 互斥：同一步里的兄弟调用按模型顺序执行，每次都重新截屏。`presentCall` 为 generic。每次观察先给出 `<frontmost_app>`（窗口有标题时还有 `<frontmost_window>`；前台是 Finder/访达时还有 `<frontmost_folder>`；跳过 overlay 后没有剩余窗口时是 `<focus_note>`）。随后可选的屏幕信封标明序号 0 和该会话的点击空间：千分比 0–1000 且不带像素尺寸，或像素外加该附件的 WxH。图片句柄尺寸仍不是点击空间。没有可操作窗口时，观察只有这些标签——不附整桌面全景。
+十三个 GUI 工具的 HID 互斥：同一步里的兄弟调用按模型顺序执行，每次都重新截屏。`presentCall` 为 generic。每次观察先给出 `<frontmost_app>`（窗口有标题时还有 `<frontmost_window>`；前台是 Finder/访达时还有 `<frontmost_folder>`；跳过 overlay 后没有剩余窗口时，以及 Windows 上该窗口不是键盘前台时，是 `<focus_note>`）。随后可选的屏幕信封标明序号 0 和该会话的点击空间：千分比 0–1000 且不带像素尺寸，或像素外加该附件的 WxH。图片句柄尺寸仍不是点击空间。没有可操作窗口时，观察只有这些标签——不附整桌面全景。
 
 测试通过 `applyComputerUse(ctx, backend, config)` 注入假桌面，而不是 Config 上的 `driver` 钩子。
 
@@ -154,6 +154,7 @@ Desktop 上新建 `code_agent` 会在 `session.create` 之后、`session.prompt`
 - [Computer Use 观察前台元数据](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-observation-foreground.zh.md) — overlay 窗口排除、Finder 文件夹，以及现有 `user/message` / `tool/result` 上的焦点 fallback。
 - [Computer Use 焦点窗口观察](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-focused-window-observation.zh.md) — 跳过 overlay 后的最前窗口、`list_apps` / `open_app`，以及不附整桌面全景。
 - [Windows Computer Use 每监视器坐标](../../../.agents/notes/implemented/architecture/2026-09-23-windows-computer-use-per-monitor-dpi.zh.md) — 捕获与 `SendInput` 使用物理像素、跳过 overlay HWND，以及同一监视器上的菜单。
+- [Windows Computer Use 焦点恢复](../../../.agents/notes/implemented/bug-fix/2026-09-23-windows-computer-use-focus-recovery.zh.md) — 报告的窗口不是键盘前台时的 `<focus_note>`，以及 `hotkey` 在按键前恢复该窗口。
 - [Computer Use 应用窗口观察](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-app-window-observation.zh.md) — 前台应用族窗口并集与始终区域捕获。
 - [Computer Use 瞬时窗口观察](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-transient-window-observation.zh.md) — 该并集矩形的区域 helper。
 - [Computer Use 右键菜单观察](../../../.agents/notes/implemented/bug-fix/2026-09-16-computer-use-context-menu-observation.zh.md) — 先等待再 inspect，以及 recapture 期间的 overlay input 遮蔽。
@@ -176,7 +177,7 @@ Desktop 上新建 `code_agent` 会在 `session.create` 之后、`session.prompt`
 
 #### 模型看到什么
 
-插件挂载期间，每次请求都会组装一段稳定的 `tool:computer-use` 分节。Overlay 像素会话会换成像素 Coordinates 段落；下面的千分比文本是 Headless/Web 默认。
+插件挂载期间，每次请求都会组装一段稳定的 `tool:computer-use` 分节。Overlay 像素会话会换成像素 Coordinates 段落；下面的千分比文本是 Headless/Web 默认。在 Windows 上，当报告的窗口不是键盘前台时，观察会加上 Windows 未聚焦窗口那段提示，并且 `hotkey` 会在发送按键前把该窗口带到前台。
 
 ##### Computer Use policy
 
@@ -227,6 +228,12 @@ When a plugin notice reports that a Code agent session finished, decide again. D
 When a user message starts with "Desktop selection. Answer in this chat only. Do not call GUI tools or code_agent.", answer in this chat only. Do not call GUI tools, code_agent, or screenshot on that turn.
 ```
 
+##### Windows 未聚焦窗口
+
+```markdown
+Keyboard focus is on another window. hotkey brings this window forward first; click inside it if focus must land on a specific control.
+```
+
 #### Token 影响
 
 插件挂载期间，每次请求都有固定的策略成本。首帧屏幕与每次 GUI 工具结果都会增加图片 token，直到压缩。
@@ -265,6 +272,7 @@ When a user message starts with "Desktop selection. Answer in this chat only. Do
 - **没有套索或 `manage_files`** — GUI 覆盖是 click、type、scroll、hotkey、wait、long_wait、screenshot、长按、拖拽、open-in-browser、open-in-finder、list-apps 与 open-app。切换应用用 `open_app`，不要去点 Dock。后台文档与代码走 `code_agent`。
 - **`code_agent` 通知需要活的 Agent** — execute 仍在入队接受后返回。找不到活的 Code agent、Computer Use 调用方已销毁、或 Code 会话再也不回到空闲，都会丢掉通知。`code_agent_stop` 会中止该区间的监视。后台 Code agent 自动允许批准并自动应答向用户提问；Computer Use 自己仍在球上显示提问。策略拦不住仍然调用 `wait` 或 `long_wait` 的模型。
 - **桌面 overlay** — macOS 与 Windows 会创建悬浮球。Linux 不会。Windows 在捕获和 HID 期间用显示亲和性把球排除出截图，前台选择也会跳过球的 HWND。未提权进程不能点击提权窗口。实验包是签名 runtime extra，不是 Desktop Host 的 npm 依赖。
+- **Windows 键盘焦点** — 前台 HWND 被跳过时，`<frontmost_app>` 命名下一个可操作窗口，观察加上 `<focus_note>`。`hotkey` 在 `SendInput` 之前用 Alt 加 `SetForegroundWindow` 把该窗口带到前台。该窗口没有成为前台时，`hotkey` 抛出 `computer-use: keyboard focus could not be moved to <app>; click inside the window, then retry hotkey`，并且不发送按键。`input_text` 靠点击聚焦，不走这次恢复。
 - **实验性原型，不提供稳定性承诺** — 本包为私有；schema 与后端可以自由变更。
 
 <a id="dev-note"></a>

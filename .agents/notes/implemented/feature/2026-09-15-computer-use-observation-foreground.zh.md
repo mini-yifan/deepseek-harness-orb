@@ -12,7 +12,7 @@ Computer Use 观察已经会附上屏幕，但模型无法知道当前焦点在�
 
 `observeDesktop` 先调用一次 `DesktopBackend.inspectForeground`，并在 `listScreens` 返回该面时捕获跳过 overlay 后的最前窗口。面向模型的内容是一块前台文本，窗口仍在时再跟窗口信封和图片。overlay 跳过使用 `activeCaptureExcludeWindowIds()`（球与展开面板共用那扇窗）。检查路径不跳过 Electron PID。若 Desktop 主窗口是 z-order 中下一个，`<frontmost_app>` 就是该窗口的本地化名称（通常是 DeepSeek Harness），并且不走 fallback。[Computer Use 焦点窗口观察](2026-09-16-computer-use-focused-window-observation.zh.md) 拥有窗口捕获、可选的 `<frontmost_window>`，以及空最前不附整桌面全景的路径。
 
-剩余窗口所有者是 `Finder` 或 `访达` 时，第二次 osascript 把 `POSIX path of (target of front window as alias)` 读进 `<frontmost_folder>`。超时或空结果会省略文件夹标签并保留应用名。没有任何剩余窗口带所有者名称时，信封是 `<frontmost_app>none</frontmost_app>` 加上 `<focus_note>`。空标签省略。从不发出截图文件系统路径。从不编造 Finder 路径。
+剩余窗口所有者是 `Finder` 或 `访达` 时，第二次 osascript 把 `POSIX path of (target of front window as alias)` 读进 `<frontmost_folder>`。超时或空结果会省略文件夹标签并保留应用名。没有任何剩余窗口带所有者名称时，信封是 `<frontmost_app>none</frontmost_app>` 加上 `<focus_note>`。Windows 上，报告的窗口不是键盘前台时也会带上该标签；[Windows Computer Use 焦点恢复](../bug-fix/2026-09-23-windows-computer-use-focus-recovery.zh.md) 拥有该情况以及 `hotkey` 的前台恢复。空标签省略。从不发出截图文件系统路径。从不编造 Finder 路径。
 
 这些标签走现有的 `user/message`（首帧插件通知）和 `tool/result` 内容。没有新的会话事件，没有 `ignorable` 标志，也不 bump `SESSION_FORMAT_VERSION`。`SCREEN_SCHEMA` 保持不变（`additionalProperties: false`）。结构化的 `foreground` 是每个 GUI 工具输出上的兄弟字段，以便 `output.render` 能格式化它。
 
