@@ -58,7 +58,7 @@ pnpm dsh web --patch packages/experimental/tool-computer-use/cordis.source.patch
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-experimental-tool-computer-use)是每个受支持字段及其 JSDoc 的穷尽式真源。
 
-在 macOS 上，截屏需要屏幕录制权限，发送点击与按键需要辅助功能权限，Finder 当前文件夹查询需要访达的自动化权限。Desktop overlay 会在 overlay 发送前盖住屏幕录制与辅助功能；若执行时仍缺权限，捕获或输入会失败，并在消息中指出对应的 TCC 权限。访达自动化在第一次使用时弹出。Windows 用 GDI 截屏并用 `SendInput` 发送输入；以管理员身份运行的目标窗口会拒绝点击和输入。Linux 仍会加载，随后每个后端方法都会抛出 `computer-use: desktop control is implemented only on macOS and Windows`。
+在 macOS 上，截屏需要屏幕录制权限，发送点击与按键需要辅助功能权限，Finder 当前文件夹查询需要访达的自动化权限。Desktop overlay 会在 overlay 发送前盖住屏幕录制与辅助功能；若执行时仍缺权限，捕获或输入会失败，并在消息中指出对应的 TCC 权限。访达自动化在第一次使用时弹出。Windows 用 GDI 截屏并用 `SendInput` 发送输入，两者都在每监视器物理像素上，因此截图上的位置会落到混合 DPI 布局里每一块显示器的对应像素。以管理员身份运行的目标窗口会拒绝点击和输入。Linux 仍会加载，随后每个后端方法都会抛出 `computer-use: desktop control is implemented only on macOS and Windows`。
 
 ### 工具
 
@@ -121,7 +121,9 @@ Desktop 上新建 `code_agent` 会在 `session.create` 之后、`session.prompt`
 | [`src/code-agent-completion.ts`](src/code-agent-completion.ts) | Code 会话与 Computer Use 调用方都空闲后投递的插件通知；停止时可中止 |
 | [`src/code-agent-unattended.ts`](src/code-agent-unattended.ts) | 在活的 Code agent 上前置自动允许 `approval/request` 与自动应答 `user-questions/request` |
 | [`src/macos.ts`](src/macos.ts) | Darwin 通过整屏 `screencapture` 加 `sips` 裁切前台应用窗口并集，或在设置了 overlay 窗口 id 时走排除 overlay 的 ScreenCaptureKit `--region=`（Desktop IPC 进 Electron，CLI 派生 helper）；click、scroll、hotkey、长按与拖拽走 JXA `CGEvent`；`input_text` 通过 NSPasteboard 粘贴；`list_apps` / `open_app` 走 NSWorkspace；`open_in_browser` / `open_in_finder` 走 `/usr/bin/open`；`inspectForeground` 绑定 `CGWindowListCopyWindowInfo` 再 unwrap（跳过 overlay id）加 Finder AppleScript |
-| [`src/windows.ts`](src/windows.ts) | Win32 用 GDI 把前台窗口截成 PNG；click、scroll、hotkey、长按与拖拽走 `SendInput`；`input_text` 用 Ctrl+V 粘贴；`open_in_finder` 打开资源管理器；提权的前台窗口拒绝输入 |
+| [`src/windows.ts`](src/windows.ts) | Win32 用 GDI 把选中窗口并集截成 PNG，坐标是每监视器物理像素；click、scroll、hotkey、长按与拖拽走 `SendInput`；`input_text` 用 Ctrl+V 粘贴，并在粘贴发出后再恢复字符串剪贴板；`open_in_finder` 打开资源管理器；提权的前台窗口拒绝输入 |
+| [`src/windows-foreground.ts`](src/windows-foreground.ts) | 纯 z-order 选择：跳过 overlay HWND、任务栏和桌面；合并同一监视器上的菜单与有 owner 的弹出窗口 |
+| [`src/observation-limits.ts`](src/observation-limits.ts) | 共用的最小窗口边长和瞬时窗口外扩，macOS 上是 point，Windows 上是物理像素 |
 | [`src/macos-sck-capture.swift`](src/macos-sck-capture.swift) | Darwin helper 与进程内库：窗口捕获或排除 overlay 后的区域裁切，仍省略 overlay CGWindowID；CLI 先在主 actor 启动 `NSApplication`；库入口不改 activation policy |
 | [`src/open.ts`](src/open.ts) | `long_press` 时长、`open_in_browser` URL 与 `open_in_finder` 路径校验 |
 | [`src/wait-args.ts`](src/wait-args.ts) | 固定 1 秒的 `wait` 与 `long_wait` 的 10/30/60/120 分档 |
@@ -151,6 +153,7 @@ Desktop 上新建 `code_agent` 会在 `session.create` 之后、`session.prompt`
 - [Overlay Computer Use 后台调度](../../../.agents/notes/implemented/feature/2026-09-17-orb-code-agent-dispatch.zh.md) — 子目录 cwd、调用方登记表、status/stop，以及 Code agent 上的无人值守应答。
 - [Computer Use 观察前台元数据](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-observation-foreground.zh.md) — overlay 窗口排除、Finder 文件夹，以及现有 `user/message` / `tool/result` 上的焦点 fallback。
 - [Computer Use 焦点窗口观察](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-focused-window-observation.zh.md) — 跳过 overlay 后的最前窗口、`list_apps` / `open_app`，以及不附整桌面全景。
+- [Windows Computer Use 每监视器坐标](../../../.agents/notes/implemented/architecture/2026-09-23-windows-computer-use-per-monitor-dpi.zh.md) — 捕获与 `SendInput` 使用物理像素、跳过 overlay HWND，以及同一监视器上的菜单。
 - [Computer Use 应用窗口观察](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-app-window-observation.zh.md) — 前台应用族窗口并集与始终区域捕获。
 - [Computer Use 瞬时窗口观察](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-transient-window-observation.zh.md) — 该并集矩形的区域 helper。
 - [Computer Use 右键菜单观察](../../../.agents/notes/implemented/bug-fix/2026-09-16-computer-use-context-menu-observation.zh.md) — 先等待再 inspect，以及 recapture 期间的 overlay input 遮蔽。
@@ -255,13 +258,13 @@ When a user message starts with "Desktop selection. Answer in this chat only. Do
 - **macOS 与 Windows** — 捕获与 HID 输入在 Darwin 和 Win32 上运行；Linux 在执行时抛错。
 - **屏幕录制、辅助功能与自动化 TCC** — 捕获需要屏幕录制；点击、输入、滚动、热键、长按与拖拽需要辅助功能；Finder 当前文件夹查询需要访达的自动化权限。插件不会提示授予这些权限。Desktop overlay 会在 overlay `session/prompt` 前盖住屏幕录制与辅助功能；访达自动化仍在第一次使用访达时弹出。执行时缺权限仍会点名对应 TCC。Desktop 排除 overlay 的捕获使用 Electron 进程里 DeepSeek Orb 的屏幕录制授权；CLI 仍派生 `macos-sck-capture`。
 - **没有逐次点击批准** — 安装或 patch 插件就是同意门槛；视觉循环不能在每个动作上询问。
-- **宿主 chrome 不是最前窗口时不会进图** — Web 窗口只在它是最前窗口时出现。Desktop 主窗口在 overlay 跳过后仍可被截到。macOS overlay 与观察框彩带由 ScreenCaptureKit 的 exclude id 校验从 Computer Use 截图中省略（display exclude 加裁切），overlay 在 HID 突发、`open_app` 及其 recapture 期间通过带确认的 overlay-guard IPC 点击穿透。Windows 用显示亲和性把球排除出截图。前台检查与 `listScreens` 都跳过这些 overlay 窗口 id，因此主窗口可以出现在 `<frontmost_app>` 里。
-- **输入会使用字符串剪贴板** — `input_text` 在 macOS 上通过 Cmd+V 粘贴，在 Windows 上通过 Ctrl+V 粘贴，然后恢复先前的字符串剪贴板。其他剪贴板类型不会被恢复。`screenshot` 会用捕获的图片替换剪贴板，不恢复先前内容。
+- **宿主 chrome 不是最前窗口时不会进图** — Web 窗口只在它是最前窗口时出现。Desktop 主窗口在 overlay 跳过后仍可被截到。macOS overlay 与观察框彩带由 ScreenCaptureKit 的 exclude id 校验从 Computer Use 截图中省略（display exclude 加裁切），overlay 在 HID 突发、`open_app` 及其 recapture 期间通过带确认的 overlay-guard IPC 点击穿透。Windows 在前台选择里跳过这些 overlay HWND，并在捕获区间以及包含 recapture 的 HID 区间设置显示亲和性。前台检查与 `listScreens` 都跳过这些 overlay 窗口 id，因此主窗口可以出现在 `<frontmost_app>` 里。
+- **输入会使用字符串剪贴板** — `input_text` 在 macOS 上通过 Cmd+V 粘贴，在 Windows 上通过 Ctrl+V 粘贴，然后恢复先前的字符串剪贴板。Windows 会在 Ctrl+V 之后等待，再做这次恢复。其他剪贴板类型不会被恢复。`screenshot` 会用捕获的图片替换剪贴板，不恢复先前内容。
 - **Retina 与附件尺寸** — backing scale 与请求栅格可能和捕获栅格不同；千分比会话对可见截图使用 0–1000 比例坐标。Overlay 像素会话按 Computer Use 信封上该次观察的附件 WxH 相除。
 - **固定等待** — 动作后延迟是 inspect 与截取像素之前的 `postActionWaitMs`；没有像素差 stall。
 - **没有套索或 `manage_files`** — GUI 覆盖是 click、type、scroll、hotkey、wait、long_wait、screenshot、长按、拖拽、open-in-browser、open-in-finder、list-apps 与 open-app。切换应用用 `open_app`，不要去点 Dock。后台文档与代码走 `code_agent`。
 - **`code_agent` 通知需要活的 Agent** — execute 仍在入队接受后返回。找不到活的 Code agent、Computer Use 调用方已销毁、或 Code 会话再也不回到空闲，都会丢掉通知。`code_agent_stop` 会中止该区间的监视。后台 Code agent 自动允许批准并自动应答向用户提问；Computer Use 自己仍在球上显示提问。策略拦不住仍然调用 `wait` 或 `long_wait` 的模型。
-- **桌面 overlay** — macOS 与 Windows 会创建悬浮球。Linux 不会。Windows 用显示亲和性把球排除出截图，未提权进程不能点击提权窗口。实验包是签名 runtime extra，不是 Desktop Host 的 npm 依赖。
+- **桌面 overlay** — macOS 与 Windows 会创建悬浮球。Linux 不会。Windows 在捕获和 HID 期间用显示亲和性把球排除出截图，前台选择也会跳过球的 HWND。未提权进程不能点击提权窗口。实验包是签名 runtime extra，不是 Desktop Host 的 npm 依赖。
 - **实验性原型，不提供稳定性承诺** — 本包为私有；schema 与后端可以自由变更。
 
 <a id="dev-note"></a>

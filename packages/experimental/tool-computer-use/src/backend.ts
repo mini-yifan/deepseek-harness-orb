@@ -24,10 +24,11 @@ export interface ScreenInfo {
   }
   /** Backing-store scale of the `NSScreen` that contains the window (`1` on non-retina). */
   readonly scale: number
-  /** CGWindowID of the owner window. Omit on fake/unsupported backends. */
+  /** Owner window id. CGWindowID on macOS, HWND on Windows. Omit on fake/unsupported backends. */
   readonly windowId?: number
   /**
-   * Extra family or layer-101 CGWindowIDs included in {@link bounds}.
+   * Extra window ids included in {@link bounds}.
+   * CGWindowIDs on macOS, HWNDs on Windows.
    * Capture is always a screen rectangle of {@link bounds}.
    */
   readonly transientWindowIds?: readonly number[]
@@ -168,7 +169,7 @@ export interface DesktopBackend {
    */
   capture(screen: ScreenInfo, signal?: AbortSignal): Promise<CapturedScreen>
   /**
-   * Report the frontmost app after skipping overlay CGWindowIDs, plus Finder's
+   * Report the frontmost app after skipping overlay window ids, plus Finder's
    * folder when that app is Finder. Query failures return {@link FOCUS_FALLBACK_FOREGROUND}.
    * @param signal - cooperative cancellation.
    * @returns structured foreground metadata for the observation envelope.

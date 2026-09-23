@@ -12,9 +12,9 @@ The floating ball, selection toolbar, and Computer Use desktop backend were crea
 
 Windows creates the same overlay after Host ready. The window is a borderless transparent always-on-top window at the screen-saver level. It does not use `type: 'panel'` or `setVisibleOnAllWorkspaces`, which are Darwin-only. `app.setActivationPolicy` and `app.dock.show()` stay on macOS. Linux still does not create the ball. Settings writes are allowed on macOS and Windows.
 
-While a Computer Use capture interval is open, Windows sets `contentProtection` on the ball and the selection toolbar so capture APIs that honor `WDA_EXCLUDEFROMCAPTURE` omit them. macOS still excludes those windows by ScreenCaptureKit id. Click-through during HID is unchanged.
+While a Computer Use capture or HID interval is open, Windows sets `contentProtection` on the ball and the selection toolbar so capture APIs that honor `WDA_EXCLUDEFROMCAPTURE` omit them. The post-action screenshot runs inside the HID interval. macOS still excludes those windows by ScreenCaptureKit id. Click-through during HID is unchanged.
 
-`createPlatformBackend('win32')` returns a Windows backend. It captures the foreground window with GDI into PNG and posts click, scroll, hotkey, long-press, and drag with `SendInput`. `input_text` pastes with Ctrl+V and restores the previous string clipboard. `open_in_finder` opens Explorer. When the foreground process integrity is higher than this process, input throws instead of being dropped silently. Tests inject `WindowsDesktopOps` and do not post real input.
+`createPlatformBackend('win32')` returns a Windows backend. Capture, foreground selection, and `SendInput` share per-monitor physical pixels. [Windows Computer Use per-monitor coordinates](../architecture/2026-09-23-windows-computer-use-per-monitor-dpi.md) owns that decision. `open_in_finder` opens Explorer. When the foreground process integrity is higher than this process, input throws instead of being dropped silently. Tests inject `WindowsDesktopOps` and do not post real input.
 
 The selection toolbar keeps its controller and page. Windows installs `WH_MOUSE_LL` and `WH_KEYBOARD_LL` in the Electron main process and reads the focused selection with UI Automation. The events match the Darwin helper. A failed hook install logs and still emits `ready`, so the ball remains usable.
 
@@ -32,4 +32,4 @@ Closing the main window leaves the ball running until Quit, on Windows as on mac
 
 ## Testing
 
-`apps/desktop/tests/main-startup.spec.ts` creates the Win32 overlay and toolbar, checks screen-saver always-on-top, and checks content protection only during capture. Linux still creates neither. `windows.spec.ts` drives the backend through injected operations. `windows-selection.spec.ts` checks selection events without installing a hook.
+`apps/desktop/tests/main-startup.spec.ts` creates the Win32 overlay and toolbar, checks screen-saver always-on-top, and checks content protection during capture and during HID. Linux still creates neither. `windows.spec.ts` drives the backend through injected operations. `windows-selection.spec.ts` checks selection events without installing a hook.
