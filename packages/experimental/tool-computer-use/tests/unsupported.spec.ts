@@ -58,4 +58,9 @@ describe('unsupported desktop', () => {
   it('constructs the macOS backend on Darwin without posting input', () => {
     expect(typeof createPlatformBackend('darwin').click).toBe('function')
   })
+
+  it('constructs the Windows backend on Win32 without posting input', () => {
+    expect(typeof createPlatformBackend('win32').click).toBe('function')
+    expect(typeof createPlatformBackend('win32').capture).toBe('function')
+  })
 })

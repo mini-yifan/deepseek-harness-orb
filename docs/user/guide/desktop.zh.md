@@ -2,7 +2,7 @@
 
 [English](desktop.md) | 中文
 
-打包后的 Mac 应用名叫 DeepSeek Orb。桌面端在同一 Desktop Host 上打开 Electron 主窗口，并在 macOS 上再打开一颗悬浮球。主窗口沿用 Web UI，新建会话默认走 standard；悬浮球锁死 Computer Use，其对话和委派编码会话出现在侧栏的 `dsh_orb` 文件夹下。
+打包后的 Mac 应用名叫 DeepSeek Orb。桌面端在同一 Desktop Host 上打开 Electron 主窗口，并在 macOS 和 Windows 上再打开一颗悬浮球。主窗口沿用 Web UI，新建会话默认走 standard；悬浮球锁死 Computer Use，其对话和委派编码会话出现在侧栏的 `dsh_orb` 文件夹下。
 
 ## 启动前准备
 
@@ -12,7 +12,7 @@
 pnpm install
 ```
 
-模型调用需要 [DeepSeek API 密钥](https://platform.deepseek.com/)。悬浮球只在 macOS 创建；Windows 仍只有主窗口。Computer Use 需要屏幕录制与辅助功能：第一次展开面板时若缺权限会盖住对话和输入，每行按钮打开系统设置对应页，两项都授予本进程后该层自动消失。未齐时 overlay 发送留在输入框。访达自动化在第一次使用时弹出。
+模型调用需要 [DeepSeek API 密钥](https://platform.deepseek.com/)。macOS 和 Windows 都会创建悬浮球。macOS 上的 Computer Use 需要屏幕录制与辅助功能：第一次展开面板时若缺权限会盖住对话和输入，每行按钮打开系统设置对应页，两项都授予本进程后该层自动消失。未齐时 overlay 发送留在输入框。访达自动化在第一次使用时弹出。在 Windows 上，以管理员身份运行的目标窗口会拒绝点击和输入。
 
 ## 从源码启动
 
@@ -71,7 +71,7 @@ Host 就绪后才会创建球，出现在主显示器右沿、垂直方向中间
 
 ## 限制
 
-悬浮球只做 Mac。Windows 仍在设置里列出「悬浮球」页，但全部控件禁用。没有语音、圈选或逐次点击批准。Computer Use 通过 ScreenCaptureKit 窗口排除，只在那一次截屏里省略球、展开面板、划词工具条和观察框彩带，只在那一次 HID 期间让整扇 overlay 点击穿透并隐藏工具条；主窗口始终可被截到、可被点到。Computer Use 包是签名 runtime extra，不是 Desktop Host 的 npm 依赖。
+没有语音、圈选或逐次点击批准。Computer Use 截图会省略球、展开面板、划词工具条和观察框彩带：macOS 使用 ScreenCaptureKit 窗口排除，Windows 在同一次捕获期间设置显示亲和性。只在那一次 HID 期间让整扇 overlay 点击穿透并隐藏工具条；主窗口始终可被截到、可被点到。Linux 不创建悬浮球，设置里仍列出「悬浮球」页但全部控件禁用。未提权的 Windows 进程不能点击或输入以管理员身份运行的窗口。Computer Use 包是签名 runtime extra，不是 Desktop Host 的 npm 依赖。
 
 ## 继续阅读
 

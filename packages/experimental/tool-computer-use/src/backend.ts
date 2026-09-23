@@ -6,6 +6,7 @@
 import type { ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import { createMacosDesktopBackend, type OverlayExcludedRegionCapture } from './macos.ts'
 import { createUnsupportedDesktopBackend } from './unsupported.ts'
+import { createWindowsDesktopBackend } from './windows.ts'
 
 /** One observation surface: the overlay-skipped frontmost app's on-screen window union. */
 export interface ScreenInfo {
@@ -255,13 +256,13 @@ export interface DesktopBackend {
  * Construct the backend for a host platform.
  * @param platform - Node `process.platform` value; tests pass an explicit id.
  * @param excludedRegionCapture - Desktop overlay-exclude capture; CLI omits it and spawns the helper.
- * @returns macOS capture/input on Darwin, otherwise a backend whose methods throw.
+ * @returns macOS capture/input on Darwin, Windows capture/input on Win32, otherwise a backend whose methods throw.
  */
 export function createPlatformBackend(
   platform: NodeJS.Platform = process.platform,
   excludedRegionCapture?: OverlayExcludedRegionCapture,
 ): DesktopBackend {
-  return platform === 'darwin'
-    ? createMacosDesktopBackend(undefined, excludedRegionCapture)
-    : createUnsupportedDesktopBackend()
+  if (platform === 'darwin') return createMacosDesktopBackend(undefined, excludedRegionCapture)
+  if (platform === 'win32') return createWindowsDesktopBackend()
+  return createUnsupportedDesktopBackend()
 }

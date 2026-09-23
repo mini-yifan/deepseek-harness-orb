@@ -19,20 +19,20 @@ export const ORB_AVATAR_PATH = '/orb-avatar'
 /** Suggested maximum size for a custom ball image. */
 export const MAX_ORB_AVATAR_BYTES = 2 * 1024 * 1024
 
-/** Writes that change live overlay state require macOS. */
-export const ORB_SETTINGS_MACOS_ONLY = 'dsh desktop: floating ball settings require macOS'
+/** Writes that change live overlay state require macOS or Windows. */
+export const ORB_SETTINGS_MACOS_ONLY = 'dsh desktop: floating ball settings require macOS or Windows'
 
 /**
  * Whether this OS creates the floating ball.
  * @param platform - Node `process.platform`.
- * @returns true on macOS.
+ * @returns true on macOS and Windows.
  */
 export function orbSettingsSupported(platform: NodeJS.Platform): boolean {
-  return platform === 'darwin'
+  return platform === 'darwin' || platform === 'win32'
 }
 
 /**
- * Refuse overlay preference writes on Windows and Linux.
+ * Refuse overlay preference writes on Linux.
  * @param platform - Node `process.platform`.
  * @throws when {@link orbSettingsSupported} is false.
  */

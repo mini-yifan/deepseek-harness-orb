@@ -1,6 +1,7 @@
-/** macOS selection-toolbar overlay window geometry and BrowserWindow construction. */
+/** Selection-toolbar overlay window geometry and BrowserWindow construction. */
 
 import { BrowserWindow, screen } from 'electron'
+import { presentOverlayWindow } from './floating-window.ts'
 import {
   FLOATING_OVERLAY_ALWAYS_ON_TOP_RELATIVE,
   OVERLAY_ALWAYS_ON_TOP_LEVEL,
@@ -87,7 +88,7 @@ export function selectionToolbarMenuBounds(
 }
 
 /**
- * Construct the selection-toolbar panel. The caller loads `dsh-app://shell/selection-toolbar.html`.
+ * Construct the selection-toolbar window. The caller loads `dsh-app://shell/selection-toolbar.html`.
  * @param preload - context-isolated shell preload.
  * @returns a hidden, non-activating overlay.
  */
@@ -100,7 +101,7 @@ export function createSelectionToolbarWindow(preload: string): BrowserWindow {
     alwaysOnTop: true,
     skipTaskbar: true,
     focusable: false,
-    type: 'panel',
+    ...process.platform === 'win32' ? {} : { type: 'panel' as const },
     show: false,
     hasShadow: true,
     resizable: false,
@@ -115,8 +116,10 @@ export function createSelectionToolbarWindow(preload: string): BrowserWindow {
       webSecurity: true,
     },
   })
-  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
-  window.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, FLOATING_OVERLAY_ALWAYS_ON_TOP_RELATIVE)
+  presentOverlayWindow(window)
+  if (process.platform === 'darwin') {
+    window.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, FLOATING_OVERLAY_ALWAYS_ON_TOP_RELATIVE)
+  }
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   return window
 }

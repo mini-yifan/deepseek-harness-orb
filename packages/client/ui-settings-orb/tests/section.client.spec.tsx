@@ -111,7 +111,7 @@ describe('OrbSettingsSection', () => {
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Choose image' }).disabled).toBe(false)
   })
 
-  it('shows the macOS-only banner and disables controls on Windows', () => {
+  it('shows the unavailable banner and disables controls when the host reports the ball is unsupported', () => {
     mount({ supported: false })
     expect(screen.getByRole('status').textContent).toBe('The floating ball is available only on macOS.')
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Choose image' }).disabled).toBe(true)
