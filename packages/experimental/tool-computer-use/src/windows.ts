@@ -24,7 +24,7 @@ import type {
   ScrollInput,
   TypeInput,
 } from './backend.ts'
-import { FOCUS_FALLBACK_FOREGROUND } from './backend.ts'
+import { FOCUS_FALLBACK_FOREGROUND, UNFOCUSED_WINDOW_NOTE } from './backend.ts'
 import { activeCaptureExcludeWindowIds } from './capture-exclude.ts'
 import { mapNormalizedToGlobal } from './coordinates.ts'
 import { delay } from './wait.ts'
@@ -74,6 +74,18 @@ export interface WindowsDesktopOps {
    * @throws when a window matches but does not become foreground.
    */
   activateApp(name: string): boolean
+  /**
+   * HWND of the current foreground window.
+   * @returns a positive HWND, or `0` when no window is foreground.
+   */
+  foregroundWindowId(): number
+  /**
+   * Bring `hwnd` forward with the same Alt plus `SetForegroundWindow` sequence as `activateApp`.
+   * Restores an iconic window before that call.
+   * @param hwnd - top-level HWND from an observation.
+   * @returns false when that window is not in the current top-level list or does not become foreground.
+   */
+  focusWindow(hwnd: number): boolean
   launch(target: string, parameters?: string): void
   /**
    * Explorer address path for one Explorer window.
@@ -246,6 +258,26 @@ function assertInput(ops: WindowsDesktopOps): void {
   if (ops.targetBlocksInput()) throw new Error(ELEVATED_WINDOW)
 }
 
+/**
+ * Move keyboard focus to the last `listScreens` window when it is not already foreground.
+ * No-op when this backend has not listed a window, or when the foreground hwnd is that window or one of its transients.
+ * @param host - Win32 operations.
+ * @param observed - selection from the latest `listScreens`, if any.
+ * @throws when the window cannot become foreground. No keys are posted after that throw.
+ */
+function restoreObservedFocus(
+  host: WindowsDesktopOps,
+  observed: WindowsObservationSelection | undefined,
+): void {
+  if (observed === undefined) return
+  const foreground = host.foregroundWindowId()
+  if (foreground === observed.windowId || observed.transientWindowIds.includes(foreground)) return
+  if (host.focusWindow(observed.windowId)) return
+  throw new Error(
+    `computer-use: keyboard focus could not be moved to ${observed.appName}; click inside the window, then retry hotkey`,
+  )
+}
+
 async function clickAt(
   ops: WindowsDesktopOps,
   button: 'left' | 'right',
@@ -305,6 +337,7 @@ async function production(): Promise<WindowsDesktopOps> {
  */
 export function createWindowsDesktopBackend(ops?: WindowsDesktopOps): DesktopBackend {
   const use = async (): Promise<WindowsDesktopOps> => ops ?? await production()
+  let observed: WindowsObservationSelection | undefined
 
   return {
     withGuiTurn: run => run(),
@@ -312,6 +345,7 @@ export function createWindowsDesktopBackend(ops?: WindowsDesktopOps): DesktopBac
     async listScreens(signal) {
       signal?.throwIfAborted()
       const selected = observationOf(await use())
+      observed = selected
       if (selected === undefined) return []
       return [screenFromObservation(selected)]
     },
@@ -339,6 +373,7 @@ export function createWindowsDesktopBackend(ops?: WindowsDesktopOps): DesktopBac
         appName: selected.appName,
         ...selected.windowTitle === '' ? {} : { windowTitle: selected.windowTitle },
         ...folder === undefined ? {} : { finderFolder: folder },
+        ...selected.focused ? {} : { focusNote: UNFOCUSED_WINDOW_NOTE },
       }
       return foreground
     },
@@ -398,6 +433,7 @@ export function createWindowsDesktopBackend(ops?: WindowsDesktopOps): DesktopBac
     async hotkey(input: HotkeyInput, signal) {
       signal?.throwIfAborted()
       const host = await use()
+      restoreObservedFocus(host, observed)
       assertInput(host)
       await chord(host, input.keys.map(postedKey), liveSignal(signal))
     },

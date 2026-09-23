@@ -18,6 +18,8 @@ vi.mock('../src/windows-native.ts', () => ({
       copyImageFile: () => undefined,
       listWindowApps: () => [],
       activateApp: () => false,
+      foregroundWindowId: () => 0,
+      focusWindow: () => false,
       launch: () => undefined,
       explorerFolder: () => undefined,
     }
@@ -80,6 +82,8 @@ function ops(overrides: Partial<WindowsDesktopOps> = {}): WindowsDesktopOps & {
     copyImageFile: (path) => { calls.push(`image:${path}`) },
     listWindowApps: () => ['notepad', 'explorer'],
     activateApp: () => false,
+    foregroundWindowId: () => 0,
+    focusWindow: () => false,
     launch: (target) => { calls.push(`launch:${target}`) },
     explorerFolder: () => undefined,
     ...overrides,
@@ -142,7 +146,10 @@ describe('windows desktop backend', () => {
         scale: 1,
         windowId: 5,
       }])
-      await expect(backend.inspectForeground()).resolves.toEqual({ appName: 'notepad' })
+      await expect(backend.inspectForeground()).resolves.toEqual({
+        appName: 'notepad',
+        focusNote: 'Keyboard focus is on another window. hotkey brings this window forward first; click inside it if focus must land on a specific control.',
+      })
     })
   })
 
@@ -197,6 +204,106 @@ describe('windows desktop backend', () => {
     host.calls.length = 0
     await backend.scroll({ screen, position: [0, 0], direction: 'up', scrollLevel: 1 })
     expect(host.calls).toEqual(['wheel:120'])
+  })
+
+  it('brings the observed window forward before a hotkey when focus is elsewhere', async () => {
+    const ball = fact({ hwnd: 9, appName: 'electron', title: 'ball' })
+    const host = ops({
+      listWindows: () => shot([ball, fact()], 9),
+      foregroundWindowId: () => 9,
+      focusWindow: (hwnd) => {
+        host.calls.push(`focus:${String(hwnd)}`)
+        return true
+      },
+    })
+    const backend = createWindowsDesktopBackend(host)
+    await runWithCaptureExcludeWindowIds([9], async () => {
+      await backend.listScreens()
+      await backend.hotkey({ keys: ['ctrl', 'w'] })
+    })
+    const focusAt = host.calls.indexOf('focus:5')
+    expect(focusAt).toBeGreaterThan(-1)
+    expect(focusAt).toBeLessThan(host.calls.indexOf('key:17:down:0'))
+    expect(host.calls).toContain('key:87:down:0')
+  })
+
+  it('does not move focus when the foreground window is the owner or its menu', async () => {
+    const menu = fact({
+      hwnd: 11,
+      pid: 99,
+      className: '#32768',
+      popup: true,
+      title: '',
+      frame: { x: 90, y: 20, width: 40, height: 40 },
+    })
+    const host = ops({
+      listWindows: () => shot([fact(), menu], 11),
+      foregroundWindowId: () => 11,
+      focusWindow: (hwnd) => {
+        host.calls.push(`focus:${String(hwnd)}`)
+        return true
+      },
+    })
+    const backend = createWindowsDesktopBackend(host)
+    await expect(backend.inspectForeground()).resolves.toEqual({
+      appName: 'notepad',
+      windowTitle: 'notes.txt',
+    })
+    await backend.listScreens()
+    await backend.hotkey({ keys: ['ctrl', 'w'] })
+    expect(host.calls.some(call => call.startsWith('focus:'))).toBe(false)
+    host.calls.length = 0
+    const focused = ops({
+      foregroundWindowId: () => 5,
+      focusWindow: (hwnd) => {
+        focused.calls.push(`focus:${String(hwnd)}`)
+        return true
+      },
+    })
+    const owning = createWindowsDesktopBackend(focused)
+    await owning.listScreens()
+    await owning.hotkey({ keys: ['escape'] })
+    expect(focused.calls.some(call => call.startsWith('focus:'))).toBe(false)
+    expect(focused.calls).toEqual(['key:27:down:0', 'key:27:up:0'])
+  })
+
+  it('posts no keys when the observed window cannot become foreground', async () => {
+    const ball = fact({ hwnd: 9, appName: 'electron', title: 'ball' })
+    const host = ops({
+      listWindows: () => shot([ball, fact()], 9),
+      foregroundWindowId: () => 9,
+      focusWindow: (hwnd) => {
+        host.calls.push(`focus:${String(hwnd)}`)
+        return false
+      },
+    })
+    const backend = createWindowsDesktopBackend(host)
+    await runWithCaptureExcludeWindowIds([9], async () => {
+      await backend.listScreens()
+      await expect(backend.hotkey({ keys: ['ctrl', 'w'] })).rejects.toThrow(
+        'computer-use: keyboard focus could not be moved to notepad; click inside the window, then retry hotkey',
+      )
+    })
+    expect(host.calls).toEqual(['focus:5'])
+  })
+
+  it('does not restore a window after a later listing finds nothing operable', async () => {
+    let windows = shot([fact()], 9)
+    const host = ops({
+      listWindows: () => windows,
+      foregroundWindowId: () => 9,
+      focusWindow: (hwnd) => {
+        host.calls.push(`focus:${String(hwnd)}`)
+        return true
+      },
+    })
+    const backend = createWindowsDesktopBackend(host)
+    await backend.listScreens()
+    windows = shot([])
+    await backend.listScreens()
+    await backend.hotkey({ keys: ['ctrl', 'w'] })
+    expect(host.calls.some(call => call.startsWith('focus:'))).toBe(false)
+    expect(host.calls[0]).toBe('key:17:down:0')
   })
 
   it('drags in steps and holds a long press', async () => {

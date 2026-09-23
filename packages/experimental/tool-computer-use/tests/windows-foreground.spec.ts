@@ -48,6 +48,7 @@ describe('windows observation selection', () => {
       scale: 2,
       bounds: front.frame,
       transientWindowIds: [],
+      focused: true,
     })
   })
 
@@ -55,7 +56,29 @@ describe('windows observation selection', () => {
     const menu = fact({ hwnd: 3, className: '#32768', title: 'menu' })
     const notes = fact({ hwnd: 4, appName: 'notepad', title: 'a.txt', monitorDpi: 0 })
     const selected = selectWindowsObservation(snapshot([menu, notes], 3), [])
-    expect(selected).toMatchObject({ windowId: 4, scale: 1, appName: 'notepad' })
+    expect(selected).toMatchObject({ windowId: 4, scale: 1, appName: 'notepad', focused: false })
+  })
+
+  it('keeps focus when the foreground window is the owner menu and drops it for an excluded overlay', () => {
+    const owner = fact({ hwnd: 10, pid: 4, frame: { x: 0, y: 0, width: 400, height: 300 } })
+    const menu = fact({
+      hwnd: 11,
+      pid: 99,
+      className: '#32768',
+      popup: true,
+      frame: { x: 20, y: 20, width: 80, height: 40 },
+    })
+    const overlay = fact({ hwnd: 12, appName: 'electron', title: 'ball' })
+    expect(selectWindowsObservation(snapshot([owner, menu], 11), [])).toMatchObject({
+      windowId: 10,
+      focused: true,
+      transientWindowIds: [11],
+    })
+    expect(selectWindowsObservation(snapshot([overlay, owner], 12), [12])).toMatchObject({
+      windowId: 10,
+      focused: false,
+      transientWindowIds: [],
+    })
   })
 
   it('skips overlay hwnds, shell windows, and windows that cannot own an observation', () => {

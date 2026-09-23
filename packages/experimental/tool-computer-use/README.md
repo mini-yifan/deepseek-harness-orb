@@ -69,7 +69,7 @@ There is no `observe` tool. The first user turn already includes the current fro
 | `click` | `screen_index` (0), `position: [x,y]` (0–1000 millifraction by default; overlay pixel sessions use attached WxH), optional `button` (`left`/`right`), optional `count` (1 or 2), optional `modifiers` (`shift` / `cmd` / `option` / `control`, held only for that click) | click, wait, recapture |
 | `input_text` | `screen_index`, `position`, `text`, optional `replace`, optional `submit` | click-focus, type, optional Enter, wait, recapture |
 | `scroll` | `screen_index`, `position`, `direction` (`up`/`down`), `scroll_level` 1–10 | scroll, wait, recapture |
-| `hotkey` | `keys: string[]` | key combo; system screenshot chords are rejected; wait, recapture |
+| `hotkey` | `keys: string[]` | key combo; on Windows, bring the last observed window forward when it is not foreground; system screenshot chords are rejected; wait, recapture |
 | `wait` | none | pause 1s, recapture |
 | `long_wait` | required `wait_seconds`: 10, 30, 60, or 120 | pause, recapture |
 | `screenshot` | none | save Desktop files, copy the window to clipboard, return that window |
@@ -83,7 +83,7 @@ There is no `observe` tool. The first user turn already includes the current fro
 | `code_agent_status` | none | list this Computer Use chat's background sessions (count, latest task, cwd, running or idle) |
 | `code_agent_stop` | `session_id` | cancel that session's running turn and queued follow-ups; the session stays idle and continuable |
 
-The thirteen GUI tools run exclusive HID: sibling calls in one step execute in model order and each recaptures. `presentCall` is generic. Each observation starts with `<frontmost_app>` (plus `<frontmost_window>` when the window has a title, `<frontmost_folder>` when Finder or 访达 is frontmost, or `<focus_note>` when no remaining window remains after skipping the overlay). The optional screen envelope then names index 0 and that session's click space: millifraction 0–1000 with no pixel sizes, or pixels plus that attachment's WxH. Image-handle dimensions are still not a click space. When no operable window remains, the observation is those tags only — there is no desktop panorama.
+The thirteen GUI tools run exclusive HID: sibling calls in one step execute in model order and each recaptures. `presentCall` is generic. Each observation starts with `<frontmost_app>` (plus `<frontmost_window>` when the window has a title, `<frontmost_folder>` when Finder or 访达 is frontmost, or `<focus_note>` when no remaining window remains after skipping the overlay, and on Windows also when that window is not the keyboard foreground). The optional screen envelope then names index 0 and that session's click space: millifraction 0–1000 with no pixel sizes, or pixels plus that attachment's WxH. Image-handle dimensions are still not a click space. When no operable window remains, the observation is those tags only — there is no desktop panorama.
 
 Tests inject a fake desktop through `applyComputerUse(ctx, backend, config)` rather than a Config `driver` hook.
 
@@ -154,6 +154,7 @@ Desktop `code_agent` create reads optional `ctx.get('orbCodeAgentModel')` after 
 - [Computer Use observation foreground](../../../.agents/notes/implemented/feature/2026-09-15-computer-use-observation-foreground.md) — overlay-window skip, Finder folder, and focus fallback on existing `user/message` / `tool/result`.
 - [Computer Use focused-window observation](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-focused-window-observation.md) — one overlay-skipped frontmost window, `list_apps` / `open_app`, and no desktop panorama.
 - [Windows Computer Use per-monitor coordinates](../../../.agents/notes/implemented/architecture/2026-09-23-windows-computer-use-per-monitor-dpi.md) — physical pixels for capture and `SendInput`, overlay HWND skip, and same-monitor menus.
+- [Windows Computer Use focus recovery](../../../.agents/notes/implemented/bug-fix/2026-09-23-windows-computer-use-focus-recovery.md) — `<focus_note>` when the reported window is not the keyboard foreground, and `hotkey` restores that window before keys.
 - [Computer Use app-window observation](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-app-window-observation.md) — frontmost-app family window union and always-region capture.
 - [Computer Use transient window observation](../../../.agents/notes/implemented/feature/2026-09-16-computer-use-transient-window-observation.md) — region helper for that union rectangle.
 - [Computer Use context-menu observation](../../../.agents/notes/implemented/bug-fix/2026-09-16-computer-use-context-menu-observation.md) — settle-before-inspect and overlay input cloak through recapture.
@@ -176,7 +177,7 @@ Desktop `code_agent` create reads optional `ctx.get('orbCodeAgentModel')` after 
 
 #### What the model sees
 
-One stable `tool:computer-use` section is assembled on every request while the plugin is mounted. Overlay pixel sessions substitute a pixel Coordinates paragraph; the millifraction text below is the Headless/Web default.
+One stable `tool:computer-use` section is assembled on every request while the plugin is mounted. Overlay pixel sessions substitute a pixel Coordinates paragraph; the millifraction text below is the Headless/Web default. On Windows, when the reported window is not the keyboard foreground, the observation adds the Windows unfocused window note, and `hotkey` brings that window forward before posting keys.
 
 ##### Computer Use policy
 
@@ -227,6 +228,12 @@ When a plugin notice reports that a Code agent session finished, decide again. D
 When a user message starts with "Desktop selection. Answer in this chat only. Do not call GUI tools or code_agent.", answer in this chat only. Do not call GUI tools, code_agent, or screenshot on that turn.
 ```
 
+##### Windows unfocused window
+
+```markdown
+Keyboard focus is on another window. hotkey brings this window forward first; click inside it if focus must land on a specific control.
+```
+
 #### Token effect
 
 Fixed policy cost on every request while the plugin is mounted. First-frame screens and each GUI tool result add image tokens that remain until compaction.
@@ -265,6 +272,7 @@ These limits are current package constraints. The plugin drives the real unsandb
 - **No lasso or `manage_files`** — GUI coverage is click, type, scroll, hotkey, wait, long_wait, screenshot, long-press, drag, open-in-browser, open-in-finder, list-apps, and open-app. Switch apps with `open_app`; do not click the Dock. Background documents and code go through `code_agent`.
 - **`code_agent` notice needs live Agents** — execute still returns after queue accept. A missing live Code agent, a disposed Computer Use caller, or a Code session that never returns to idle drops the notice. `code_agent_stop` aborts the watch for that interval. Background Code agents auto-allow approval and auto-answer ask-user prompts; Computer Use itself still shows questions on the ball. Policy cannot stop a model that still calls `wait` or `long_wait`.
 - **Desktop overlay** — macOS and Windows create the floating ball. Linux does not. Windows omits the ball from capture with display affinity during capture and HID, and the foreground walk skips the ball's HWND. A non-elevated process cannot click an elevated window. The experimental package is a signed runtime extra, not a Desktop Host npm dependency.
+- **Windows keyboard focus** — When the foreground hwnd is skipped, `<frontmost_app>` names the next operable window and the observation adds `<focus_note>`. `hotkey` brings that window forward with Alt plus `SetForegroundWindow` before `SendInput`. When that window does not become foreground, `hotkey` throws `computer-use: keyboard focus could not be moved to <app>; click inside the window, then retry hotkey` and posts no keys. `input_text` focuses by clicking and does not use this restore.
 - **Experimental prototype with no stability promise** — the package is private; schemas and backends can change freely.
 
 <a id="dev-note"></a>

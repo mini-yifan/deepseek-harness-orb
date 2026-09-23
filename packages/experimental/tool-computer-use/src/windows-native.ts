@@ -637,6 +637,35 @@ export function createProductionWindowsOps(): WindowsDesktopOps {
     return hwndId(api.GetForegroundWindow()) === hwndId(hwnd)
   }
 
+  function windowPointer(id: number): unknown {
+    if (!Number.isSafeInteger(id) || id <= 0) return undefined
+    for (const hwnd of enumTopLevel(api)) {
+      if (hwndId(hwnd) === id) return hwnd
+    }
+    return undefined
+  }
+
+  /**
+   * `SetForegroundWindow` is ignored unless this process received the last input.
+   * A posted Alt transition satisfies that, then the key is released.
+   * @param target - top-level HWND pointer from `EnumWindows`.
+   * @returns false when `target` is still not foreground after one retry.
+   */
+  function becomeForeground(target: unknown): boolean {
+    if (api.IsIconic(target) !== 0) api.ShowWindow(target, SW_RESTORE)
+    postKey(api, VK_MENU, true, false)
+    try {
+      api.SetForegroundWindow(target)
+      if (!isForeground(target)) {
+        sleepSync(FOREGROUND_RETRY_MS)
+        if (!isForeground(target)) return false
+      }
+      return true
+    } finally {
+      postKey(api, VK_MENU, false, false)
+    }
+  }
+
   return {
     listWindows,
     capturePng(bounds) {
@@ -772,18 +801,18 @@ try { [System.Windows.Forms.Clipboard]::SetImage($image) } finally { $image.Disp
           }
         }
         if (target === undefined) return false
-        if (api.IsIconic(target) !== 0) api.ShowWindow(target, SW_RESTORE)
-        postKey(api, VK_MENU, true, false)
-        try {
-          api.SetForegroundWindow(target)
-          if (!isForeground(target)) {
-            sleepSync(FOREGROUND_RETRY_MS)
-            if (!isForeground(target)) throw new Error(`computer-use: failed to activate ${name}`)
-          }
-          return true
-        } finally {
-          postKey(api, VK_MENU, false, false)
-        }
+        if (!becomeForeground(target)) throw new Error(`computer-use: failed to activate ${name}`)
+        return true
+      })
+    },
+    foregroundWindowId() {
+      return hwndId(api.GetForegroundWindow()) ?? 0
+    },
+    focusWindow(hwnd) {
+      return perMonitor(() => {
+        const target = windowPointer(hwnd)
+        if (target === undefined) return false
+        return becomeForeground(target)
       })
     },
     launch(target, parameters) {

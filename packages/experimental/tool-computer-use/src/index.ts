@@ -35,7 +35,7 @@ export type {
   ScrollInput,
   TypeInput,
 } from './backend.ts'
-export { FOCUS_FALLBACK_FOREGROUND, FOCUS_NOTE } from './backend.ts'
+export { FOCUS_FALLBACK_FOREGROUND, FOCUS_NOTE, UNFOCUSED_WINDOW_NOTE } from './backend.ts'
 export { Config, resolveComputerUseConfig } from './config.ts'
 export type { ResolvedComputerUseConfig } from './config.ts'
 export { createFakeDesktopBackend, FAKE_DESKTOP_PNG } from './fake.ts'
