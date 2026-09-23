@@ -11,6 +11,7 @@ export default defineConfig([
     fixedExtension: false,
     dts: false,
     clean: false,
+    deps: { neverBundle: ['koffi'] },
   },
   {
     entry: ['lib/types/preset-root.js'],

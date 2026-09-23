@@ -345,10 +345,10 @@ describe('floating overlay guard', () => {
     }
   }
 
-  it('does not set contentProtection during capture; HID still click-through', () => {
+  it('sets contentProtection during capture only on Windows; HID still click-through', () => {
     const window = overlayWindow()
     applyFloatingOverlayGuard(window as never, 'capture', 'begin')
-    expect(window.contentProtection).toBe(false)
+    expect(window.contentProtection).toBe(process.platform === 'win32')
     expect(window.ignoreMouseEvents).toBe(false)
     applyFloatingOverlayGuard(window as never, 'capture', 'end')
     expect(window.contentProtection).toBe(false)

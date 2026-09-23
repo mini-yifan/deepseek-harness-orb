@@ -1,6 +1,7 @@
-/** macOS selection-toolbar overlay window geometry and BrowserWindow construction. */
+/** Selection-toolbar overlay window geometry and BrowserWindow construction. */
 
 import { BrowserWindow, screen } from 'electron'
+import { presentOverlayWindow } from './floating-window.ts'
 
 /** Default toolbar size before the renderer reports content width. */
 export const SELECTION_TOOLBAR_SIZE = { width: 280, height: 46 } as const
@@ -83,7 +84,7 @@ export function selectionToolbarMenuBounds(
 }
 
 /**
- * Construct the selection-toolbar panel. The caller loads `dsh-app://shell/selection-toolbar.html`.
+ * Construct the selection-toolbar window. The caller loads `dsh-app://shell/selection-toolbar.html`.
  * @param preload - context-isolated shell preload.
  * @returns a hidden, non-activating overlay.
  */
@@ -96,7 +97,7 @@ export function createSelectionToolbarWindow(preload: string): BrowserWindow {
     alwaysOnTop: true,
     skipTaskbar: true,
     focusable: false,
-    type: 'panel',
+    ...process.platform === 'win32' ? {} : { type: 'panel' as const },
     show: false,
     hasShadow: true,
     resizable: false,
@@ -111,7 +112,7 @@ export function createSelectionToolbarWindow(preload: string): BrowserWindow {
       webSecurity: true,
     },
   })
-  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
+  presentOverlayWindow(window)
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   return window
 }

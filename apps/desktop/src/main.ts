@@ -285,7 +285,7 @@ async function main(): Promise<void> {
     }
   }
   const ensureFloating = (): void => {
-    if (process.platform !== 'darwin' || quitting) return
+    if ((process.platform !== 'darwin' && process.platform !== 'win32') || quitting) return
     if (floatingWindow !== undefined && !floatingWindow.isDestroyed()) return
     selection ??= new SelectionToolbarController(activeProject, {
       electronPid: process.pid,
@@ -333,8 +333,10 @@ async function main(): Promise<void> {
         void confirmMillifractionEnabled(!current, floatingWindow)
       },
     })
-    app.setActivationPolicy('regular')
-    app.dock?.show()
+    if (process.platform === 'darwin') {
+      app.setActivationPolicy('regular')
+      app.dock?.show()
+    }
     floatingWindow.once('closed', () => { floatingWindow = undefined })
     void floatingWindow.loadURL(`${SCHEME}://shell/floating.html`)
     if (selection.window() === undefined) {
@@ -432,8 +434,11 @@ async function main(): Promise<void> {
     return selection
   }
   const restoreOverlayGuard = (): void => {
-    if (floatingWindow === undefined || floatingWindow.isDestroyed()) return
-    resetFloatingOverlayGuard(floatingWindow)
+    if (floatingWindow !== undefined && !floatingWindow.isDestroyed()) {
+      resetFloatingOverlayGuard(floatingWindow)
+    }
+    const toolbar = selection?.window()
+    if (toolbar !== undefined && !toolbar.isDestroyed()) resetFloatingOverlayGuard(toolbar)
     selection?.setHidInput(false)
   }
   const backend = new DesktopBackendController((onFailure) => {
@@ -452,6 +457,10 @@ async function main(): Promise<void> {
       (event) => {
         if (floatingWindow === undefined || floatingWindow.isDestroyed()) return []
         applyFloatingOverlayGuard(floatingWindow, event.mode, event.action)
+        const toolbar = selection?.window()
+        if (toolbar !== undefined && !toolbar.isDestroyed()) {
+          applyFloatingOverlayGuard(toolbar, event.mode, event.action)
+        }
         if (event.mode === 'input') selection?.setHidInput(event.action === 'begin')
         const ids = overlayWindowExcludeIds(floatingWindow, selection?.window())
         if (event.mode === 'input' && event.action === 'begin') {

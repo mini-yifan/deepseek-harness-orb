@@ -4,6 +4,8 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { sep } from 'node:path'
+import { installWindowsSelectionHooks, productionSelectionProbe } from './windows-selection-native.ts'
+import { startWindowsSelectionMonitor } from './windows-selection.ts'
 
 /** Selection rectangle in Electron screen coordinates (top-left origin). */
 export interface SelectionBounds {
@@ -127,6 +129,9 @@ export function macosSelectionHelperPath(): string {
  * @returns a running monitor, or undefined when the helper is missing or not Darwin.
  */
 export function startSelectionMonitor(handlers: SelectionMonitorHandlers): SelectionMonitor | undefined {
+  if (process.platform === 'win32') {
+    return startWindowsSelectionMonitor(handlers, productionSelectionProbe(), installWindowsSelectionHooks)
+  }
   if (process.platform !== 'darwin') return undefined
   const helper = macosSelectionHelperPath()
   if (!existsSync(helper)) return undefined

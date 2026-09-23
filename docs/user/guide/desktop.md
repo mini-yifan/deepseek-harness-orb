@@ -2,7 +2,7 @@
 
 English | [中文](desktop.zh.md)
 
-The Desktop app opens an Electron main window on one Desktop Host, and on macOS it also opens a floating ball. The main window reuses the Web UI and creates standard sessions by default. The ball locks Computer Use; its chats and delegated coding sessions appear under the `dsh_orb` sidebar folder.
+The Desktop app opens an Electron main window on one Desktop Host, and on macOS and Windows it also opens a floating ball. The main window reuses the Web UI and creates standard sessions by default. The ball locks Computer Use; its chats and delegated coding sessions appear under the `dsh_orb` sidebar folder.
 
 ## Before you start
 
@@ -12,7 +12,7 @@ Install dependencies from the repository root. You need Node.js `^22.19 || >=24`
 pnpm install
 ```
 
-Model calls need a [DeepSeek API key](https://platform.deepseek.com/). The floating ball is created only on macOS; Windows still has a single main window. Computer Use capture needs Screen Recording, and clicks and typing need Accessibility; the app does not prompt for those rights.
+Model calls need a [DeepSeek API key](https://platform.deepseek.com/). macOS and Windows both create the floating ball. On macOS, Computer Use capture needs Screen Recording, and clicks and typing need Accessibility; the app does not prompt for those rights. On Windows, an elevated target window rejects clicks and typing.
 
 ## Launch from source
 
@@ -71,7 +71,7 @@ Those background sessions are the same kind as a session you type in the main wi
 
 ## Limits
 
-The floating ball is macOS-only. Windows still lists **Floating ball** in Settings with every control disabled. There is no voice, lasso, or per-click approval. Computer Use capture omits the ball, expanded panel, and selection toolbar from that screenshot via ScreenCaptureKit window exclusion, and HID makes that whole overlay click-through only for that input burst while hiding the toolbar; the main window stays capturable and hittable. The Computer Use package is a signed runtime extra, not a Desktop Host npm dependency.
+There is no voice, lasso, or per-click approval. Computer Use capture omits the ball, expanded panel, and selection toolbar from that screenshot: macOS uses ScreenCaptureKit window exclusion, and Windows sets display affinity for the same capture interval. HID makes that whole overlay click-through only for that input burst while hiding the toolbar; the main window stays capturable and hittable. Linux does not create the ball. A non-elevated Windows process cannot click or type into an elevated window. The Computer Use package is a signed runtime extra, not a Desktop Host npm dependency.
 
 ## Continue
 

@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Give a vision-capable agent live sight of the host's frontmost application window and thirteen exclusive GUI tools so it can click, type, scroll, drag, long-press, list and open apps, open files and the browser, press hotkeys, wait, and save a screenshot to Desktop and the clipboard, then see the new window in the same tool result. Mount it only when you want that unsandboxed control. Text-only routes skip the first screenshot and refuse the tools. macOS is the production backend; other hosts load the plugin and fail at execute.
+Give a vision-capable agent live sight of the host's frontmost application window and thirteen exclusive GUI tools so it can click, type, scroll, drag, long-press, list and open apps, open files and the browser, press hotkeys, wait, and save a screenshot to Desktop and the clipboard, then see the new window in the same tool result. Mount it only when you want that unsandboxed control. Text-only routes skip the first screenshot and refuse the tools. macOS and Windows are the production backends; Linux loads the plugin and fails at execute.
 
 ## Table of Contents
 
@@ -29,7 +29,7 @@ Patch this private overlay onto a running Web composition when you want a dedica
 
 ### When to choose it
 
-Choose it when a vision model should drive visible GUI chrome that bash cannot reach, and you want a catalog limited to Shell, web search and fetch, the thirteen GUI tools, `code_agent`, `code_agent_status`, `code_agent_stop`, and `ask_user_question`. Avoid it for ordinary coding sessions, text-only routes, and any host that must not grant Screen Recording, Accessibility, and Automation for Finder. It is not a Skill, not a capability seam, and not part of `dsh-base`. Desktop macOS also mounts this overlay as a signed runtime extra so the floating ball can lock a Computer Use session.
+Choose it when a vision model should drive visible GUI chrome that bash cannot reach, and you want a catalog limited to Shell, web search and fetch, the thirteen GUI tools, `code_agent`, `code_agent_status`, `code_agent_stop`, and `ask_user_question`. Avoid it for ordinary coding sessions, text-only routes, and any host that must not grant Screen Recording, Accessibility, and Automation for Finder. It is not a Skill, not a capability seam, and not part of `dsh-base`. Desktop on macOS and Windows also mounts this overlay as a signed runtime extra so the floating ball can lock a Computer Use session.
 
 ### Minimal configuration
 
@@ -58,7 +58,7 @@ A custom Loader composition that can resolve the package name may instead mount:
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-experimental-tool-computer-use) is the exhaustive source for every accepted field and its JSDoc.
 
-On macOS, grant Screen Recording to capture, Accessibility to post clicks and keys, and Automation for Finder. Missing Screen Recording or Accessibility fails the capture or input with a message that names that TCC right. Windows and Linux still load; every backend method then throws `computer-use: desktop control is implemented only on macOS`.
+On macOS, grant Screen Recording to capture, Accessibility to post clicks and keys, and Automation for Finder. Missing Screen Recording or Accessibility fails the capture or input with a message that names that TCC right. Windows captures with GDI and posts input with `SendInput`; an elevated target window rejects clicks and typing. Linux still loads, and every backend method then throws `computer-use: desktop control is implemented only on macOS and Windows`.
 
 ### The tools
 
@@ -120,6 +120,7 @@ Desktop `code_agent` create reads optional `ctx.get('orbCodeAgentModel')` after 
 | [`src/code-agent-completion.ts`](src/code-agent-completion.ts) | Parked plugin notice after the Code session and the Computer Use caller are idle; abortable on stop |
 | [`src/code-agent-unattended.ts`](src/code-agent-unattended.ts) | Prepended auto-allow for `approval/request` and auto-answer for `user-questions/request` on the live Code agent |
 | [`src/macos.ts`](src/macos.ts) | Darwin capture via a full `screencapture` plus `sips` crop of the frontmost-app window union, or ScreenCaptureKit helper `--region=` when overlay window ids are set; click, scroll, hotkey, long-press, and drag via JXA `CGEvent`; `input_text` pastes via NSPasteboard; `list_apps` / `open_app` via NSWorkspace; `open_in_browser` / `open_in_finder` via `/usr/bin/open`; `inspectForeground` binds `CGWindowListCopyWindowInfo` then unwraps (skip overlay ids) plus Finder AppleScript |
+| [`src/windows.ts`](src/windows.ts) | Win32 capture of the foreground window via GDI into PNG; click, scroll, hotkey, long-press, and drag via `SendInput`; `input_text` pastes with Ctrl+V; `open_in_finder` opens Explorer; an elevated foreground window rejects input |
 | [`src/macos-sck-capture.swift`](src/macos-sck-capture.swift) | Darwin helper: window capture or display-exclude region crop that still omits overlay CGWindowIDs; starts `NSApplication` on the main actor first |
 | [`src/open.ts`](src/open.ts) | `long_press` duration, `open_in_browser` URL, and `open_in_finder` path validation |
 | [`src/wait-args.ts`](src/wait-args.ts) | Fixed 1s `wait` and `long_wait` 10/30/60/120 buckets |
@@ -246,16 +247,16 @@ Prefix-stable while the sixteen definitions and order are unchanged. Registratio
 
 These limits are current package constraints. The plugin drives the real unsandboxed desktop.
 
-- **macOS only** — capture and HID input are implemented on Darwin; other platforms throw at execute.
+- **macOS and Windows** — capture and HID input run on Darwin and Win32; Linux throws at execute.
 - **Screen Recording, Accessibility, and Automation TCC** — capture needs Screen Recording; clicks, typing, scroll, hotkeys, long-press, and drag need Accessibility; Finder folder lookup needs Automation for Finder. The plugin does not prompt for those rights.
 - **No per-click approval** — installing or patching the plugin is the consent gate; a visual loop cannot ask on every action.
 - **Host chrome is omitted from the shot when it is not the frontmost window** — Web windows appear only when that window is frontmost. Desktop's main window stays capturable when it is next after overlay skip. The macOS overlay is omitted from Computer Use screenshots by ScreenCaptureKit exclude-id checks (display exclude plus crop) and is click-through for HID bursts, `open_app`, and their recapture via ack'd overlay-guard IPC. Foreground inspect and `listScreens` skip those overlay window ids, so the main window can appear as `<frontmost_app>`.
-- **Typing uses the string clipboard** — `input_text` pastes with Cmd+V and restores the previous string clipboard afterwards. Other clipboard types are not restored. `screenshot` replaces the pasteboard with the captured image and does not restore the previous clipboard.
+- **Typing uses the string clipboard** — `input_text` pastes with Cmd+V on macOS and Ctrl+V on Windows, then restores the previous string clipboard. Other clipboard types are not restored. `screenshot` replaces the pasteboard with the captured image and does not restore the previous clipboard.
 - **Retina vs attached size** — backing scale and request rasters can differ from the capture; millifraction sessions pass 0–1000 fractions of the visible screenshot. Overlay pixel sessions divide by that observation's attached WxH named on the Computer Use envelope.
 - **Fixed settle wait** — post-action delay is `postActionWaitMs` before inspect and capture pixels; there is no pixel-diff stall.
 - **No lasso or `manage_files`** — GUI coverage is click, type, scroll, hotkey, wait, long_wait, screenshot, long-press, drag, open-in-browser, open-in-finder, list-apps, and open-app. Switch apps with `open_app`; do not click the Dock. Background documents and code go through `code_agent`.
 - **`code_agent` notice needs live Agents** — execute still returns after queue accept. A missing live Code agent, a disposed Computer Use caller, or a Code session that never returns to idle drops the notice. `code_agent_stop` aborts the watch for that interval. Background Code agents auto-allow approval and auto-answer ask-user prompts; Computer Use itself still shows questions on the ball. Policy cannot stop a model that still calls `wait` or `long_wait`.
-- **Desktop overlay is macOS-only** — Windows Desktop keeps a single main window. The experimental package is a signed runtime extra, not a Desktop Host npm dependency.
+- **Desktop overlay** — macOS and Windows create the floating ball. Linux does not. Windows omits the ball from capture with display affinity, and a non-elevated process cannot click an elevated window. The experimental package is a signed runtime extra, not a Desktop Host npm dependency.
 - **Experimental prototype with no stability promise** — the package is private; schemas and backends can change freely.
 
 <a id="dev-note"></a>

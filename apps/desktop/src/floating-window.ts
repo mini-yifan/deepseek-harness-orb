@@ -320,7 +320,21 @@ function currentBallOrigin(window: BrowserWindow, workArea: OverlayRect): { x: n
 }
 
 /**
- * Construct the macOS overlay BrowserWindow. The caller loads `dsh-app://shell/floating.html`.
+ * Keep a transparent overlay above other windows.
+ * macOS uses a panel on every Space. Windows uses the screen-saver always-on-top level
+ * because `type: 'panel'` and `setVisibleOnAllWorkspaces` are Darwin-only.
+ * @param window - floating ball or selection toolbar.
+ */
+export function presentOverlayWindow(window: BrowserWindow): void {
+  if (process.platform === 'darwin') {
+    window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
+    return
+  }
+  if (process.platform === 'win32') window.setAlwaysOnTop(true, 'screen-saver')
+}
+
+/**
+ * Construct the overlay BrowserWindow. The caller loads `dsh-app://shell/floating.html`.
  * Places the collapsed overlay on the primary-display work-area right edge, slightly below vertical center.
  * @param preload - context-isolated shell preload.
  * @param messages - locale dictionary for the right-click menu.
@@ -350,7 +364,7 @@ export function createFloatingWindow(
     transparent: true,
     alwaysOnTop: true,
     skipTaskbar: true,
-    type: 'panel',
+    ...process.platform === 'win32' ? {} : { type: 'panel' as const },
     show: true,
     hasShadow: false,
     resizable: false,
@@ -365,7 +379,7 @@ export function createFloatingWindow(
       webSecurity: true,
     },
   })
-  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
+  presentOverlayWindow(window)
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   window.webContents.on('context-menu', (_event, params) => {
     void popupFloatingContextMenu(
@@ -539,6 +553,8 @@ export const OVERLAY_GUARD_INPUT_APPLY_MS = 80
 
 function syncOverlayGuard(window: BrowserWindow, counts: OverlayGuardCounts): void {
   if (window.isDestroyed()) return
+  // Windows capture APIs honor WDA_EXCLUDEFROMCAPTURE. macOS exclusion stays on ScreenCaptureKit ids.
+  window.setContentProtection(process.platform === 'win32' && counts.capture > 0)
   const clickThrough = counts.input > 0
   if (overlayClickThrough.get(window) === clickThrough) return
   overlayClickThrough.set(window, clickThrough)
@@ -552,8 +568,9 @@ function syncOverlayGuard(window: BrowserWindow, counts: OverlayGuardCounts): vo
 
 /**
  * Apply or restore overlay click-through for one Computer Use HID interval.
- * Capture begin still refcounts so overlapping sessions stay paired with their ends;
- * ScreenCaptureKit exclusion uses {@link overlayWindowExcludeIds} rather than `contentProtection`.
+ * Capture begin still refcounts so overlapping sessions stay paired with their ends.
+ * macOS omits the overlay with {@link overlayWindowExcludeIds}. Windows sets
+ * `contentProtection` for the same capture interval.
  * HID click-through does not forward mouse events into the overlay renderer.
  * Overlapping begins are refcounted. Click-through and blur apply only when the
  * input count crosses zero, so nested capture IPC during a HID turn does not flash the overlay.
@@ -582,5 +599,6 @@ export function resetFloatingOverlayGuard(window: BrowserWindow): void {
   overlayGuardCounts.delete(window)
   overlayClickThrough.delete(window)
   if (window.isDestroyed()) return
+  window.setContentProtection(false)
   window.setIgnoreMouseEvents(false)
 }

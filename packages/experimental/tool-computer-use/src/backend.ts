@@ -6,6 +6,7 @@
 import type { ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import { createMacosDesktopBackend } from './macos.ts'
 import { createUnsupportedDesktopBackend } from './unsupported.ts'
+import { createWindowsDesktopBackend } from './windows.ts'
 
 /** One observation surface: the overlay-skipped frontmost app's on-screen window union. */
 export interface ScreenInfo {
@@ -252,8 +253,10 @@ export interface DesktopBackend {
 /**
  * Construct the backend for a host platform.
  * @param platform - Node `process.platform` value; tests pass an explicit id.
- * @returns macOS capture/input on Darwin, otherwise a backend whose methods throw.
+ * @returns macOS capture/input on Darwin, Windows capture/input on Win32, otherwise a backend whose methods throw.
  */
 export function createPlatformBackend(platform: NodeJS.Platform = process.platform): DesktopBackend {
-  return platform === 'darwin' ? createMacosDesktopBackend() : createUnsupportedDesktopBackend()
+  if (platform === 'darwin') return createMacosDesktopBackend()
+  if (platform === 'win32') return createWindowsDesktopBackend()
+  return createUnsupportedDesktopBackend()
 }

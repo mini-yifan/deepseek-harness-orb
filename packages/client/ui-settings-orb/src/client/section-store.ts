@@ -42,7 +42,7 @@ export interface OrbSettingsState {
   status: 'idle' | 'loading' | 'ready' | 'unavailable' | 'error'
   /** Whole-load failure text. */
   error: string | null
-  /** False on Windows; the page stays visible with controls disabled. */
+  /** False until the host reports that this OS creates the ball. Linux stays false. */
   supported: boolean
   avatarUrl: string
   avatarError: Exclude<OrbAvatarWriteError, 'cancelled'> | null

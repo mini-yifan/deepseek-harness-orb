@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { parseSelectionHelperLine, startSelectionMonitor } from '../src/selection-monitor.ts'
 
 describe('selection helper protocol', () => {
@@ -43,6 +43,8 @@ describe('selection helper protocol', () => {
   })
 
   it('does not spawn a helper when the binary is missing', () => {
+    vi.stubGlobal('process', { ...process, platform: 'linux' })
     expect(startSelectionMonitor({ onEvent: () => undefined })).toBeUndefined()
+    vi.unstubAllGlobals()
   })
 })

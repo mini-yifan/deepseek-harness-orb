@@ -53,12 +53,14 @@ const harness = await vi.hoisted(async () => {
     readonly focus = vi.fn(() => { this.focused = true })
     readonly blur = vi.fn(() => { this.focused = false })
     readonly restore = vi.fn()
+    readonly setAlwaysOnTop = vi.fn()
     constructor(readonly options: {
       show?: boolean
       type?: string
       width?: number
       height?: number
       focusable?: boolean
+      skipTaskbar?: boolean
       x?: number
       y?: number
     }) {
@@ -120,6 +122,7 @@ const harness = await vi.hoisted(async () => {
     })
     readonly setOrbCodeAgentModel = vi.fn()
     readonly setOrbPermissionPreset = vi.fn()
+    readonly setOrbCoordinateMode = vi.fn()
     constructor(
       readonly node: string,
       readonly runtime: string,
@@ -257,7 +260,7 @@ function invokeSelection(channel: string, ...args: unknown[]): unknown {
 }
 
 function appWindows(): typeof harness.windows {
-  return harness.windows.filter(window => window.options.type !== 'panel')
+  return harness.windows.filter(window => window.options.type !== 'panel' && window.options.skipTaskbar !== true)
 }
 
 beforeEach(() => {
@@ -630,7 +633,36 @@ describe('desktop floating overlay', () => {
     expect(overlay?.ignoreMouseEvents).toBe(false)
   })
 
-  it('does not create a floating overlay off macOS', async () => {
+  it('creates a Windows overlay after Host ready and protects it during capture', async () => {
+    vi.stubGlobal('process', { ...process, platform: 'win32', resourcesPath: 'desktop-test-resources' })
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    harness.prepared.resolve()
+    await harness.hostStarted.promise
+    harness.hosts[0]!.ready.resolve()
+    await harness.navigated.promise
+    const overlay = harness.windows.find(window => window.urls.includes('dsh-app://shell/floating.html'))
+    const toolbar = harness.windows.find(window => window.urls.includes('dsh-app://shell/selection-toolbar.html'))
+    expect(overlay).toBeDefined()
+    expect(overlay?.options.type).toBeUndefined()
+    expect(overlay?.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver')
+    expect(toolbar?.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver')
+    expect(harness.app.dock.show).not.toHaveBeenCalled()
+    expect(harness.app.setActivationPolicy).not.toHaveBeenCalled()
+    expect(overlay?.contentProtection).toBe(false)
+    harness.hosts[0]!.onOverlayGuard?.({
+      type: 'overlay-guard', requestId: 1, action: 'begin', mode: 'capture',
+    })
+    expect(overlay?.contentProtection).toBe(true)
+    expect(toolbar?.contentProtection).toBe(true)
+    harness.hosts[0]!.onOverlayGuard?.({
+      type: 'overlay-guard', requestId: 2, action: 'end', mode: 'capture',
+    })
+    expect(overlay?.contentProtection).toBe(false)
+    expect(toolbar?.contentProtection).toBe(false)
+  })
+
+  it('does not create a floating overlay on Linux', async () => {
     vi.stubGlobal('process', { ...process, platform: 'linux', resourcesPath: 'desktop-test-resources' })
     await import('../src/main.ts')
     await harness.preparing.promise
