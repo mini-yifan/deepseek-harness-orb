@@ -1,4 +1,4 @@
-/** macOS Computer Use observation-frame overlay geometry and BrowserWindow construction. */
+/** Computer Use observation-frame overlay geometry and BrowserWindow construction. */
 
 import { BrowserWindow, screen } from 'electron'
 
@@ -101,6 +101,22 @@ export function observationFramePadding(
 }
 
 /**
+ * Convert a Windows observation rectangle from physical pixels to Electron DIP.
+ * macOS bounds are already logical points.
+ * @param region - Computer Use `ScreenInfo.bounds`.
+ * @returns the rectangle `observationFramePlacement` consumes.
+ */
+export function observationFrameRegion(region: OverlayRect): OverlayRect {
+  if (process.platform !== 'win32') return region
+  return screen.screenToDipRect(null, {
+    x: Math.round(region.x),
+    y: Math.round(region.y),
+    width: Math.round(region.width),
+    height: Math.round(region.height),
+  })
+}
+
+/**
  * Inflate the observation union so the stroke and glow sit just outside it, then intersect the display work area.
  * Intersection clips an edge that would leave the work area; it does not translate the overlay and keep its size.
  * @param region - Computer Use `ScreenInfo.bounds` in global logical points.
@@ -195,7 +211,7 @@ export function createObservationFrameWindow(): BrowserWindow {
     alwaysOnTop: true,
     skipTaskbar: true,
     focusable: false,
-    type: 'panel',
+    ...process.platform === 'win32' ? {} : { type: 'panel' as const },
     show: false,
     hasShadow: false,
     resizable: false,
@@ -210,8 +226,11 @@ export function createObservationFrameWindow(): BrowserWindow {
       webSecurity: true,
     },
   })
-  window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
+  if (process.platform === 'darwin') {
+    window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
+  }
   window.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, OBSERVATION_FRAME_ALWAYS_ON_TOP_RELATIVE)
+  if (process.platform === 'win32') window.setContentProtection(true)
   window.setIgnoreMouseEvents(true, { forward: true })
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   return window
@@ -226,12 +245,13 @@ export function createObservationFrameWindow(): BrowserWindow {
  */
 export function showObservationFrame(window: BrowserWindow, region: OverlayRect): void {
   if (window.isDestroyed()) return
-  const placement = observationFramePlacement(region)
+  const logical = observationFrameRegion(region)
+  const placement = observationFramePlacement(logical)
   window.setContentBounds(placement.bounds)
   window.setIgnoreMouseEvents(true, { forward: true })
   window.showInactive()
   window.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, OBSERVATION_FRAME_ALWAYS_ON_TOP_RELATIVE)
-  const padding = observationFramePadding(region, window.getContentBounds())
+  const padding = observationFramePadding(logical, window.getContentBounds())
   applyObservationFrameCss(window, padding.glow, padding.stroke)
 }
 
@@ -245,12 +265,14 @@ export function raiseOverlayAboveObservationFrame(
   overlay: BrowserWindow | undefined,
   toolbar?: BrowserWindow,
 ): void {
+  const level = process.platform === 'win32' ? 'screen-saver' as const : OVERLAY_ALWAYS_ON_TOP_LEVEL
+  const relative = process.platform === 'win32' ? undefined : FLOATING_OVERLAY_ALWAYS_ON_TOP_RELATIVE
   if (overlay !== undefined && !overlay.isDestroyed()) {
-    overlay.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, FLOATING_OVERLAY_ALWAYS_ON_TOP_RELATIVE)
+    overlay.setAlwaysOnTop(true, level, relative)
     overlay.moveTop()
   }
   if (toolbar !== undefined && !toolbar.isDestroyed() && toolbar.isVisible()) {
-    toolbar.setAlwaysOnTop(true, OVERLAY_ALWAYS_ON_TOP_LEVEL, FLOATING_OVERLAY_ALWAYS_ON_TOP_RELATIVE)
+    toolbar.setAlwaysOnTop(true, level, relative)
     toolbar.moveTop()
   }
 }

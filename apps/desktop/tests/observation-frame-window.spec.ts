@@ -11,9 +11,10 @@ const { FakeBrowserWindow } = vi.hoisted(() => {
     destroyed = false
     loading = false
     contentBounds = { x: 0, y: 0, width: 1, height: 1 }
+    contentProtection = false
     readonly loadHandlers: Array<() => void> = []
-    readonly options: { roundedCorners?: boolean }
-    constructor(options: { roundedCorners?: boolean } = {}) {
+    readonly options: { roundedCorners?: boolean; type?: string }
+    constructor(options: { roundedCorners?: boolean; type?: string } = {}) {
       this.options = options
     }
     isDestroyed() { return this.destroyed }
@@ -26,6 +27,7 @@ const { FakeBrowserWindow } = vi.hoisted(() => {
       this.alwaysOnTopRelativeLevel = relativeLevel
     }
     setVisibleOnAllWorkspaces() {}
+    setContentProtection(value: boolean) { this.contentProtection = value }
     moveTop() {}
     showInactive() {}
     setContentBounds(next: { x: number; y: number; width: number; height: number }) {
@@ -50,7 +52,15 @@ const { FakeBrowserWindow } = vi.hoisted(() => {
 
 vi.mock('electron', () => ({
   BrowserWindow: FakeBrowserWindow,
-  screen: { getDisplayNearestPoint: vi.fn() },
+  screen: {
+    getDisplayNearestPoint: vi.fn(),
+    screenToDipRect: vi.fn((_window: unknown, rect: {
+      x: number
+      y: number
+      width: number
+      height: number
+    }) => rect),
+  },
 }))
 
 import {
@@ -63,6 +73,7 @@ import {
   OVERLAY_ALWAYS_ON_TOP_LEVEL,
   observationFramePadding,
   observationFramePlacement,
+  observationFrameRegion,
   raiseOverlayAboveObservationFrame,
   showObservationFrame,
   type ObservationFramePlacement,
@@ -207,6 +218,12 @@ describe('observation frame geometry', () => {
     expect(window.ignoreMouseEventsForward).toBe(true)
     expect(window.alwaysOnTopLevel).toBe(OVERLAY_ALWAYS_ON_TOP_LEVEL)
     expect(window.alwaysOnTopRelativeLevel).toBe(OBSERVATION_FRAME_ALWAYS_ON_TOP_RELATIVE)
+    if (process.platform === 'win32') {
+      expect(window.contentProtection).toBe(true)
+      expect(window.options.type).toBeUndefined()
+    } else {
+      expect(window.options.type).toBe('panel')
+    }
     expect(OBSERVATION_FRAME_ALWAYS_ON_TOP_RELATIVE).toBeLessThan(FLOATING_OVERLAY_ALWAYS_ON_TOP_RELATIVE)
   })
 
@@ -226,16 +243,34 @@ describe('observation frame geometry', () => {
       moveTop: vi.fn(),
     }
     raiseOverlayAboveObservationFrame(overlay as never, hiddenToolbar as never)
-    expect(overlay.setAlwaysOnTop).toHaveBeenCalledWith(
-      true,
-      OVERLAY_ALWAYS_ON_TOP_LEVEL,
-      FLOATING_OVERLAY_ALWAYS_ON_TOP_RELATIVE,
-    )
+    if (process.platform === 'win32') {
+      expect(overlay.setAlwaysOnTop).toHaveBeenCalledWith(true, 'screen-saver', undefined)
+    } else {
+      expect(overlay.setAlwaysOnTop).toHaveBeenCalledWith(
+        true,
+        OVERLAY_ALWAYS_ON_TOP_LEVEL,
+        FLOATING_OVERLAY_ALWAYS_ON_TOP_RELATIVE,
+      )
+    }
     expect(overlay.moveTop).toHaveBeenCalledTimes(1)
     expect(hiddenToolbar.moveTop).not.toHaveBeenCalled()
     hiddenToolbar.visible = true
     raiseOverlayAboveObservationFrame(overlay as never, hiddenToolbar as never)
     expect(hiddenToolbar.moveTop).toHaveBeenCalledTimes(1)
+  })
+
+  it('maps Windows physical pixels to DIP before placing the ribbon', () => {
+    vi.stubGlobal('process', { ...process, platform: 'win32' })
+    vi.mocked(screen.getDisplayNearestPoint).mockReturnValue({ workArea } as never)
+    const physical = { x: 400, y: 240, width: 800, height: 600 }
+    const dip = { x: 200, y: 120, width: 400, height: 300 }
+    vi.mocked(screen.screenToDipRect).mockReturnValue(dip)
+    expect(observationFrameRegion(physical)).toEqual(dip)
+    const window = createObservationFrameWindow() as unknown as InstanceType<typeof FakeBrowserWindow>
+    showObservationFrame(window as never, physical)
+    expect(window.contentBounds).toEqual(observationFramePlacement(dip, workArea).bounds)
+    vi.unstubAllGlobals()
+    vi.mocked(screen.screenToDipRect).mockImplementation((_window, rect) => rect)
   })
 
   it('applies content bounds and CSS variables when showing the ribbon', () => {
