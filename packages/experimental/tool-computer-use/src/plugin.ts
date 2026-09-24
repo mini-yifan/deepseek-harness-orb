@@ -8,7 +8,13 @@ import { homedir } from 'node:os'
 import type { Context } from '@deepseek-ai/cordis'
 import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { ContentBlock } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, ContextFormed } from '@deepseek-ai/dsh-llm'
+
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'computer-use': { kind: 'computer-use' } & ContextFormed
+  }
+}
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { GenericCallView, ToolExecution } from '@deepseek-ai/dsh-tools'
 import type { Session } from '@deepseek-ai/dsh-session'
@@ -1091,8 +1097,7 @@ export function applyComputerUse(
         ...observation.blocks,
       ],
       source: {
-        kind: 'plugin',
-        plugin: PLUGIN_NAME,
+        kind: 'computer-use',
         form: 'notice',
         summary: 'Frontmost window attached',
       },

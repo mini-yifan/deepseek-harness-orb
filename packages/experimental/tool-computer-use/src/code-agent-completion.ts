@@ -7,6 +7,13 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller/types'
 import { boundContextSummary, createUserMessage } from '@deepseek-ai/dsh-llm'
+import type { ContextFormed } from '@deepseek-ai/dsh-llm'
+
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'computer-use': { kind: 'computer-use' } & ContextFormed
+  }
+}
 import type { SessionId, UserMessage } from '@deepseek-ai/dsh-session'
 
 /** Plugin id recorded on the parked completion notice. */
@@ -77,8 +84,7 @@ async function runWatch(watch: CodeAgentCompletionWatch, signal: AbortSignal): P
     watch.caller.followup(createUserMessage({
       content: [{ type: 'text', text: completionNoticeText(watch.sessionId, watch.task, outcome) }],
       source: {
-        kind: 'plugin',
-        plugin: COMPLETION_PLUGIN,
+        kind: 'computer-use',
         form: 'notice',
         summary: boundContextSummary(`Code agent ${watch.sessionId} finished`),
       },

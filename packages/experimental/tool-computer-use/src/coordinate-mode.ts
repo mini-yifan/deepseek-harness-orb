@@ -9,7 +9,13 @@ import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { z as zod } from 'zod'
 import type { ZodType } from 'zod'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
-import type { ToolSchema } from '@deepseek-ai/dsh-llm'
+import type { ContextFormed, ToolSchema } from '@deepseek-ai/dsh-llm'
+
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'computer-use': { kind: 'computer-use' } & ContextFormed
+  }
+}
 
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-session-projection'
@@ -70,8 +76,6 @@ interface OrbCoordinateMode {
   currentMode(): CoordinateMode
 }
 
-const PLUGIN_NOTICE = 'tool-computer-use'
-
 const observationCache = new WeakMap<object, ObservationRaster | false>()
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -122,7 +126,7 @@ function reconstructFromLog(session: Session): ObservationRaster | undefined {
     if (event === undefined) continue
     if (event.type === 'user/message') {
       const source = event.data.source
-      if (source.kind !== 'plugin' || source.plugin !== PLUGIN_NOTICE) continue
+      if (source.kind !== 'computer-use' || source.form !== 'notice') continue
       const raster = lastRasterIn(event.data.content)
       if (raster !== undefined) return raster
     }
