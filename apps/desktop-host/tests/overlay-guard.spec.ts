@@ -136,7 +136,7 @@ describe('computer-use overlay guard', () => {
           completeObservationFrameAck(event.requestId)
           return
         }
-        if (event.mode === 'input') {
+        if (event.type === 'overlay-guard' && event.mode === 'input') {
           completeOverlayGuardAck(event.requestId, [4])
           return
         }

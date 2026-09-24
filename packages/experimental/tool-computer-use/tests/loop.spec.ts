@@ -113,9 +113,7 @@ describe('computer-use agent loop', () => {
     expect(backend.actions.some(action => action.type === 'click')).toBe(true)
     const events = agent.session.snapshotEvents()
     const notices = events.filter(event => event.type === 'user/message'
-      && event.data.source.kind === 'plugin'
-      && 'plugin' in event.data.source
-      && event.data.source.plugin === 'tool-computer-use')
+      && event.data.source.kind === 'computer-use')
     expect(notices).toHaveLength(1)
     const notice = notices[0]
     if (notice === undefined || notice.type !== 'user/message') {
@@ -127,16 +125,11 @@ describe('computer-use agent loop', () => {
     )).toBe(true)
     const results = events.filter(event => event.type === 'tool/result')
     expect(results.some(event => event.data.message.content.some(block =>
-      block.type === 'tool-result' && block.content.some(part =>
-        part.type === 'text' && 'text' in part && part.text.includes('<frontmost_app>Pages</frontmost_app>'),
-      ),
+      block.type === 'text' && block.text.includes('<frontmost_app>Pages</frontmost_app>'),
     ))).toBe(true)
-    expect(results.some(event => event.data.message.content.some(block =>
-      block.type === 'tool-result' && block.content.some(part => part.type === 'image'),
-    ))).toBe(true)
+    expect(results.some(event => event.data.message.content.some(block => block.type === 'image'))).toBe(true)
     expect(agent.session.deriveMessages().some(message =>
-      message.content.some(block => block.type === 'image'
-        || (block.type === 'tool-result' && block.content.some(part => part.type === 'image'))),
+      message.content.some(block => block.type === 'image'),
     )).toBe(true)
   }, 30_000)
 
@@ -159,18 +152,12 @@ describe('computer-use agent loop', () => {
     ])
     const results = agent.session.snapshotEvents().filter(event => event.type === 'tool/result')
     expect(results).toHaveLength(2)
-    expect(results.every(event => event.data.message.content.some(block =>
-      block.type === 'tool-result' && block.isError !== true
-      && block.content.some(part => part.type === 'image'),
-    ))).toBe(true)
+    expect(results.every(event => event.data.message.isError !== true
+      && event.data.message.content.some(block => block.type === 'image'))).toBe(true)
     expect(adapter.requests).toHaveLength(2)
-    const followUpResults = adapter.requests[1]?.messages.flatMap(message =>
-      message.content.filter(block => block.type === 'tool-result'),
-    ) ?? []
+    const followUpResults = adapter.requests[1]?.messages.filter(message => message.role === 'tool') ?? []
     expect(followUpResults).toHaveLength(2)
-    expect(followUpResults.every(block =>
-      block.type === 'tool-result' && block.content.some(part => part.type === 'image'),
-    )).toBe(true)
+    expect(followUpResults.every(message => message.content.some(block => block.type === 'image'))).toBe(true)
   }, 30_000)
 
   it('skips first-frame images and refuses GUI tools on a text-only route', async () => {
@@ -184,13 +171,9 @@ describe('computer-use agent loop', () => {
     await idle
     expect(backend.actions).toEqual([])
     const notices = agent.session.snapshotEvents().filter(event => event.type === 'user/message'
-      && event.data.source.kind === 'plugin'
-      && 'plugin' in event.data.source
-      && event.data.source.plugin === 'tool-computer-use')
+      && event.data.source.kind === 'computer-use')
     expect(notices).toEqual([])
     const results = agent.session.snapshotEvents().filter(event => event.type === 'tool/result')
-    expect(results.some(event => event.data.message.content.some(block =>
-      block.type === 'tool-result' && block.isError === true,
-    ))).toBe(true)
+    expect(results.some(event => event.data.message.isError === true)).toBe(true)
   }, 30_000)
 })

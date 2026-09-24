@@ -13,7 +13,7 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
 import { resolveComputerUseConfig } from '../src/config.ts'
 import { createFakeDesktopBackend } from '../src/fake.ts'
-import { applyComputerUse, PLUGIN_NAME } from '../src/plugin.ts'
+import { applyComputerUse } from '../src/plugin.ts'
 import { DESKTOP_SELECTION_PREAMBLE } from '../src/selection-turn.ts'
 
 import type {} from '../src/coordinate-mode.ts'
@@ -92,8 +92,7 @@ describe('computer-use first-frame pre-step', () => {
     expect(decision.messages).toHaveLength(2)
     const notice = decision.messages[1]
     expect(notice?.source).toMatchObject({
-      kind: 'plugin',
-      plugin: PLUGIN_NAME,
+      kind: 'computer-use',
       form: 'notice',
     })
     expect(notice?.content.some(block => block.type === 'image')).toBe(true)
@@ -155,7 +154,7 @@ describe('computer-use first-frame pre-step', () => {
     expect(empty).toEqual({ kind: 'enter', messages: [] })
     const plugin = createUserMessage({
       content: [{ type: 'text', text: 'inject' }],
-      source: { kind: 'plugin', plugin: 'fixture', form: 'notice', summary: 'inject' },
+      source: { kind: 'computer-use', form: 'notice', summary: 'inject' },
     })
     const injected = await agentEvents(vision, owner).waterfall(
       'agent/pre-step',

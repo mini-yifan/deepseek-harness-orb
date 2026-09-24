@@ -9,7 +9,6 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { apply, BACKGROUND_ROLE, inject, name, queuedTaskText, slugFromTask, STATUS_TOOL_NAME, STOP_TOOL_NAME, TOOL_NAME, uniqueDirectory } from '../src/code-agent.ts'
 import {
   COMPLETION_BODY_MAX_CHARS,
-  COMPLETION_PLUGIN,
   watchCodeAgentCompletion,
 } from '../src/code-agent-completion.ts'
 import { autoAnswerQuestions, UNATTENDED_CUSTOM_ANSWER } from '../src/code-agent-unattended.ts'
@@ -255,7 +254,7 @@ function callerAgent(header: Partial<HeaderFacts> = {}) {
   }
 }
 
-function text(result: { content: { type: string; text?: string }[] }): string {
+function text(result: { content: readonly { type: string; text?: string }[] }): string {
   return result.content.filter(block => block.type === 'text').map(block => block.text).join('\n')
 }
 
@@ -658,8 +657,7 @@ describe('code_agent plugin', () => {
     code.resolveIdle()
     await expect.poll(() => caller.followups.length).toBe(1)
     expect(caller.followups[0]?.source).toMatchObject({
-      kind: 'plugin',
-      plugin: COMPLETION_PLUGIN,
+      kind: 'computer-use',
       form: 'notice',
     })
     expect(text({ content: caller.followups[0]!.content })).toContain('Wrote the Word document.')

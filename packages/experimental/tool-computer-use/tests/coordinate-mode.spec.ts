@@ -83,7 +83,7 @@ describe('computer-use coordinate-mode stamp', () => {
     await ctx.plugin(LocalAttachmentStore, { dshHome: home })
     applyComputerUse(ctx, createFakeDesktopBackend(), resolveComputerUseConfig({ postActionWaitMs: 0 }))
     const session = Session.create(SessionId('cu-coord-created'))
-    ctx.emit('agent/created', { agent: agentFor(session) })
+    ctx.emit('agent/created', { agent: agentFor(session), source: 'startup' })
     expect(loggedCoordinateMode(session)).toBe('pixel')
   })
 })
@@ -101,21 +101,17 @@ describe('computer-use observation raster cache', () => {
       content: [
         { type: 'text', text: 'notice' },
         {
-          type: 'tool-result',
-          toolCallId: ToolCallId('c1'),
-          content: [{
-            type: 'image',
-            attachment: {
-              attachmentId: AttachmentId('sha256:cu'),
-              mediaType: 'image/png',
-              bytes: 4,
-              width: 640,
-              height: 360,
-            },
-          }],
+          type: 'image',
+          attachment: {
+            attachmentId: AttachmentId('sha256:cu'),
+            mediaType: 'image/png',
+            bytes: 4,
+            width: 640,
+            height: 360,
+          },
         },
       ],
-      source: { kind: 'plugin', plugin: 'tool-computer-use', form: 'notice', summary: 'frontmost' },
+      source: { kind: 'computer-use', form: 'notice', summary: 'frontmost' },
     }), { surfaceOp: 'append' })
     expect(lastAttachedRaster(restored)).toEqual({ width: 640, height: 360 })
   })
@@ -156,7 +152,7 @@ describe('computer-use observation raster cache', () => {
           height: 50,
         },
       }],
-      source: { kind: 'plugin', plugin: 'other-plugin', form: 'notice', summary: 'other' },
+      source: { kind: 'user' },
     }), { surfaceOp: 'append' })
     expect(lastAttachedRaster(otherPlugin)).toBeUndefined()
 
@@ -166,7 +162,7 @@ describe('computer-use observation raster cache', () => {
         { type: 'text', text: 'empty notice' },
         { type: 'image', attachment: { attachmentId: AttachmentId('sha256:zero'), mediaType: 'image/png', bytes: 1, width: 0, height: 0 } },
       ],
-      source: { kind: 'plugin', plugin: 'tool-computer-use', form: 'notice', summary: 'empty' },
+      source: { kind: 'computer-use', form: 'notice', summary: 'empty' },
     }), { surfaceOp: 'append' })
     expect(lastAttachedRaster(emptyNotice)).toBeUndefined()
 

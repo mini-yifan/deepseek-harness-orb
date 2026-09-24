@@ -10,7 +10,7 @@ import {
   linkDevelopmentPluginStore,
 } from '../src/development-plugin-store.ts'
 import { DESKTOP_HOST_PROTOCOL_VERSION } from '../src/host-protocol.ts'
-import { parseDesktopPluginArgs } from '../src/project-manager.ts'
+import { parseDesktopPluginArgs } from '../src/plugin-spec.ts'
 import { DESKTOP_MARKET_VERSION } from '../src/market-plugin.ts'
 import type { DesktopRelease } from '../src/release.ts'
 
@@ -68,7 +68,7 @@ describe('desktop development plugin store', () => {
       hostDir: host,
       dependencyDir: dependencies,
       release: release(),
-      pluginStoreDir: store,
+      target: 'mac-arm64',
     })
     expect(realpathSync(join(project, 'node_modules', 'dshmarket'))).toBe(realpathSync(market))
     const manifest = JSON.parse(readFileSync(join(project, 'package.json'), 'utf8')) as {
