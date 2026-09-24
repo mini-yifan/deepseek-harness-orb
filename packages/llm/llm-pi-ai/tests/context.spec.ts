@@ -232,8 +232,7 @@ describe('pi-ai request context conversion', () => {
       ],
     })
     expect(JSON.stringify(context.messages[0])).toContain('/tmp/dsh/objects/aa/object')
-    expect(JSON.stringify(context.messages[0])).toContain('2048x1024px')
-    expect(JSON.stringify(context.messages[0])).not.toContain('request preview')
+    expect(JSON.stringify(context.messages[0])).toContain('request preview 1130x565px')
   })
 
   it('treats a tool message without isError as a successful result', () => {

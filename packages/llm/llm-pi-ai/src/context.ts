@@ -78,7 +78,7 @@ function userContent(
         const version = requestImages.get(block.attachment.attachmentId) as RequestImageAttachment
         content.push({
           type: 'text',
-          text: requestImageHandleText(block.attachment, resolveImageAccess(block.attachment)),
+          text: requestImageHandleText(block.attachment, version, resolveImageAccess(block.attachment)),
         })
         content.push({
           type: 'image',
