@@ -725,6 +725,7 @@ describe('borrow-only bindings', () => {
   })
 })
 
+
 describe('catalog-addressed navigation', () => {
   it('retains a projected child independently of its parent and shares its history generation', async ({ bench }) => {
     const b = bench()

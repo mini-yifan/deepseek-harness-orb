@@ -231,7 +231,7 @@ function TurnNavigatorRail(
   if (scrollTop > 1) fadeClasses.push(css.fadeTop)
   if (scrollTop < virtualizer.getTotalSize() - viewHeight - 1) fadeClasses.push(css.fadeBottom)
   return (
-    <div className={css.slot}>
+    <div className={css.slot} data-chat-turn-rail="">
       <nav
         className={css.frame}
         aria-label={t('chat.turnNavigation.label')}

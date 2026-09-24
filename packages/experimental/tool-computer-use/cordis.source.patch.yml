@@ -1,0 +1,16 @@
+# Source overlay for experimental Computer Use. Tool rows load TypeScript
+# through the CLI tsx loader. Not part of dsh-base.
+
+- insert:
+    - id: preset-computer-use
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: computer-use
+        order: 20
+        plugins:
+          - id: tool-computer-use
+            name: './src/index.ts'
+            config:
+              postActionWaitMs: 600
+          - id: tool-code-agent
+            name: './src/code-agent.ts'

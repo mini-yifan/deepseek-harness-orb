@@ -145,6 +145,27 @@ describe('Chat apply wiring', () => {
     await b.runtime.dispose()
   })
 
+  it('forces Compact transcript on the overlay surface even when Host Settings are Detailed', async () => {
+    vi.stubGlobal('location', { search: '?surface=overlay' })
+    try {
+      const b = await bench()
+      const row = b.runtime.slots.entries('settings.general.item')
+        .find(entry => entry.options.id === 'transcript-view')!
+      const face = (row.inject as unknown as () => TranscriptViewRowInjected)()
+      expect(face.hooks.transcriptView.getSnapshot()).toBe('compact')
+      b.chatSettings.publish({
+        status: 'ready', value: { linkOpening: 'sidebar', transcriptView: 'detailed', performanceUsage: 'detailed' }, revision: 1, writable: true,
+      })
+      expect(face.hooks.transcriptView.getSnapshot()).toBe('compact')
+      face.setTranscriptView('detailed')
+      expect(face.hooks.transcriptView.getSnapshot()).toBe('compact')
+      expect(b.chatSettings.set).not.toHaveBeenCalled()
+      await b.runtime.dispose()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('shares one Chat store while keeping it distinct from Conversation state', async () => {
     const b = await bench()
     const conversationStore = storeOf(b.runtime, 'conversation.session')

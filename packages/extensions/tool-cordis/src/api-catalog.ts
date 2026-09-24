@@ -1828,7 +1828,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       {
         signature: '@Remote(\'selectModel\') selectModel(request: SessionSelectModelRequest): Promise<SessionSelectModelValue>',
         description: 'Select one Session-local model after explicitly resuming the Session.',
-        parameters: [{ name: 'request', description: 'Session identity and requested model selection.' }],
+        parameters: [{ name: 'request', description: 'Session identity and requested model selection. `saveAsDefault: false` skips writing `agent-default-model`.' }],
         returns: 'the normalized selection installed for the Session.',
       },
       {
@@ -3346,7 +3346,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
   {
     key: 'webServer',
     summary: 'The browser HTTP carrier service.',
-    description: 'The browser HTTP carrier service. Activation listens immediately. Route registration order does not affect requests because configured named routes must be distinct, and the fallback handler answers anything not yet claimed during startup with 404 until its owner registers. A listen failure rejects initialization, and the boot process reports the failed fiber.',
+    description: 'The browser HTTP carrier service. Activation binds a TCP socket unless `listen` is false. Route registration order does not affect requests because configured named routes must be distinct, and the fallback handler answers anything not yet claimed during startup with 404 until its owner registers. A listen failure rejects initialization, and the boot process reports the failed fiber. In-process carriers call dispatch and never bind a port.',
     methods: [
       {
         signature: 'register(route: WebRoute): () => void',
@@ -3371,6 +3371,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Register a raw-HTML index transform, the escape hatch for markup no IndexInjection row expresses: renderIndex applies taps in registration order after rendering the structured rows.',
         parameters: [{ name: 'transform', description: 'pure html-to-html function.' }],
         returns: 'the disposer removing the transform.',
+      },
+      {
+        signature: 'async dispatch(request: Request): Promise<Response | undefined>',
+        description: 'Dispatch one Fetch request against named exact/prefix routes only. Unmatched pathnames return `undefined` so the carrier can keep its own fallback (Desktop SPA assets). This path never runs gzip or the fallback seat.',
+        parameters: [{ name: 'request', description: 'reconstructed Fetch request; Host and Origin must be forwarded so same-origin POST checks see the original carrier values.' }],
+        returns: 'the named-route Response, or `undefined` when no named route matches.',
       },
       {
         signature: 'applyIndexTaps(html: string): string',
@@ -4552,10 +4558,6 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'CommandInvocation',
     declaration: 'export interface CommandInvocation {\n    readonly commandId: CommandId;\n    readonly agent: Agent;\n    readonly rawInput: string;\n    readonly attachments: readonly (ImageBlock | FileBlock)[];\n    readonly signal: AbortSignal;\n}',
-  },
-  {
-    name: 'CommandResult',
-    declaration: 'export type CommandResult = {\n    readonly kind: \'success\';\n    readonly text?: string;\n    readonly sourceEventSeq?: SessionSeq;\n} | {\n    readonly kind: \'error\';\n    readonly text: string;\n};',
   },
   {
     name: 'CommandSubmitAttachment',
@@ -6471,7 +6473,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionSelectModelRequest',
-    declaration: 'export interface SessionSelectModelRequest extends ModelSelection {\n    readonly sessionId: SessionId;\n}',
+    declaration: 'export interface SessionSelectModelRequest extends ModelSelection {\n    readonly sessionId: SessionId;\n    readonly saveAsDefault?: boolean;\n}',
   },
   {
     name: 'SessionSelectModelValue',

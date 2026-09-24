@@ -1,0 +1,8 @@
+version: 1
+scenario: computer-use
+profile: headless
+composition: computer-use
+recording: authored
+header:
+  class: computer-use
+  pin: true

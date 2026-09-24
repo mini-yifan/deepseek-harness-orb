@@ -101,6 +101,7 @@ describe('real Loader composition', () => {
     expect(HttpServer.Config({ host: '127.0.0.1', port: 0 })).toEqual({
       host: '127.0.0.1',
       port: 0,
+      listen: true,
       compression: 'none',
       compressionLevel: 1,
       compressionThresholdBytes: 1024,
@@ -373,5 +374,190 @@ describe('real Loader composition', () => {
       if (root !== undefined) await rm(root, { recursive: true, force: true })
       root = firstRoot
     }
+  })
+
+  it('dispatches named routes in-process without binding a TCP socket', { timeout: 60_000 }, async () => {
+    const beforeSockets = process.getActiveResourcesInfo().filter(name => name === 'TCPWRAP').length
+    const ctx = new Context()
+    context = ctx
+    await ctx.plugin(HttpServer, { host: '127.0.0.1', port: 0, listen: false })
+    const server = ctx.webServer
+    expect(server.port).toBe(0)
+    expect(process.getActiveResourcesInfo().filter(name => name === 'TCPWRAP').length).toBe(beforeSockets)
+
+    server.register({
+      kind: 'prefix',
+      path: '/dsh-market',
+      handler: (req, res) => {
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({
+          method: req.method,
+          url: req.url,
+          host: req.headers.host,
+          origin: req.headers.origin,
+        }))
+      },
+    })
+    server.register({
+      kind: 'exact',
+      path: '/probe',
+      handler: (_req, res) => {
+        res.writeHead(200)
+        res.end('EXACT')
+      },
+    })
+    server.register({
+      kind: 'exact',
+      path: '/echo-body',
+      handler: async (req, res) => {
+        const chunks: Uint8Array[] = []
+        for await (const chunk of req) chunks.push(chunk)
+        res.statusCode = 201
+        res.setHeader('x-host', String(req.headers.host))
+        res.setHeader('x-names', ['a', 'b'])
+        expect(res.getHeader('x-host')).toBe('app')
+        res.writeHead(201, 'Created', { 'content-type': 'text/plain' })
+        res.write('part-')
+        res.end(Buffer.concat(chunks).toString('utf8'))
+      },
+    })
+    server.register({
+      kind: 'exact',
+      path: '/headers-list',
+      handler: (_req, res) => {
+        res.writeHead(200, [['X-A', '1'], ['x-b', 2], ['skip'], null] as never)
+        res.end()
+      },
+    })
+    server.register({
+      kind: 'exact',
+      path: '/stream-write',
+      handler: (_req, res) => {
+        let closed = 0
+        const onClose = (): void => { closed += 1 }
+        res.on('close', onClose)
+        res.once('close', onClose)
+        res.write(new Uint8Array([65]), 'utf8', () => undefined)
+        res.end(() => {
+          res.off('close', onClose)
+          res.write('late', () => undefined)
+          res.end()
+          res.destroy()
+        })
+      },
+    })
+    server.register({
+      kind: 'exact',
+      path: '/abort',
+      handler: (_req, res) => new Promise<void>((resolve) => {
+        res.on('close', () => { resolve() })
+      }),
+    })
+    server.register({
+      kind: 'exact',
+      path: '/throw',
+      handler: () => {
+        throw new Error('handler failed')
+      },
+    })
+    server.register({
+      kind: 'exact',
+      path: '/implicit-end',
+      handler: (_req, res) => {
+        res.setHeader('x-ok', 1)
+      },
+    })
+    server.register({
+      kind: 'exact',
+      path: '/empty-iter',
+      handler: async (req, res) => {
+        const chunks: Uint8Array[] = []
+        for await (const chunk of req) chunks.push(chunk)
+        res.end(String(chunks.length))
+      },
+    })
+    server.register({
+      kind: 'exact',
+      path: '/odd-headers',
+      handler: (_req, res) => {
+        res.writeHead(204, null as never)
+        res.writeHead(204, 5 as never)
+        res.writeHead(200, { skip: undefined, 'x-ok': ['yes'] } as never)
+        res.end(new Uint8Array([66]), () => undefined)
+      },
+    })
+    server.register({
+      kind: 'exact',
+      path: '/destroy',
+      handler: (_req, res) => {
+        res.write('x')
+        res.destroy()
+        res.destroy()
+      },
+    })
+    server.register({
+      kind: 'exact',
+      path: '/abort-body',
+      handler: async (req, res) => {
+        req.destroy()
+        const chunks: Uint8Array[] = []
+        for await (const chunk of req) chunks.push(chunk)
+        res.end(String(chunks.length))
+      },
+    })
+
+    const posted = await server.dispatch(new Request('dsh-app://app/dsh-market/install', {
+      method: 'POST',
+      headers: { host: 'app', origin: 'dsh-app://app', 'content-type': 'application/json' },
+      body: '{"ok":true}',
+    }))
+    expect(posted).toBeDefined()
+    expect(posted?.status).toBe(200)
+    expect(await posted?.json()).toEqual({
+      method: 'POST',
+      url: '/dsh-market/install',
+      host: 'app',
+      origin: 'dsh-app://app',
+    })
+    const echoed = await server.dispatch(new Request('dsh-app://app/echo-body', {
+      method: 'POST',
+      body: 'payload',
+    }))
+    expect(echoed?.status).toBe(201)
+    expect(await echoed?.text()).toBe('part-payload')
+    expect(echoed?.headers.get('x-names')).toBe('a, b')
+    const listed = await server.dispatch(new Request('dsh-app://app/headers-list'))
+    expect(listed?.headers.get('x-a')).toBe('1')
+    expect(listed?.headers.get('x-b')).toBe('2')
+    expect(await (await server.dispatch(new Request('dsh-app://app/stream-write')))?.text()).toBe('A')
+    const abort = new AbortController()
+    const aborted = server.dispatch(new Request('dsh-app://app/abort', { signal: abort.signal }))
+    abort.abort()
+    await expect(aborted).resolves.toBeDefined()
+    expect((await server.dispatch(new Request('dsh-app://app/throw')))?.status).toBe(400)
+    expect((await server.dispatch(new Request('dsh-app://app/implicit-end')))?.headers.get('x-ok')).toBe('1')
+    expect(await (await server.dispatch(new Request('dsh-app://app/empty-iter')))?.text()).toBe('0')
+    const emptyChunk = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array())
+        controller.enqueue(new TextEncoder().encode('z'))
+        controller.close()
+      },
+    })
+    expect(await (await server.dispatch(new Request('dsh-app://app/empty-iter', {
+      method: 'POST',
+      body: emptyChunk,
+      // Node's Fetch RequestInit for streaming bodies.
+      duplex: 'half',
+    } as RequestInit)))?.text()).toBe('1')
+    expect((await server.dispatch(new Request('dsh-app://app/odd-headers')))?.headers.get('x-ok')).toBe('yes')
+    expect(await (await server.dispatch(new Request('dsh-app://app/destroy')))?.text()).toBe('x')
+    expect(await (await server.dispatch(new Request('dsh-app://app/abort-body', {
+      method: 'POST',
+      body: 'ignored',
+    })))?.text()).toBe('0')
+    expect((await server.dispatch(new Request('dsh-app://app/probe')))?.status).toBe(200)
+    expect(await server.dispatch(new Request('dsh-app://app/no/such/route'))).toBeUndefined()
+    expect(new URL('dsh-app://app').host).toBe('app')
   })
 })

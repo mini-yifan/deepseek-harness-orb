@@ -411,6 +411,7 @@ describe('JsonTree', () => {
   it('reports clipboard failure, resets feedback, and clears a prior timer', async () => {
     vi.useFakeTimers()
     writeText.mockRejectedValue(new Error('denied'))
+    Object.defineProperty(document, 'execCommand', { configurable: true, value: undefined })
     const view = render(<JsonTree data={{ value: 'x' }} />)
     const row = screen.getByRole('treeitem')
     fireEvent.mouseOver(row)

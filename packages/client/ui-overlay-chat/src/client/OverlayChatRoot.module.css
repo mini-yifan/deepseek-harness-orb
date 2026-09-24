@@ -1,0 +1,38 @@
+:global(html),
+:global(body) {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+:global(html) {
+  background: transparent;
+}
+
+:global(body) {
+  background: var(--dsw-alias-bg-base);
+}
+
+:global(#root) {
+  height: 100%;
+}
+
+.shell {
+  box-sizing: border-box;
+  height: 100%;
+  overflow: auto;
+  --dsh-chat-content-width: 100%;
+  --dsh-composer-side-clearance: 0px;
+}
+
+.shell :global([data-chat-turn-rail]) {
+  display: none;
+}
+
+/* FeedbackDialog (and other input-overlay entries) portal to document.body;
+   this host only has to exist. */
+.inputOverlay {
+  width: 0;
+  height: 0;
+  overflow: visible;
+}

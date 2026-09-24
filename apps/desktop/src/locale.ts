@@ -125,6 +125,21 @@ export const en = {
   mandatoryCopyFailed: 'Copy failed. Select and copy the address below manually.',
   mandatoryAddress: 'Download address',
   mandatoryNotification: 'Return to the application to confirm installation and restart.',
+  floatingOpenMain: 'Open Main Window',
+  floatingAgentSettings: 'Floating Agent Settings',
+  floatingBackgroundAgentSettings: 'Background Agent Settings',
+  floatingNoModels: 'No models available.',
+  floatingEffortDefault: 'Default',
+  floatingQuit: 'Quit',
+  selectionToolbarEnable: 'Enable Selection Toolbar',
+  selectionToolbarDisable: 'Disable Selection Toolbar',
+  millifractionEnable: 'Enable millifraction coordinates',
+  millifractionDisable: 'Disable millifraction coordinates',
+  millifractionConfirmTitle: 'Change coordinate encoding',
+  millifractionConfirmMessage: 'The new encoding takes effect in a new conversation.',
+  millifractionConfirmDetail: 'The current conversation stays unchanged and remains in History. Cancel leaves the default and this chat as they are.',
+  millifractionConfirmOk: 'Create new conversation',
+  millifractionConfirmCancel: 'Cancel',
 } as const
 
 /** Every Desktop locale supplies the complete English key set. */
@@ -255,6 +270,21 @@ export const zh = {
   mandatoryCopyFailed: '复制失败，请手动选择下方地址复制。',
   mandatoryAddress: '下载地址',
   mandatoryNotification: '返回应用确认安装并重启。',
+  floatingOpenMain: '打开主窗口',
+  floatingAgentSettings: '悬浮球 Agent 设置',
+  floatingBackgroundAgentSettings: '后台 Agent 设置',
+  floatingNoModels: '没有可用的模型。',
+  floatingEffortDefault: '默认',
+  floatingQuit: '退出',
+  selectionToolbarEnable: '开启划词',
+  selectionToolbarDisable: '关闭划词',
+  millifractionEnable: '打开千分比坐标',
+  millifractionDisable: '关闭千分比坐标',
+  millifractionConfirmTitle: '更改坐标编码',
+  millifractionConfirmMessage: '新编码只在新对话中生效。',
+  millifractionConfirmDetail: '当前对话不变，仍可从历史记录打开。取消不写入、不新建。',
+  millifractionConfirmOk: '新建对话',
+  millifractionConfirmCancel: '取消',
 } as const satisfies DesktopMessages
 
 /** Locale payload exposed to the Desktop-owned renderer. */

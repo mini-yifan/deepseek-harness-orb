@@ -41,6 +41,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-subagent-control` | `interrupt_agent`, `list_agents`, `send_message` | `ctx.tools`, `ctx.subagents`, `ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`, `tool/result`, `child session events through ctx.subagents` | - | The globally named control tools over continuable background subagents: provider-bound `tool-subagent` instances register distinct delegation tools, while this package registers `send_message` and `interrupt_agent` once, plus `list_agents` from its separately loaded `/list-agents` plugin (whose catalog rows use the sessionProjections and live Agent registries). |
 | `@deepseek-ai/dsh-tool-jobs` | `job_kill`, `job_list`, `job_output` | `ctx.tools`, `ctx.jobs`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `user/message via agent.inject() for background completion notices` | - | The kind-agnostic background-job controller: background bash commands, PTY sends, and subagents are read, listed, and killed through the same three tools. Loading the plugin attaches the controller that arms producers' `ctx.jobs.start()`. |
 | `@deepseek-ai/dsh-experimental-tool-agent-team` | `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | All nine tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
+| `@deepseek-ai/dsh-experimental-tool-computer-use` | `click`, `code_agent`, `code_agent_status`, `code_agent_stop`, `drag`, `hotkey`, `input_text`, `list_apps`, `long_press`, `long_wait`, `open_app`, `open_in_browser`, `open_in_finder`, `screenshot`, `scroll`, `wait` | `ctx.tools`, `ctx.systemPrompt`, `ctx.attachments`, `ctx.llm + an image-capable route (execution and first-frame screenshot)`, `ctx.sessionController (code_agent)` | `tool/call`, `durable attachment (saveImage)`, `user/message first-frame notice`, `tool/result`, `session.create + session.prompt (code_agent)`, `user/message plugin notice (code_agent completion)` | - | Experimental opt-in GUI tools plus Computer Use-only code_agent, code_agent_status, and code_agent_stop. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no observe tool: the first user turn and every GUI result attach the overlay-skipped frontmost window plus foreground tags. screenshot writes Desktop files and the clipboard when the user asked for a file or paste. list_apps and open_app switch applications without clicking the Dock. code_agent tools are registered only with the Computer Use preset; the catalog stub satisfies inject so the schema is harvestable. |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-workspace-dependencies` | `load_workspace_dependencies` | `ctx.tools` | `tool/call`, `tool/result` | - | - |
@@ -2307,6 +2308,444 @@ Wait for the next teammate status, mailbox, or shared-task change after this cal
 Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
 
 All nine tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names.
+
+<a id="deepseek-aidsh-experimental-tool-computer-use"></a>
+
+## `@deepseek-ai/dsh-experimental-tool-computer-use`
+
+### `click`
+
+Click at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. Use left (default) or right button; count 2 is a double-click. Optional modifiers (shift, cmd, option, control) are held only for this click.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "screen_index": {
+      "type": "integer",
+      "description": "0 for the attached frontmost-window screenshot."
+    },
+    "position": {
+      "type": "array",
+      "description": "[x, y] as a 0–1000 fraction of that screenshot, not pixels.",
+      "items": {
+        "type": "number"
+      }
+    },
+    "button": {
+      "type": "string",
+      "description": "Mouse button. Default: left.",
+      "default": "left",
+      "enum": [
+        "left",
+        "right"
+      ]
+    },
+    "count": {
+      "type": "integer",
+      "description": "1 for a single click, 2 for a double-click. Default: 1.",
+      "default": 1,
+      "enum": [
+        1,
+        2
+      ]
+    },
+    "modifiers": {
+      "type": "array",
+      "description": "Modifier keys held only for this click, for example [\"shift\"] or [\"cmd\"]. Omit for a plain click.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "screen_index",
+    "position"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `code_agent`
+
+Delegate one stretch of file search or file production to a standard-mode Code agent that appears in the desktop sidebar like a user-created session. Do the stretch in this chat when it is visible GUI or when one search or one command will answer or feed the next click. A second search that you expect will hit the point stays here. Do not call this tool for visible GUI work such as opening WeChat or clicking a button in Pages — use the GUI tools instead. Do not call this tool for a short lookup such as today's weather or current headlines — use web_search or web_fetch in this chat. Call this tool when you are still digging through files, searches, or commands, or when the user asked for a file, document, spreadsheet, or site. The last step being a click does not keep the investigation here. Omit session_id to create a new blank standard session: write a Word document, make a gobang game, write an HTML research report, or any task that is not a follow-up to a previous code_agent result. Pass session_id with the id returned by an earlier code_agent result when continuing the same artifact, for example making that Word document's font green, or another stretch of the same investigation. Do not pass a previous id when the new work is unrelated. session_id must be a session this Computer Use agent started. task is the stretch to enqueue. The call returns after the standard session accepts the message; it does not wait for that session to finish. Tell the user the background Code agent is running. Continue with a GUI action in this turn only when it does not need this result; otherwise end the turn. Do not call wait, long_wait, or bash sleep to poll that session. A plugin notice arrives later when that session is idle and this session is idle; then decide again: do remaining GUI, or call code_agent with that session_id for another stretch, and tell the user the short conclusion. Do not recite a long report. Pass cwd when the user named a path or said this folder and <frontmost_folder> is present. Omit cwd to create a new subdirectory under this session's workspace. session_id cannot target this Computer Use session, a subagent child, or a non-standard session.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "task": {
+      "type": "string",
+      "description": "User message to enqueue on a standard session. Required."
+    },
+    "session_id": {
+      "type": "string",
+      "description": "Existing standard session this Computer Use agent started. Omit to create a blank session. Required when following up on the same artifact; forbidden when starting unrelated work."
+    },
+    "cwd": {
+      "type": "string",
+      "description": "Workspace directory for a newly created session. Pass a named path or <frontmost_folder>. Omit to create a new subdirectory under this Computer Use session's cwd."
+    }
+  },
+  "required": [
+    "task"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/code-agent.ts`](../packages/experimental/tool-computer-use/src/code-agent.ts)
+
+### `code_agent_status`
+
+List background Code agent sessions this Computer Use agent started. Returns the count plus each task name, working directory, and running or idle status. Does not include sessions from other Computer Use chats or the main window. Stopped and finished sessions stay listed as idle so they can be continued.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/code-agent.ts`](../packages/experimental/tool-computer-use/src/code-agent.ts)
+
+### `code_agent_stop`
+
+Stop a background Code agent this Computer Use agent started. Cancels the current turn and drops queued follow-ups. The session stays idle so a later code_agent call with the same session_id can continue. Does not delete files. session_id is required and must be a session this Computer Use agent started.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "description": "Background Code agent session this Computer Use agent started. Required."
+    }
+  },
+  "required": [
+    "session_id"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/code-agent.ts`](../packages/experimental/tool-computer-use/src/code-agent.ts)
+
+### `drag`
+
+Drag from a start 0–1000 position to an end 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "start_screen_index": {
+      "type": "integer",
+      "description": "0 for the attached frontmost-window screenshot."
+    },
+    "start_position": {
+      "type": "array",
+      "description": "[x, y] start as a 0–1000 fraction of that screenshot, not pixels.",
+      "items": {
+        "type": "number"
+      }
+    },
+    "end_screen_index": {
+      "type": "integer",
+      "description": "0 for the attached frontmost-window screenshot."
+    },
+    "end_position": {
+      "type": "array",
+      "description": "[x, y] end as a 0–1000 fraction of that screenshot, not pixels.",
+      "items": {
+        "type": "number"
+      }
+    }
+  },
+  "required": [
+    "start_screen_index",
+    "start_position",
+    "end_screen_index",
+    "end_position"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `hotkey`
+
+Press a key combination on the desktop, then return the post-action screenshot. System screenshot shortcuts (Cmd/Win+Shift+3/4/5) are rejected.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "keys": {
+      "type": "array",
+      "description": "Key names in order, for example [\"cmd\", \"c\"].",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "keys"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `input_text`
+
+Click to focus a 0–1000 position on the attached frontmost-window screenshot, type text, optionally replace existing content and press Enter, then return the post-action screenshot.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "screen_index": {
+      "type": "integer",
+      "description": "0 for the attached frontmost-window screenshot."
+    },
+    "position": {
+      "type": "array",
+      "description": "[x, y] as a 0–1000 fraction of that screenshot, not pixels; the click focuses the field.",
+      "items": {
+        "type": "number"
+      }
+    },
+    "text": {
+      "type": "string",
+      "description": "Characters to type after the focus click."
+    },
+    "replace": {
+      "type": "boolean",
+      "description": "When true, select all in the focused field before typing. Default: false.",
+      "default": false
+    },
+    "submit": {
+      "type": "boolean",
+      "description": "When true, press Enter after typing. Default: false.",
+      "default": false
+    }
+  },
+  "required": [
+    "screen_index",
+    "position",
+    "text"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `list_apps`
+
+List running regular (Dock-visible) applications by display name, then return the current frontmost-window screenshot. Use this when the attached window is the wrong app.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `long_press`
+
+Press and hold the left button at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. duration_seconds defaults to 3 and must be 1–10.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "screen_index": {
+      "type": "integer",
+      "description": "0 for the attached frontmost-window screenshot."
+    },
+    "position": {
+      "type": "array",
+      "description": "[x, y] as a 0–1000 fraction of that screenshot, not pixels.",
+      "items": {
+        "type": "number"
+      }
+    },
+    "duration_seconds": {
+      "type": "number",
+      "description": "Hold duration in seconds. Default: 3. Must be 1–10.",
+      "default": 3
+    }
+  },
+  "required": [
+    "screen_index",
+    "position"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `long_wait`
+
+Pause 10, 30, 60, or 120 seconds, then return a fresh frontmost-window screenshot without moving the pointer. Only for a visible long job such as a download, installer, export, or on-screen generation. Pick the smallest wait_seconds that covers remaining progress; 120 only when the screenshot already shows a minutes-long job. Ordinary loading uses wait. Do not use for code_agent.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "wait_seconds": {
+      "type": "integer",
+      "description": "Seconds to pause. Must be 10, 30, 60, or 120.",
+      "enum": [
+        10,
+        30,
+        60,
+        120
+      ]
+    }
+  },
+  "required": [
+    "wait_seconds"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `open_app`
+
+Activate a running application or launch it by display name or bundle id, then return the post-action screenshot. Use this when the attached window is the wrong app. Do not click the Dock.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Localized application name or bundle identifier, for example Pages or com.apple.TextEdit."
+    }
+  },
+  "required": [
+    "name"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `open_in_browser`
+
+Open the default browser, or a full http(s) URL in it, then return the post-action screenshot. This is the user-visible browser. Do not use web_fetch as a substitute. Chinese in path or query must be plain text, never CJK percent-encoding such as %E5... / %E8....
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string",
+      "description": "http(s) URL to open. Omit to launch the default browser with no page."
+    }
+  }
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `open_in_finder`
+
+Open a folder in Finder, open a file with its default app, or reveal a file in Finder, then return the post-action screenshot. Omit path to open the Desktop. Use reveal_only only to select a file in Finder (Open With or rename/move). Pass a real path; do not OCR one from the screenshot.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Absolute or ~ path. Omit to open the user Desktop."
+    },
+    "reveal_only": {
+      "type": "boolean",
+      "description": "When true and path is a file, reveal it in Finder instead of opening it. Default: false.",
+      "default": false
+    }
+  }
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `screenshot`
+
+Save the current frontmost-window screenshot to the user Desktop and copy it to the clipboard. Returns the saved file path. After bash, search, or web_fetch, call this to refresh the frontmost window. After click, type, wait, or open, do not call it again — those results already attach a window. Use when the user asked for a screenshot file or needs the image on the clipboard to paste.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `scroll`
+
+Scroll up or down at a 0–1000 position on the attached frontmost-window screenshot, then return the post-action screenshot. scroll_level is 1–10.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "screen_index": {
+      "type": "integer",
+      "description": "0 for the attached frontmost-window screenshot."
+    },
+    "position": {
+      "type": "array",
+      "description": "[x, y] as a 0–1000 fraction of that screenshot, not pixels.",
+      "items": {
+        "type": "number"
+      }
+    },
+    "direction": {
+      "type": "string",
+      "description": "Scroll direction.",
+      "enum": [
+        "up",
+        "down"
+      ]
+    },
+    "scroll_level": {
+      "type": "integer",
+      "description": "Scroll magnitude from 1 (smallest) to 10 (largest)."
+    }
+  },
+  "required": [
+    "screen_index",
+    "position",
+    "direction",
+    "scroll_level"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `wait`
+
+Pause 1 second, then return a fresh frontmost-window screenshot without moving the pointer. Use for page refresh, a loader, or a control that has not appeared yet. Do not use for code_agent.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+Experimental opt-in GUI tools plus Computer Use-only code_agent, code_agent_status, and code_agent_stop. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no observe tool: the first user turn and every GUI result attach the overlay-skipped frontmost window plus foreground tags. screenshot writes Desktop files and the clipboard when the user asked for a file or paste. list_apps and open_app switch applications without clicking the Dock. code_agent tools are registered only with the Computer Use preset; the catalog stub satisfies inject so the schema is harvestable.
 
 <a id="deepseek-aidsh-tool-todo"></a>
 

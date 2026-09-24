@@ -50,11 +50,25 @@ describe('chat flow font-size axis', () => {
     const actions = read('MessageIconActions.module.css')
     // The user clock reads the secondary tier. The assistant tail is one
     // further pixel down, matching its usage trigger and supporting metadata.
+    expect(declarationsFrom(actions, '.actions')).toEqual(expect.arrayContaining([
+      'min-width: 0',
+      'max-width: 100%',
+    ]))
     expect(declarationsFrom(actions, '.timeStart')).toEqual(expect.arrayContaining([
+      'min-width: 0',
+      'overflow: hidden',
       'font-size: var(--dsh-content-font-size-secondary, 13px)',
+      'text-overflow: ellipsis',
     ]))
     expect(declarationsFrom(actions, '.timeEnd')).toEqual(expect.arrayContaining([
+      'min-width: 0',
+      'overflow: hidden',
       'font-size: calc(var(--dsh-content-font-size-secondary, 13px) - 1px)',
+      'text-overflow: ellipsis',
+    ]))
+    expect(declarationsFrom(actions, '.action')).toEqual(expect.arrayContaining([
+      'flex: none',
+      'width: calc(28px + var(--dsh-content-font-delta, 0px))',
     ]))
     expect(declarationsFrom(actions, '.action svg')).toEqual(expect.arrayContaining([
       'width: calc(15px + var(--dsh-content-font-delta, 0px))',
@@ -126,6 +140,7 @@ describe('chat flow font-size axis', () => {
     // keeps the row's plain 8px rhythm instead of overlapping.
     const css = read('TurnUsagePanel.module.css')
     const narrow = /@media \(max-width: 480px\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? ''
+    expect(narrow).toMatch(/\.root,\n  \.trigger \{\s*flex: none/)
     expect(narrow).toMatch(/\.trigger \{[^}]*justify-content: center/)
     expect(narrow).toMatch(/\.trigger \{[^}]*width: calc\(28px \+ var\(--dsh-content-font-delta, 0px\)\)/)
     expect(narrow).toMatch(/\.trigger \{[^}]*padding: 6px/)

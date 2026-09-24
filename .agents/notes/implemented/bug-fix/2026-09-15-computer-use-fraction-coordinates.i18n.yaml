@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-15-computer-use-fraction-coordinates.md
+2026-09-15-computer-use-fraction-coordinates.md: 2ec652d2be5d817b06494ec6c906ad3f27f615fb
+2026-09-15-computer-use-fraction-coordinates.zh.md: de6432adddfb2d7fbdec8f8220c84020b9917ef8

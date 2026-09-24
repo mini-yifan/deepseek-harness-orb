@@ -296,6 +296,12 @@ export interface SessionCreateValue {
 /** Session model-selection request. */
 export interface SessionSelectModelRequest extends ModelSelection {
   readonly sessionId: SessionId
+  /**
+   * When false, install the selection on this Session only and leave the
+   * deployment Agent default unchanged. Omitted or true also writes
+   * `agent-default-model`.
+   */
+  readonly saveAsDefault?: boolean
 }
 
 /** Accepted model selection after Host resolution. */

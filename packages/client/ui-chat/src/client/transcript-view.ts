@@ -15,10 +15,15 @@ export class TranscriptViewPolicy {
 
   /**
    * @param host - durable Chat settings scope.
+   * @param forceCompact - overlay iframe: Compact regardless of Host Settings.
    */
-  constructor(private readonly host: ConfigForm<ChatSettings>) {
+  constructor(
+    private readonly host: ConfigForm<ChatSettings>,
+    private readonly forceCompact = false,
+  ) {
     this.unsubscribe = host.subscribe(() => { this.adopt() })
-    this.adopt()
+    if (forceCompact) this.mode.set('compact')
+    else this.adopt()
   }
 
   /** Release the accepted-value subscription. */
@@ -29,6 +34,7 @@ export class TranscriptViewPolicy {
    * @param mode - Compact, Standard, Detailed, or Verbose work details.
    */
   setMode(mode: TranscriptViewMode): void {
+    if (this.forceCompact) return
     if (this.mode.getSnapshot() === mode) return
     this.mode.set(mode)
     void this.host.set(TRANSCRIPT_VIEW_FIELD, mode)
@@ -36,6 +42,7 @@ export class TranscriptViewPolicy {
 
   /** Adopt the latest accepted Host section without writing it back. */
   private adopt(): void {
+    if (this.forceCompact) return
     const section = this.host.getSnapshot().value
     if (section === undefined) return
     const saved = section.transcriptView

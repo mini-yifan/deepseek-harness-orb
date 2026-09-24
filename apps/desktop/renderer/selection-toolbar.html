@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self' dsh-app://app;">
+    <title></title>
+    <link rel="stylesheet" href="selection-toolbar.css">
+  </head>
+  <body>
+    <div id="bar">
+      <button id="search" type="button"></button>
+      <span id="translate-group">
+        <button id="translate" type="button"></button>
+        <button id="translate-arrow" type="button" aria-haspopup="menu">▾</button>
+      </span>
+      <button id="send-to-agent" type="button"></button>
+    </div>
+    <div id="language-menu" hidden role="menu">
+      <button id="language-zh" type="button" role="menuitem"></button>
+      <button id="language-en" type="button" role="menuitem"></button>
+    </div>
+    <script src="selection-toolbar.js"></script>
+  </body>
+</html>

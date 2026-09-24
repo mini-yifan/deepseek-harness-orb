@@ -23,11 +23,39 @@ interface PlatformSessionEvent {
   readonly session: PlatformSession | null
 }
 
-type DesktopHostEvent = ReadyEvent | FatalEvent | PlatformSessionEvent | { readonly type: 'shutdown-complete' } | {
+interface OverlayGuardEvent {
+  readonly type: 'overlay-guard'
+  readonly requestId: number
+  readonly action: 'begin' | 'end'
+  readonly mode: 'capture' | 'input'
+}
+
+interface ObservationFrameEvent {
+  readonly type: 'observation-frame'
+  readonly requestId: number
+  readonly bounds: { readonly x: number; readonly y: number; readonly width: number; readonly height: number } | null
+}
+
+interface SckCaptureEvent {
+  readonly type: 'sck-capture'
+  readonly requestId: number
+  readonly region: string
+  readonly excludeWindowIds: readonly number[]
+  readonly output: string
+}
+
+type DesktopHostEvent = ReadyEvent | FatalEvent | PlatformSessionEvent | OverlayGuardEvent | ObservationFrameEvent | SckCaptureEvent | { readonly type: 'shutdown-complete' } | {
   readonly type: 'update-tasks'
   readonly requestId: number
   readonly active: boolean
   readonly error?: string
+}
+
+/** Electron-side handlers for Computer Use overlay IPC. */
+export interface DesktopOrbHostHandlers {
+  onOverlayGuard?(event: OverlayGuardEvent): readonly number[] | void | Promise<readonly number[] | void>
+  onObservationFrame?(event: ObservationFrameEvent): void | Promise<void>
+  onSckCapture?(event: SckCaptureEvent): void | Promise<void>
 }
 
 const MAX_HOST_DIAGNOSTIC_CHARS = 64 * 1024
@@ -62,6 +90,18 @@ function isDesktopHostEvent(message: unknown): message is DesktopHostEvent {
     case 'update-tasks':
       return Number.isSafeInteger(candidate.requestId) && typeof candidate.active === 'boolean'
         && (candidate.error === undefined || typeof candidate.error === 'string')
+    case 'overlay-guard':
+      return Number.isSafeInteger(candidate.requestId)
+        && (candidate.action === 'begin' || candidate.action === 'end')
+        && (candidate.mode === 'capture' || candidate.mode === 'input')
+    case 'observation-frame':
+      return Number.isSafeInteger(candidate.requestId)
+        && (candidate.bounds === null || (typeof candidate.bounds === 'object' && candidate.bounds !== null))
+    case 'sck-capture':
+      return Number.isSafeInteger(candidate.requestId)
+        && typeof candidate.region === 'string'
+        && Array.isArray(candidate.excludeWindowIds)
+        && typeof candidate.output === 'string'
     default:
       return false
   }
@@ -151,6 +191,7 @@ export class DesktopHostProcess {
     private readonly packageManager?: { readonly pnpm: string; readonly nodeBin: string },
 
     private readonly onPlatformSession?: (session: PlatformSession | null) => void,
+    private readonly orb?: DesktopOrbHostHandlers,
   ) {}
 
   /**
@@ -185,6 +226,27 @@ export class DesktopHostProcess {
       }
       if (message.type === 'ready') this.readyResolve({ url: message.url, injections: message.injections })
       else if (message.type === 'platform-session') this.onPlatformSession?.(message.session)
+      else if (message.type === 'overlay-guard') {
+        void Promise.resolve(this.orb?.onOverlayGuard?.(message)).then((ids) => {
+          child.send({ type: 'overlay-guard-ack', requestId: message.requestId, excludeWindowIds: ids ?? [] })
+        }).catch((error: unknown) => { this.fail(error instanceof Error ? error : new Error(String(error))) })
+      }
+      else if (message.type === 'observation-frame') {
+        void Promise.resolve(this.orb?.onObservationFrame?.(message)).then(() => {
+          child.send({ type: 'observation-frame-ack', requestId: message.requestId })
+        }).catch((error: unknown) => { this.fail(error instanceof Error ? error : new Error(String(error))) })
+      }
+      else if (message.type === 'sck-capture') {
+        void Promise.resolve(this.orb?.onSckCapture?.(message)).then(() => {
+          child.send({ type: 'sck-capture-ack', requestId: message.requestId })
+        }).catch((error: unknown) => {
+          child.send({
+            type: 'sck-capture-ack',
+            requestId: message.requestId,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        })
+      }
       else if (message.type === 'shutdown-complete') {
         if (this.stopping) this.shutdownCompleted = true
         else this.fail(new Error('dsh desktop host acknowledged an unrequested shutdown'))

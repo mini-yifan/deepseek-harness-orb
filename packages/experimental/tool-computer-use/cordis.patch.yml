@@ -1,0 +1,63 @@
+# Desktop overlay for experimental Computer Use.
+# Inserts one agent preset. GUI tools stay on that preset and are not on the
+# default coding preset. Not part of dsh-base.
+
+- insert:
+    - id: preset-computer-use
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: computer-use
+        order: 20
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              suffix: Your working directory is {{cwd}}.
+              prefix: >-
+                You are a desktop GUI agent powered by the {{model}} model.
+                You operate the screen and decide each stretch yourself.
+                Do visible GUI, and a search or command that will answer or feed the next click, in this chat.
+                A second search that you expect will hit the point stays here.
+                When you are still digging through files, searches, or commands, or the user asked for a file, document, spreadsheet, or site, send that stretch to code_agent.
+                Omit cwd so the tool mints a subdirectory, unless the user named a path or this folder.
+                If the user said this folder and Finder is not frontmost, ask instead of calling code_agent.
+                After code_agent accepts, tell the user the background agent is running.
+                Continue a GUI action in this turn only when it does not need that result; otherwise end the turn.
+                Call code_agent_status or code_agent_stop when the user asks about or stops background work.
+                When a plugin notice reports that work finished, decide again: do remaining GUI, or call code_agent with that session_id for another stretch, then tell the user the short conclusion.
+          - id: tool-bash
+            name: '@deepseek-ai/dsh-tool-bash'
+            disabled: !!js process.platform === 'win32'
+          - id: tool-pwsh
+            name: '@deepseek-ai/dsh-tool-pwsh'
+            disabled: !!js process.platform !== 'win32'
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024
+          - id: tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'
+          - id: tool-web
+            name: '@deepseek-ai/dsh-tool-web'
+            config:
+              fetch: true
+              searchTimeoutMs: 60000
+          - id: tool-computer-use
+            name: '@deepseek-ai/dsh-experimental-tool-computer-use'
+            config:
+              postActionWaitMs: 600
+          - id: tool-code-agent
+            name: '@deepseek-ai/dsh-experimental-tool-computer-use/code-agent'

@@ -51,7 +51,8 @@ export class ThemePresenter {
    * @param snapshot - resolved theme snapshot from ctx.theme.
    */
   apply(snapshot: ThemeSnapshot): void {
-    const scheme = snapshot.active.colorScheme
+    const active = snapshot.active
+    const scheme = active.colorScheme
     document.documentElement.style.colorScheme = scheme
     document.documentElement.setAttribute(THEME_SOURCE_ATTRIBUTE,
       snapshot.preference === 'system' ? 'system' : scheme)
@@ -61,7 +62,7 @@ export class ThemePresenter {
     body.style.setProperty(CONTENT_FONT_SIZE_VARIABLE, `${snapshot.fontSize}px`)
     for (const name of this.appliedTokens) body.style.removeProperty(name)
     this.appliedTokens = []
-    for (const [name, value] of Object.entries(snapshot.active.tokens)) {
+    for (const [name, value] of Object.entries(active.tokens)) {
       body.style.setProperty(name, value)
       this.appliedTokens.push(name)
     }

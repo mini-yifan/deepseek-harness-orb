@@ -64,6 +64,10 @@ const appPackageFiles: Readonly<Record<string, readonly string[]>> = {
   '@deepseek-ai/dsh': ['lib/*.js', 'lib/types/*.d.ts'],
   '@deepseek-ai/dsh-desktop-host': [
     'lib/index.js',
+    'lib/computer-use-overlay-guard.js',
+    'lib/computer-use-orb-permission.js',
+    'lib/computer-use-orb-code-agent-model.js',
+    'lib/computer-use-orb-coordinate-mode.js',
   ],
   // Sourcemaps stay out by payload policy; the worker-preview surface
   // (dist/preview.html and dist/preview/) backs opt-in experimental
@@ -230,6 +234,12 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   // The headless entry and its startup row share the JSON projection code
   // through a hashed tsdown chunk; both import it by relative path.
   '@deepseek-ai/dsh-headless': ['lib/json-stream-*.js'],
+  // Computer Use GUI tools plus the overlay code_agent and the macOS capture helper.
+  '@deepseek-ai/dsh-experimental-tool-computer-use': [
+    'lib/code-agent.js',
+    'lib/macos-sck-capture',
+    'lib/libmacos-sck-capture.dylib',
+  ],
 }
 
 function sameStringList(actual: readonly string[] | undefined, expected: readonly string[]): boolean {

@@ -4,7 +4,7 @@ import type { ContentBlock, ImageBlock, LlmImageRequestBudget } from './types.ts
 import type { RequestMessage } from './types.ts'
 import type { Message } from './message.ts'
 import type {
-  AttachmentStore, FileAttachmentRef, ImageAttachmentRef, ImageMediaType, RequestImageAttachment,
+  AttachmentStore, FileAttachmentRef, ImageAttachmentRef, ImageMediaType,
 } from '@deepseek-ai/dsh-attachment'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 
@@ -82,21 +82,20 @@ export function textOnlyImageText(ref: ImageAttachmentRef): string {
  * Stable model-facing handle for one exact request image. Identity comes from
  * the occurrence's own durable reference: request versions are prepared per
  * attachment id, so one shared version may serve occurrences whose display
- * names differ.
+ * names differ. Request-preview pixel sizes are omitted so they cannot be read
+ * as a click coordinate space.
  * @param ref - the occurrence's durable normalized attachment.
- * @param version - exact request-image dimensions shown beside the text.
  * @param access - optional path resolved for the current tool execution world.
- * @returns attachment handle and request-image dimensions.
+ * @returns attachment identity plus optional normalized-object access.
  */
 export function requestImageHandleText(
   ref: ImageAttachmentRef,
-  version: Pick<RequestImageAttachment, 'width' | 'height'>,
   access?: ImageAttachmentAccess,
 ): string {
-  const preview = `Image ${imageIdentity(ref)}; request preview ${version.width}x${version.height}px.`
+  const identity = `Image ${imageIdentity(ref)}.`
   return access === undefined
-    ? `${preview} It may be resized or re-encoded; source dimensions, format, and byte size may differ.`
-    : preview + normalizedAccessText(ref, access)
+    ? `${identity} It may be resized or re-encoded; source dimensions, format, and byte size may differ.`
+    : `${identity}${normalizedAccessText(ref, access)}`
 }
 
 /**

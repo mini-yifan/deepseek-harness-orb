@@ -63,6 +63,8 @@ import BrowserUseRegistry from '@deepseek-ai/dsh-browser-use'
 import * as StagehandBrowserTools from '@deepseek-ai/dsh-experimental-browser-use-stagehand-native'
 import type TeamService from '@deepseek-ai/dsh-experimental-agent-team'
 import * as ToolTeam from '@deepseek-ai/dsh-experimental-tool-agent-team'
+import * as ToolComputerUse from '@deepseek-ai/dsh-experimental-tool-computer-use'
+import * as ToolCodeAgent from '@deepseek-ai/dsh-experimental-tool-computer-use/code-agent'
 import * as ToolTodo from '@deepseek-ai/dsh-tool-todo'
 import type PluginManager from '@deepseek-ai/dsh-plugin-manager'
 import * as PluginManagerTools from '@deepseek-ai/dsh-plugin-manager/tools'
@@ -617,6 +619,42 @@ const TOOL_PACKAGES: ToolPackage[] = [
     scope: ctx => catalogChildScopes.get(ctx) as Agent,
     note:
       'All nine tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-experimental-tool-computer-use',
+    dir: 'tool-computer-use',
+    source: {
+      click: 'packages/experimental/tool-computer-use/src/plugin.ts',
+      drag: 'packages/experimental/tool-computer-use/src/plugin.ts',
+      hotkey: 'packages/experimental/tool-computer-use/src/plugin.ts',
+      input_text: 'packages/experimental/tool-computer-use/src/plugin.ts',
+      list_apps: 'packages/experimental/tool-computer-use/src/plugin.ts',
+      long_press: 'packages/experimental/tool-computer-use/src/plugin.ts',
+      long_wait: 'packages/experimental/tool-computer-use/src/plugin.ts',
+      open_app: 'packages/experimental/tool-computer-use/src/plugin.ts',
+      open_in_browser: 'packages/experimental/tool-computer-use/src/plugin.ts',
+      open_in_finder: 'packages/experimental/tool-computer-use/src/plugin.ts',
+      screenshot: 'packages/experimental/tool-computer-use/src/plugin.ts',
+      scroll: 'packages/experimental/tool-computer-use/src/plugin.ts',
+      wait: 'packages/experimental/tool-computer-use/src/plugin.ts',
+      code_agent: 'packages/experimental/tool-computer-use/src/code-agent.ts',
+      code_agent_status: 'packages/experimental/tool-computer-use/src/code-agent.ts',
+      code_agent_stop: 'packages/experimental/tool-computer-use/src/code-agent.ts',
+    },
+    requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.attachments', 'ctx.llm + an image-capable route (execution and first-frame screenshot)', 'ctx.sessionController (code_agent)'],
+    writes: ['tool/call', 'durable attachment (saveImage)', 'user/message first-frame notice', 'tool/result', 'session.create + session.prompt (code_agent)', 'user/message plugin notice (code_agent completion)'],
+    async mount(ctx) {
+      await ctx.plugin(CatalogAttachmentStore)
+      await ctx.plugin(ToolComputerUse)
+      ctx.provide('sessionController', {
+        create: () => Promise.reject(new Error('gen-tool-catalog: code_agent execute is unreachable')),
+        prompt: () => Promise.reject(new Error('gen-tool-catalog: code_agent execute is unreachable')),
+        inspect: () => Promise.reject(new Error('gen-tool-catalog: code_agent execute is unreachable')),
+      })
+      await ctx.plugin(ToolCodeAgent)
+    },
+    note:
+      'Experimental opt-in GUI tools plus Computer Use-only code_agent, code_agent_status, and code_agent_stop. Not in dsh-base. Production capture and input are macOS-only and fail at execute elsewhere. Tests and snapshots inject a fake desktop through applyComputerUse; this catalog boot uses the production apply, which registers schemas without posting input. There is no observe tool: the first user turn and every GUI result attach the overlay-skipped frontmost window plus foreground tags. screenshot writes Desktop files and the clipboard when the user asked for a file or paste. list_apps and open_app switch applications without clicking the Dock. code_agent tools are registered only with the Computer Use preset; the catalog stub satisfies inject so the schema is harvestable.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-todo',

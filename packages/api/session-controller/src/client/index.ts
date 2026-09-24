@@ -26,6 +26,23 @@ export type {
 } from './transport.ts'
 export { createScope, scopeOf } from './scope.ts'
 export type { AgentContext, AgentScopeHandle } from './scope.ts'
+export {
+  OVERLAY_APP_ORIGIN,
+  OVERLAY_CLIENT_SURFACE,
+  OVERLAY_INDEX_HREF,
+  OVERLAY_READY_MESSAGE_TYPE,
+  OVERLAY_SESSION_MESSAGE_TYPE,
+  OVERLAY_SESSIONS_CURRENT_PERSIST,
+  OVERLAY_SHELL_ORIGIN,
+  OVERLAY_THEME_MESSAGE_TYPE,
+  SESSIONS_CURRENT_PERSIST,
+  overlayClientSurface,
+  overlaySessionId,
+  overlaySessionMessage,
+  overlayThemeMessage,
+  sessionsSelectionPersistName,
+} from './overlay-surface.ts'
+export type { OverlaySessionMessage, OverlayThemeMessage } from './overlay-surface.ts'
 export { SessionCreateError, SessionForkError } from './sessions/service.ts'
 export type { SessionBinding, SessionListState, SessionSummary } from './sessions/service.ts'
 export type {

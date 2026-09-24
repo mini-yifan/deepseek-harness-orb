@@ -45,6 +45,7 @@
 | `@deepseek-ai/dsh-tool-subagent-control` | `interrupt_agent`、`list_agents`、`send_message` | `ctx.tools`、`ctx.subagents`、`ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`、`tool/result`、`child session events through ctx.subagents` | - | 这些是控制可继续后台 subagent 的全局命名工具：绑定提供方的 `tool-subagent` 实例注册不同的委派工具；本包注册一次 `send_message` 和 `interrupt_agent`，另由 `list_agents` 通过单独加载的 `/list-agents` 插件提供，其目录行使用 sessionProjections 和实时 Agent 注册表。 |
 | `@deepseek-ai/dsh-tool-jobs` | `job_kill`、`job_list`、`job_output` | `ctx.tools`、`ctx.jobs`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`user/message via agent.inject() for background completion notices` | - | 与任务种类无关的后台任务控制器：后台 bash 命令、PTY 发送和 subagent 都通过相同的 3 个工具读取、列出和终止。加载该插件会挂接控制器，从而启用生产方的 `ctx.jobs.start()`。 |
 | `@deepseek-ai/dsh-experimental-tool-agent-team` | `interrupt_agent`、`list_agents`、`send_message`、`spawn_teammate`、`team_task_create`、`team_task_get`、`team_task_list`、`team_task_update`、`wait_agent` | `ctx.tools`、`ctx.systemPrompt`、`ctx.agentTeams`、`an exact live Team member Agent` | `tool/call`、`team/member`、`team/message/queued`、`team/message/delivered`、`team/task`、`tool/result` | - | 这 9 个工具限定于隐式 Team Lead 与持久 teammate 作用域。随产品发布的 dsh-base bundle 默认禁用该包；文档中的 Agent Teams profile patch 会启用它，并禁用旧 continuable child 的同名控制工具。 |
+| `@deepseek-ai/dsh-experimental-tool-computer-use` | `click`、`code_agent`、`code_agent_status`、`code_agent_stop`、`drag`、`hotkey`、`input_text`、`list_apps`、`long_press`、`long_wait`、`open_app`、`open_in_browser`、`open_in_finder`、`screenshot`、`scroll`、`wait` | `ctx.tools`、`ctx.systemPrompt`、`ctx.attachments`、`ctx.llm + an image-capable route (execution and first-frame screenshot)`、`ctx.sessionController (code_agent)` | `tool/call`、`durable attachment (saveImage)`、`user/message first-frame notice`、`tool/result`、`session.create + session.prompt (code_agent)`、`user/message plugin notice (code_agent completion)` | - | 实验性可选 GUI 工具，外加仅 Computer Use 的 code_agent、code_agent_status 和 code_agent_stop。不在 dsh-base 中。生产环境的捕获与输入仅 macOS 实现，其他平台在执行时失败。测试与 snapshot 通过 applyComputerUse 注入假桌面；本目录引导使用生产 apply，只注册 schema，不发送输入。没有 observe 工具：首次用户回合和每次 GUI 结果都会附上跳过 overlay 后的最前窗口以及前台标签。screenshot 会在用户要文件或粘贴时写入桌面文件和剪贴板。list_apps 与 open_app 用于切换应用，不要去点 Dock。code_agent 工具只随 Computer Use preset 注册；本目录桩满足 inject，以便采集 schema。 |
 | `@deepseek-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`、`owning Agent session` | `tool/call`、`todo/write`、`tool/result` | - | todo_write 是会话所有的状态；UI 将最新的 todo/write 事件渲染为检查清单。`allowParallelInProgress` 是没有默认值的必填项，因此本目录明确选择 `true`，对应描述允许同时存在多个 `in_progress` 项。选择 `false` 的部署会获得同一工具，但描述会要求只能有 1 个活动任务。 |
 | `@deepseek-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`、`ctx.workflowEngine`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents the script children)` | `tool/call`、`tool/result` | - | - |
 | `@deepseek-ai/dsh-tool-workspace-dependencies` | `load_workspace_dependencies` | `ctx.tools` | `tool/call`, `tool/result` | - | - |
@@ -2314,6 +2315,443 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 
 这 10 个工具限定于隐式 Team Lead 与持久 teammate 作用域。随产品发布的 dsh-base bundle 默认禁用该包；文档中的 Agent Teams profile patch 会启用它，并禁用旧 continuable child 的同名控制工具。
 
+<a id="deepseek-aidsh-experimental-tool-computer-use"></a>
+
+## `@deepseek-ai/dsh-experimental-tool-computer-use`
+
+### `click`
+
+在附加的最前窗口截图的 0–1000 位置点击，然后返回动作后的截屏。使用左键（默认）或右键；count 为 2 表示双击。可选修饰键（shift、cmd、option、control）仅在此次单击期间按住。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "screen_index": {
+      "type": "integer",
+      "description": "0 for the attached frontmost-window screenshot."
+    },
+    "position": {
+      "type": "array",
+      "description": "[x, y] as a 0–1000 fraction of that screenshot, not pixels.",
+      "items": {
+        "type": "number"
+      }
+    },
+    "button": {
+      "type": "string",
+      "description": "Mouse button. Default: left.",
+      "default": "left",
+      "enum": [
+        "left",
+        "right"
+      ]
+    },
+    "count": {
+      "type": "integer",
+      "description": "1 for a single click, 2 for a double-click. Default: 1.",
+      "default": 1,
+      "enum": [
+        1,
+        2
+      ]
+    },
+    "modifiers": {
+      "type": "array",
+      "description": "Modifier keys held only for this click, for example [\"shift\"] or [\"cmd\"]. Omit for a plain click.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "screen_index",
+    "position"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `code_agent`
+
+把一段文件查找或文件制作委派给标准模式的 Code agent，它会像用户创建的会话一样出现在桌面侧栏。这一段是可见 GUI，或一次搜索、一条命令就能回答或供下一步点击使用时，留在本对话做。判断再搜一次就能落到要点的第二次搜索也留在这里。可见 GUI 工作不要调用此工具，例如打开微信或在 Pages 里点击按钮——改用 GUI 工具。短查询不要调用此工具，例如今天的天气或当前新闻标题——改用本对话里的 web_search 或 web_fetch。还在连续翻文件、搜索或跑命令，或用户要的是文件、文档、表格或网站时，调用此工具。最后一步是点击，不把这段查找留在这里。省略 session_id 以新建空白 standard 会话：写一份 Word、做一个五子棋、写一份 HTML 调研报告，或任何不是先前 code_agent 结果之续写的任务。续写同一产物时传入先前 code_agent 结果返回的 id，例如把那份 Word 的字体改成绿色，或同一段查找的下一段。新工作无关时不要传入先前 id。session_id 必须是这个 Computer Use agent 启动过的会话。task 是要入队的这一段。调用在 standard 会话接受该消息后返回；不等待该会话完成。告诉用户后台 Code agent 正在运行。仅当本轮 GUI 不依赖该结果时继续，否则结束本回合。不要调用 wait、long_wait 或 bash sleep 去轮询该会话。之后当该会话空闲且本会话也空闲时会到达一条插件通知；然后重新决定：做剩下的 GUI，或用该 session_id 再交一段，并用几句话告诉用户。不要复述长报告。用户点名了路径或说了这个文件夹且存在 <frontmost_folder> 时传入 cwd。省略 cwd 会在本会话工作区下新建子目录。session_id 不能指向本 Computer Use 会话、subagent 子会话或非 standard 会话。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "task": {
+      "type": "string",
+      "description": "User message to enqueue on a standard session. Required."
+    },
+    "session_id": {
+      "type": "string",
+      "description": "Existing standard session this Computer Use agent started. Omit to create a blank session. Required when following up on the same artifact; forbidden when starting unrelated work."
+    },
+    "cwd": {
+      "type": "string",
+      "description": "Workspace directory for a newly created session. Pass a named path or <frontmost_folder>. Omit to create a new subdirectory under this Computer Use session's cwd."
+    }
+  },
+  "required": [
+    "task"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-computer-use/src/code-agent.ts`](../packages/experimental/tool-computer-use/src/code-agent.ts)
+
+### `code_agent_status`
+
+列出这个 Computer Use agent 启动过的后台 Code agent 会话。返回数量以及每个任务名、工作目录、running 或 idle 状态。不含其他 Computer Use 对话或主窗口的会话。已停止和已完成的会话仍列为 idle，以便续写。
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+来源：[`packages/experimental/tool-computer-use/src/code-agent.ts`](../packages/experimental/tool-computer-use/src/code-agent.ts)
+
+### `code_agent_stop`
+
+停止这个 Computer Use agent 启动过的后台 Code agent。取消当前回合并丢掉已排队的追加。会话保持 idle，之后用同一 session_id 再调 code_agent 可以续写。不删除文件。session_id 必填，且必须是这个 Computer Use agent 启动过的会话。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "description": "Background Code agent session this Computer Use agent started. Required."
+    }
+  },
+  "required": [
+    "session_id"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-computer-use/src/code-agent.ts`](../packages/experimental/tool-computer-use/src/code-agent.ts)
+
+### `drag`
+
+从起始 0–1000 位置拖到结束 0–1000 位置（在附加的最前窗口截图上），然后返回动作后的截屏。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "start_screen_index": {
+      "type": "integer",
+      "description": "0 for the attached frontmost-window screenshot."
+    },
+    "start_position": {
+      "type": "array",
+      "description": "[x, y] start as a 0–1000 fraction of that screenshot, not pixels.",
+      "items": {
+        "type": "number"
+      }
+    },
+    "end_screen_index": {
+      "type": "integer",
+      "description": "0 for the attached frontmost-window screenshot."
+    },
+    "end_position": {
+      "type": "array",
+      "description": "[x, y] end as a 0–1000 fraction of that screenshot, not pixels.",
+      "items": {
+        "type": "number"
+      }
+    }
+  },
+  "required": [
+    "start_screen_index",
+    "start_position",
+    "end_screen_index",
+    "end_position"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `hotkey`
+
+在桌面上按下组合键，然后返回动作后的截屏。系统截屏快捷键（Cmd/Win+Shift+3/4/5）会被拒绝。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "keys": {
+      "type": "array",
+      "description": "Key names in order, for example [\"cmd\", \"c\"].",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "keys"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `input_text`
+
+点击以聚焦附加的最前窗口截图上的 0–1000 位置，输入文本，可选择替换现有内容并按 Enter，然后返回动作后的截屏。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "screen_index": {
+      "type": "integer",
+      "description": "0 for the attached frontmost-window screenshot."
+    },
+    "position": {
+      "type": "array",
+      "description": "[x, y] as a 0–1000 fraction of that screenshot, not pixels; the click focuses the field.",
+      "items": {
+        "type": "number"
+      }
+    },
+    "text": {
+      "type": "string",
+      "description": "Characters to type after the focus click."
+    },
+    "replace": {
+      "type": "boolean",
+      "description": "When true, select all in the focused field before typing. Default: false.",
+      "default": false
+    },
+    "submit": {
+      "type": "boolean",
+      "description": "When true, press Enter after typing. Default: false.",
+      "default": false
+    }
+  },
+  "required": [
+    "screen_index",
+    "position",
+    "text"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `list_apps`
+
+按显示名列出正在运行的常规（Dock 可见）应用，然后返回当前最前窗口截图。附加窗口不是目标应用时使用。
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+来源：[`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `long_press`
+
+在附加的最前窗口截图的 0–1000 位置按住左键，然后返回动作后的截屏。duration_seconds 默认 3，必须为 1–10。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "screen_index": {
+      "type": "integer",
+      "description": "0 for the attached frontmost-window screenshot."
+    },
+    "position": {
+      "type": "array",
+      "description": "[x, y] as a 0–1000 fraction of that screenshot, not pixels.",
+      "items": {
+        "type": "number"
+      }
+    },
+    "duration_seconds": {
+      "type": "number",
+      "description": "Hold duration in seconds. Default: 3. Must be 1–10.",
+      "default": 3
+    }
+  },
+  "required": [
+    "screen_index",
+    "position"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `long_wait`
+
+暂停 10、30、60 或 120 秒，然后返回新的最前窗口截屏，不移动指针。仅用于看得见的长任务，如下载、安装器、导出或屏幕上的生成。选能覆盖剩余进度的最小 wait_seconds；120 只在截图已经写明还要几分钟时使用。普通加载用 wait。不要用于 code_agent。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "wait_seconds": {
+      "type": "integer",
+      "description": "Seconds to pause. Must be 10, 30, 60, or 120.",
+      "enum": [
+        10,
+        30,
+        60,
+        120
+      ]
+    }
+  },
+  "required": [
+    "wait_seconds"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `open_app`
+
+按显示名或 bundle id 激活正在运行的应用，或启动它，然后返回动作后的截屏。附加窗口不是目标应用时使用。不要去点 Dock。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Localized application name or bundle identifier, for example Pages or com.apple.TextEdit."
+    }
+  },
+  "required": [
+    "name"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `open_in_browser`
+
+打开默认浏览器，或在其中打开完整 http(s) URL，然后返回动作后的截屏。这是用户可见浏览器。不要用 web_fetch 顶替。路径或查询中的中文必须是明文，不得使用 %E5... / %E8... 这类 CJK 百分号编码。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string",
+      "description": "http(s) URL to open. Omit to launch the default browser with no page."
+    }
+  }
+}
+```
+
+来源：[`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `open_in_finder`
+
+在 Finder 打开文件夹、用默认应用打开文件，或在 Finder 中显示文件，然后返回动作后的截屏。省略 path 则打开桌面。仅在要在 Finder 中选中文件（打开方式或重命名/移动）时使用 reveal_only。传入真实路径；不要从截屏 OCR。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "description": "Absolute or ~ path. Omit to open the user Desktop."
+    },
+    "reveal_only": {
+      "type": "boolean",
+      "description": "When true and path is a file, reveal it in Finder instead of opening it. Default: false.",
+      "default": false
+    }
+  }
+}
+```
+
+来源：[`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `screenshot`
+
+把当前最前窗口截图保存到用户桌面并复制到剪贴板。返回保存的文件路径。bash、search 或 web_fetch 之后调用它来刷新最前窗口。click、type、wait 或 open 之后不要再调——那些结果已经附上窗口。当用户要截图文件或需要把图片放到剪贴板以便粘贴时使用。
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+来源：[`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `scroll`
+
+在附加的最前窗口截图的 0–1000 位置向上或向下滚动，然后返回动作后的截屏。scroll_level 为 1–10。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "screen_index": {
+      "type": "integer",
+      "description": "0 for the attached frontmost-window screenshot."
+    },
+    "position": {
+      "type": "array",
+      "description": "[x, y] as a 0–1000 fraction of that screenshot, not pixels.",
+      "items": {
+        "type": "number"
+      }
+    },
+    "direction": {
+      "type": "string",
+      "description": "Scroll direction.",
+      "enum": [
+        "up",
+        "down"
+      ]
+    },
+    "scroll_level": {
+      "type": "integer",
+      "description": "Scroll magnitude from 1 (smallest) to 10 (largest)."
+    }
+  },
+  "required": [
+    "screen_index",
+    "position",
+    "direction",
+    "scroll_level"
+  ]
+}
+```
+
+来源：[`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+### `wait`
+
+暂停 1 秒，然后返回新的最前窗口截屏，不移动指针。用于页面刷新、加载中，或控件尚未出现。不要用于 code_agent。
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+来源：[`packages/experimental/tool-computer-use/src/plugin.ts`](../packages/experimental/tool-computer-use/src/plugin.ts)
+
+实验性可选 GUI 工具，外加仅 Computer Use 的 code_agent、code_agent_status 和 code_agent_stop。不在 dsh-base 中。生产环境的捕获与输入仅 macOS 实现，其他平台在执行时失败。测试与 snapshot 通过 applyComputerUse 注入假桌面；本目录引导使用生产 apply，只注册 schema，不发送输入。没有 observe 工具：首次用户回合和每次 GUI 结果都会附上跳过 overlay 后的最前窗口以及前台标签。screenshot 会在用户要文件或粘贴时写入桌面文件和剪贴板。list_apps 与 open_app 用于切换应用，不要去点 Dock。code_agent 工具只随 Computer Use preset 注册；本目录桩满足 inject，以便采集 schema。
 
 <a id="deepseek-aidsh-tool-todo"></a>
 

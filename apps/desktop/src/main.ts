@@ -1,6 +1,7 @@
 import { WINDOWS_TITLEBAR_HEIGHT } from './windows-layout.ts'
 /** Electron shell: desktop project ownership, custom protocol, windows, and lifecycle. */
 
+import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -29,6 +30,16 @@ import { installMicrophonePermissions } from './microphone-permissions.ts'
 import { DesktopBackendController } from './backend-controller.ts'
 import { DESKTOP_IPC, SCHEME, assertDesktopSender, type DesktopUpdateState } from './ipc.ts'
 import { formatDesktopMessage, resolveDesktopLocale, resolveDesktopStartupLocale } from './locale.ts'
+import {
+  clampFloatingWindow,
+  createFloatingWindow,
+  moveFloatingBall,
+  setFloatingExpanded,
+  unsnapDockedBall,
+} from './floating-window.ts'
+import { ensureOrbWorkspaceDir, readFloatingSessionId, writeFloatingSessionId } from './floating-session.ts'
+import { readOrbAgentModels } from './orb-agent-models.ts'
+import { readOrbPermission } from './orb-permission.ts'
 import { claimDesktopSingleInstance } from './single-instance.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
 import { serveWebDocument, authenticateWebHost, forwardWebRequest } from './web-document.ts'
@@ -296,6 +307,8 @@ async function main(): Promise<void> {
   const updateJournal = journalDirectory === undefined ? undefined : new DesktopUpdateJournal(journalDirectory, app.getVersion())
   const resources = runtimeResources()
   const paths = resolveDesktopPaths()
+  const computerUsePatch = join(app.getAppPath(), 'packages/experimental/tool-computer-use/cordis.patch.yml')
+  if (existsSync(computerUsePatch)) process.env.DSH_COMPUTER_USE_PATCH = computerUsePatch
   const development = !app.isPackaged
   const primaryRuntime = development
     ? developmentPrimaryRuntime()
@@ -573,6 +586,74 @@ async function main(): Promise<void> {
       return forwardWebRequest(request, hostUrl, hostCookie)
     }
     return Promise.resolve(new Response(null, { status: 404 }))
+  })
+
+  const shellPreload = fileURLToPath(new URL('./preload.cjs', import.meta.url))
+  const floatingWindow = createFloatingWindow(shellPreload, currentDesktopLocale().messages, () => {
+    if (mainWindow !== undefined && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus() }
+  }, () => { app.quit() })
+  floatingWindow.once('ready-to-show', () => { floatingWindow.showInactive() })
+  void floatingWindow.loadURL(`${SCHEME}://shell/floating.html`)
+  const shellSender = (event: IpcMainInvokeEvent): void => {
+    if (event.sender !== floatingWindow.webContents) throw new Error('dsh desktop: rejected floating IPC')
+  }
+  ipcMain.handle(DESKTOP_IPC.floatingMove, (event, x: unknown, y: unknown, canDock: unknown) => {
+    shellSender(event)
+    if (typeof x !== 'number' || typeof y !== 'number') throw new Error('dsh desktop: invalid floating move')
+    return moveFloatingBall(floatingWindow, x, y, canDock !== false)
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingClamp, (event, canDock: unknown) => {
+    shellSender(event)
+    return clampFloatingWindow(floatingWindow, canDock !== false)
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingUnsnap, (event) => {
+    shellSender(event)
+    return unsnapDockedBall(floatingWindow)
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingSetExpanded, (event, expanded: unknown) => {
+    shellSender(event)
+    return setFloatingExpanded(floatingWindow, expanded === true)
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingSessionGet, (event) => {
+    shellSender(event)
+    return readFloatingSessionId(paths.profile)
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingSessionSet, (event, sessionId: unknown) => {
+    shellSender(event)
+    if (typeof sessionId !== 'string' || sessionId === '') throw new Error('dsh desktop: invalid floating session')
+    writeFloatingSessionId(paths.profile, sessionId)
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingOverlayModelGet, (event) => {
+    shellSender(event)
+    return readOrbAgentModels(paths.profile).overlay
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingOverlayPermissionGet, (event) => {
+    shellSender(event)
+    return readOrbPermission(paths.profile)
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingOrbWorkspace, (event) => {
+    shellSender(event)
+    ensureOrbWorkspaceDir(paths.orbWorkspace)
+    return paths.orbWorkspace
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingFocusMain, (event) => {
+    shellSender(event)
+    if (mainWindow !== undefined && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus() }
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingQuit, (event) => {
+    shellSender(event)
+    app.quit()
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingRunning, (event) => { shellSender(event) })
+  ipcMain.handle(DESKTOP_IPC.floatingEditing, (event) => { shellSender(event) })
+  ipcMain.handle(DESKTOP_IPC.floatingRestoreFront, (event) => { shellSender(event) })
+  ipcMain.handle(DESKTOP_IPC.floatingAvatarGet, (event) => {
+    shellSender(event)
+    return `${SCHEME}://shell/deepseek-avatar-square.gif`
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingTccGet, (event) => {
+    shellSender(event)
+    return { screen: 'unknown', accessibility: 'unknown' }
   })
 
   installDesktopDirectoryPicker(() => mainWindow)

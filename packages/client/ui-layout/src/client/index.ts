@@ -8,10 +8,15 @@
  * presenter, which projects ctx.theme snapshots onto document.body.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import {
+  overlayClientSurface,
+  OVERLAY_SHELL_ORIGIN,
+  OVERLAY_THEME_MESSAGE_TYPE,
+} from '@deepseek-ai/dsh-api-session-controller/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
-import type {} from '@deepseek-ai/dsh-client-ui-theme/client'
+import type { ThemeSnapshot } from '@deepseek-ai/dsh-client-ui-theme/client'
 import type { HostObservable, SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PanelInfo } from './service.ts'
 import { AppFrame } from './AppFrame.tsx'
@@ -142,6 +147,7 @@ export const inject = ['slots', 'theme', 'locale']
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
+  const overlay = overlayClientSurface()
   ctx.effect(() => {
     const handle = createLayoutStore()
     const instance = handle.create()
@@ -158,20 +164,24 @@ export function apply(ctx: ClientContext): void {
     }
     const disposePanelInfo = ctx.slots.provideRoot({ hooks: { panelInfo } })
     const disposeService = ctx.reflect.provide('layout', layout)
-    const disposeRegistration = ctx.slots.register({
-      name: 'root',
-      locale: 'common',
-      children: {
-        'sidebar': { kind: 'single', scope: 'root' },
-        'main': { kind: 'keyed', scope: 'root' },
-        'rightbar': { kind: 'single', scope: 'root' },
-        'shell.overlay': { kind: 'list', scope: 'root' },
-        'shell.leading': { kind: 'single', scope: 'root' },
-      },
-      store,
-    }, AppFrame)
-    const disposePanels = ctx.slots.subscribe('main', retainMainPanels)
-    retainMainPanels()
+    let disposeRegistration = (): void => {}
+    let disposePanels = (): void => {}
+    if (!overlay) {
+      disposeRegistration = ctx.slots.register({
+        name: 'root',
+        locale: 'common',
+        children: {
+          'sidebar': { kind: 'single', scope: 'root' },
+          'main': { kind: 'keyed', scope: 'root' },
+          'rightbar': { kind: 'single', scope: 'root' },
+          'shell.overlay': { kind: 'list', scope: 'root' },
+          'shell.leading': { kind: 'single', scope: 'root' },
+        },
+        store,
+      }, AppFrame)
+      disposePanels = ctx.slots.subscribe('main', retainMainPanels)
+      retainMainPanels()
+    }
     return () => {
       layout.dispose()
       disposePanels()
@@ -184,10 +194,20 @@ export function apply(ctx: ClientContext): void {
 
   // Theme presentation: pure DOM writes from resolved snapshots — initial
   // state through the getter once, then event-driven only; no React path.
+  // Overlay Compact Chat posts the resolved scheme to the floating-ball shell.
   ctx.effect(() => {
     const presenter = new ThemePresenter()
-    presenter.apply(ctx.theme.getTheme())
-    const off = ctx.on('theme/change', (snapshot) => { presenter.apply(snapshot) })
+    const applySnapshot = (snapshot: ThemeSnapshot): void => {
+      presenter.apply(snapshot)
+      if (overlay) {
+        window.parent.postMessage(
+          { type: OVERLAY_THEME_MESSAGE_TYPE, colorScheme: snapshot.active.colorScheme },
+          OVERLAY_SHELL_ORIGIN,
+        )
+      }
+    }
+    applySnapshot(ctx.theme.getTheme())
+    const off = ctx.on('theme/change', applySnapshot)
     return () => {
       off()
       presenter.dispose()

@@ -11,6 +11,7 @@ import type { ChatNodeViewProps } from '../src/client/contract/slots.ts'
 import {
   formatMessageClock, msUntilNextLocalMidnight, startOfLocalDay,
 } from '../src/client/chat/message-chrome.ts'
+import actionsCss from '../src/client/chat/MessageIconActions.module.css'
 import {
   CompactionNodeView, ContextMessageNodeView, RetryNodeView, UnknownNodeView,
   UserMessageNodeView,
@@ -210,6 +211,7 @@ describe('MessageItem arms', () => {
       configurable: true,
       value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
     })
+    Object.defineProperty(document, 'execCommand', { configurable: true, value: undefined })
     render(
       <MessageItem t={t} node={{
         kind: 'user', seq: 1, time: 1_000,
@@ -1039,6 +1041,24 @@ describe('useCalendarDay boundary refresh', () => {
       vi.advanceTimersByTime(msUntilNextLocalMidnight(dayStart) + 1)
     })
     expect(screen.getByText('7月29日 14:24')).toBeTruthy()
+  })
+
+  it('keeps the copy control and ellipsizes a not-today clock on the same row', () => {
+    const now = new Date(2026, 6, 29, 10, 0).getTime()
+    vi.setSystemTime(now)
+    const time = new Date(2026, 0, 1, 14, 24).getTime()
+    render(
+      <MessageItem t={t} node={{
+        kind: 'user', seq: 1, time,
+        content: [{ type: 'text', text: 'older bubble' }] as never,
+        source: null,
+      }}
+      />,
+    )
+    const clock = screen.getByText('1月1日 14:24')
+    expect(clock.className.split(/\s+/u)).toContain(actionsCss.timeStart)
+    const copy = screen.getByRole('button', { name: '复制' })
+    expect(copy.className.split(/\s+/u)).toContain(actionsCss.action)
   })
 })
 

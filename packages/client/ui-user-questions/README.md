@@ -47,7 +47,7 @@ The generic question flow keeps its current page, selected labels, custom text, 
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The package is one ownership rule: rendering a question is a host UI capability, having the tool is an agent capability, so the `tool-ask-user` row belongs to the presets that want it (and to the TUI composition, which has no presets).
+The package is one ownership rule: rendering a question is a host UI capability, having the tool is an agent capability, so the `tool-ask-user` row belongs to the presets that want it (and to the TUI composition, which has no presets). On `?surface=overlay` the waterfall listener always `next()`s so the floating-ball shell remains the overlay claimer.
 
 ### Intent surface election
 

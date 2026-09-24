@@ -54,6 +54,16 @@ describe('TranscriptViewPolicy', () => {
     expect(host.set).not.toHaveBeenCalled()
     policy.dispose()
   })
+
+  it('stays Compact on the overlay surface even when Host Settings are Normal', () => {
+    const host = stubSettingsScope<ChatSettings>()
+    host.publish({ status: 'ready', value: { transcriptView: 'normal' }, revision: 1, writable: true })
+    const policy = new TranscriptViewPolicy(host.scope, true)
+    expect(policy.mode.getSnapshot()).toBe('compact')
+    policy.setMode('normal')
+    expect(policy.mode.getSnapshot()).toBe('compact')
+    expect(host.set).not.toHaveBeenCalled()
+  })
 })
 
 it('releases its subscription when the consuming plugin unloads', () => {

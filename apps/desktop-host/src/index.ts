@@ -13,6 +13,21 @@ import * as desktopOffice from './office.ts'
 import { installDesktopUpdateTaskControl } from './update-tasks.ts'
 import { installPlatformSessionPublisher } from './platform-session.ts'
 import { installOfficeEngineResolution } from './office-engine.ts'
+import {
+  clearOverlayGuardTransport,
+  completeObservationFrameAck,
+  completeOverlayGuardAck,
+  completeSckCaptureAck,
+  setOverlayGuardTransport,
+} from './computer-use-overlay-guard.ts'
+import * as computerUseOverlayGuard from './computer-use-overlay-guard.ts'
+import * as computerUseOrbPermission from './computer-use-orb-permission.ts'
+import { setOrbPermissionPreset, isOrbPermissionPreset } from './computer-use-orb-permission.ts'
+import * as computerUseOrbCoordinateMode from './computer-use-orb-coordinate-mode.ts'
+import { setOrbCoordinateMode } from './computer-use-orb-coordinate-mode.ts'
+import * as computerUseOrbCodeAgentModel from './computer-use-orb-code-agent-model.ts'
+import { setOrbCodeAgentModelSelection } from './computer-use-orb-code-agent-model.ts'
+import { existsSync } from 'node:fs'
 
 async function main(): Promise<void> {
   const runtimeDir = process.argv[2] as string
@@ -24,7 +39,7 @@ async function main(): Promise<void> {
     environment: loadLayeredEnv('dsh'),
     profile: 'desktop',
     resolvedProfile: { profile, installAnchor },
-    patchFiles: [],
+    patchFiles: existsSync(process.env.DSH_COMPUTER_USE_PATCH ?? '') ? [process.env.DSH_COMPUTER_USE_PATCH as string] : [],
     args: ['--no-open', '--port', '19387'],
     ...(process.argv[5] === undefined ? {} : {
       packageManager: {
@@ -46,14 +61,48 @@ async function main(): Promise<void> {
   })
   const stop = (): Promise<void> => stopping ??= (async () => {
     // Startup failure is reported by main; shutdown only owns a tree that booted.
+    clearOverlayGuardTransport(new Error('dsh desktop: Host is stopping'))
     const running = await application.catch(() => undefined)
     await running?.shutdown.shutdown(0)
     await send({ type: 'shutdown-complete' })
     if (process.connected) process.disconnect()
   })()
+  setOverlayGuardTransport((event) => { void send(event) })
   process.on('message', (message: unknown) => {
     if (typeof message !== 'object' || message === null || !('type' in message)) return
     if (message.type === 'shutdown') { void stop(); return }
+    if (message.type === 'overlay-guard-ack' && 'requestId' in message && typeof message.requestId === 'number') {
+      const ids = 'excludeWindowIds' in message && Array.isArray(message.excludeWindowIds)
+        ? message.excludeWindowIds.filter((id): id is number => typeof id === 'number')
+        : []
+      completeOverlayGuardAck(message.requestId, ids)
+      return
+    }
+    if (message.type === 'observation-frame-ack' && 'requestId' in message && typeof message.requestId === 'number') {
+      completeObservationFrameAck(message.requestId)
+      return
+    }
+    if (message.type === 'sck-capture-ack' && 'requestId' in message && typeof message.requestId === 'number') {
+      completeSckCaptureAck(message.requestId, 'error' in message && typeof message.error === 'string' ? message.error : undefined)
+      return
+    }
+    if (message.type === 'orb-permission' && 'preset' in message && isOrbPermissionPreset(message.preset)) {
+      setOrbPermissionPreset(message.preset, 'sessionId' in message && typeof message.sessionId === 'string' ? message.sessionId : undefined)
+      return
+    }
+    if (message.type === 'orb-coordinate-mode' && 'mode' in message && (message.mode === 'millifraction' || message.mode === 'pixel')) {
+      setOrbCoordinateMode(message.mode)
+      return
+    }
+    if (message.type === 'orb-code-agent-model' && 'provider' in message && 'model' in message
+      && typeof message.provider === 'string' && typeof message.model === 'string') {
+      setOrbCodeAgentModelSelection({
+        provider: message.provider,
+        model: message.model,
+        ...('reasoningEffort' in message && typeof message.reasoningEffort === 'string' ? { reasoningEffort: message.reasoningEffort } : {}),
+      })
+      return
+    }
     if (message.type !== 'update-tasks' || !('requestId' in message) || !Number.isSafeInteger(message.requestId)
       || !('action' in message) || !['inspect', 'lock', 'unlock'].includes(String(message.action))) return
     void (async () => {
@@ -69,6 +118,10 @@ async function main(): Promise<void> {
   })
   process.once('disconnect', () => { void stop() })
   const { ctx } = await application
+  await ctx.plugin(computerUseOverlayGuard)
+  await ctx.plugin(computerUseOrbPermission)
+  await ctx.plugin(computerUseOrbCoordinateMode)
+  await ctx.plugin(computerUseOrbCodeAgentModel)
   control.updateTasks = installDesktopUpdateTaskControl(ctx)
   await ctx.plugin(desktopOffice, {
     runtimeDir,

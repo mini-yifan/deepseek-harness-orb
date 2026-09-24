@@ -28,16 +28,17 @@ Internal inference cost is not the limiting constraint, so the workflow optimize
 
 ### The untrusted-PR gate
 
-GitHub withholds repo secrets from two kinds of PR: those from **forks**, and **Dependabot** PRs (same-repo branch, so `head.repo.fork == false`, but secrets are still withheld). A job-level `if:` skips the whole job for both:
+GitHub withholds repo secrets from two kinds of PR: those from **forks**, and **Dependabot** PRs (same-repo branch, so `head.repo.fork == false`, but secrets are still withheld). A job-level `if:` skips the whole job unless the run is on the [canonical repository](../process/2026-09-19-canonical-repository-org-only-workflows.md) and is not one of those untrusted PRs:
 
 ```
-github.event_name != 'pull_request'
-  || !(github.event.pull_request.head.repo.fork || github.event.pull_request.user.login == 'dependabot[bot]')
+github.repository == 'deepseek-harness/deepseek-harness'
+  && (github.event_name != 'pull_request'
+      || !(github.event.pull_request.head.repo.fork || github.event.pull_request.user.login == 'dependabot[bot]'))
 ```
 
 The Dependabot clause keys on the PR **author** (`pull_request.user.login`), not `github.actor` (the run trigger): a maintainer who reopens or re-runs a Dependabot PR would make `github.actor` a human while the PR is still keyless, and an author-based test stays correct across that. A job skipped by a **job-level** `if:` reports as a *successful* check (unlike a workflow/trigger-level skip, which stays pending), so this workflow is safe to mark as a required status check if desired — a fork/Dependabot PR's skipped-but-green check does not block the merge.
 
-The gate is a *clean-skip nicety*, not the secret's security boundary (see § Security — the boundary is GitHub's own fork-secret withholding under `pull_request`). Without the gate, forks still could not read the key; they would just hit a confusing preflight hard-fail and waste compute.
+The gate is a *clean-skip nicety*, not the secret's security boundary (see § Security — the boundary is GitHub's own fork-secret withholding under `pull_request`). Without the gate, forks still could not read the key; they would just hit a confusing preflight hard-fail and waste compute. Independent copies that are not GitHub forks also skip, because they do not hold the canonical org secret; that repository identity is owned by the linked process note.
 
 ### Preflight: fail loud, never false-green
 
@@ -95,6 +96,6 @@ None of these require changing the workflow to go public; they are operational s
 
 A second CI workflow and the first repo secret to maintain. The real-API suite now gates merges (pre-merge on trusted PRs, post-merge on the main branch) and runs nightly, so a real break in the agent's interaction with the external API surfaces in CI rather than only in a developer's local run — at the cost of real (but internally free) API calls on every trusted PR and merge. The preflight makes secret misconfiguration self-announcing instead of silently disabling the net.
 
-The design carries a documented constraint surface: the `pull_request` trigger's key-exposure tradeoff (drop it to harden), the `if:` gate's dependence on the author-based Dependabot test, and the hard prohibition on `pull_request_target`. The going-public checklist above is the operational companion — this Agent Note is the place a future maintainer should re-read before changing the trigger set or flipping repo visibility, rather than re-deriving the fork/secret model from scratch.
+The design carries a documented constraint surface: the `pull_request` trigger's key-exposure tradeoff (drop it to harden), the `if:` gate's dependence on the author-based Dependabot test and the canonical repository identity, and the hard prohibition on `pull_request_target`. The going-public checklist above is the operational companion — this Agent Note is the place a future maintainer should re-read before changing the trigger set or flipping repo visibility, rather than re-deriving the fork/secret model from scratch.
 
 The scheduled trigger auto-disables after 60 days of repo inactivity (a GitHub behavior); push/PR/dispatch are backstops, and an active monorepo will not hit it. Runner egress to `https://api.deepseek.com` is assumed — GitHub-hosted `ubuntu-latest` has it; an egress-restricted self-hosted runner would need connectivity confirmed before relying on the nightly.

@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-浏览器经由 `dsh-host-webserver` 通过 HTTP 访问 web GUI：一个 `node:http` 服务器，其他插件在其中注册具名路由、upgrade 路由、index 启动输入与一个回退 handler。它不了解任何 harness 概念，也不提供任何文件服务——`/api` 桥接、插件 bundle、HMR（热模块替换）事件流与 SPA dist 都属于注册它们的插件。路由匹配顺序固定不变：先在整张表中匹配精确 route，再匹配最长前缀，最后交给回退 handler。它只服务浏览器；Electron 通过 `file://` 加载 dist，并经 IPC 桥接承载 fetch。
+浏览器经由 `dsh-host-webserver` 通过 HTTP 访问 web GUI：一个 `node:http` 服务器，其他插件在其中注册具名路由、upgrade 路由、index 启动输入与一个回退 handler。它不了解任何 harness 概念，也不提供任何文件服务——`/api` 桥接、插件 bundle、HMR（热模块替换）事件流与 SPA dist 都属于注册它们的插件。路由匹配顺序固定不变：先在整张表中匹配精确 route，再匹配最长前缀，最后交给回退 handler。浏览器宿主监听 TCP 套接字；Desktop 以 `listen: false` 与 `dispatch(request)` 在进程内启用同一张具名路由表。
 
 ## 目录
 
@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-把 webserver 组合为面向浏览器宿主的 HTTP 传输，然后让功能插件认领各自的路由。激活即开始监听；注册顺序不影响请求处理，因为具名路由组合起来互不相交。
+把 webserver 组合为面向浏览器宿主的 HTTP 传输，然后让功能插件认领各自的路由。激活即绑定 TCP 套接字，除非 `listen` 为 false；注册顺序不影响请求处理，因为具名路由组合起来互不相交。
 
 ### 最小配置
 
@@ -36,7 +36,7 @@ kind: "package-reference"
     port: 3000
 ```
 
-`host` 只接受两个值：`127.0.0.1`（默认姿态，仅回环）与 `0.0.0.0`（有意向网络开放——服务器自身不携带 TLS、认证或来源策略）。`port` 为 0 时请求 OS 分配端口；之后用 `ctx.webServer.port` 读取正在监听的端口。
+`host` 只接受两个值：`127.0.0.1`（默认姿态，仅回环）与 `0.0.0.0`（有意向网络开放——服务器自身不携带 TLS、认证或来源策略）。`port` 为 0 时请求 OS 分配端口；之后用 `ctx.webServer.port` 读取正在监听的端口。`listen` 默认为 `true`。设置 `listen: false` 可跳过 TCP 套接字：此时 `[Service.init]` 立即就绪，`port` 读为 0，调用方用 `dispatch(request)` 匹配具名 exact／prefix 路由。`dispatch` 从不运行 gzip 或回退席位；未命中的 pathname 返回 `undefined`，以便载体保留自己的 SPA handler。合成的 `IncomingMessage` 头必须包含 `Host` 与 `Origin`；`dsh-app://app` 使用 `Host: app` 与 `Origin: dsh-app://app`。
 
 设置 `compression: 'gzip'` 可以包装符合条件的 socket-backed 响应，而不改变 route API。客户端必须接受 gzip，且媒体类型必须可压缩或为 `multipart/form-data`；已知长度小于 `compressionThresholdBytes` 的响应保持未压缩，未知长度的流则立即符合条件。已有编码、`Cache-Control: no-transform`、range 响应、SSE（Server-Sent Events）、ZIP 与已打包的 `.gz` Worker image 均保持不变。随附 Web bundle 使用 level 1 与 1024 字节阈值；其他组合默认不压缩。
 
@@ -68,13 +68,14 @@ index 启动输入分两层。`collectIndexInjections()` 收集一张全新的�
 
 ### 匹配与生命周期
 
-`match(pathname)` 先查精确表，再遍历前缀表取最长匹配，最后走回退。激活（`[Service.init]`）即开始监听；资源释放会启动 `close()` 与 `closeAllConnections()`，销毁所有受跟踪的升级 socket，并仅在服务器与这些 socket 均已关闭后返回。Node 的 `closeAllConnections()` 不包含升级 socket，因此服务显式跟踪它们。
+`match(pathname)` 先查精确表，再遍历前缀表取最长匹配，最后走回退。激活（`[Service.init]`）即开始监听，除非 `listen` 为 false；资源释放会启动 `close()` 与 `closeAllConnections()`，销毁所有受跟踪的升级 socket，并仅在服务器与这些 socket 均已关闭后返回。Node 的 `closeAllConnections()` 不包含升级 socket，因此服务显式跟踪它们。`dispatch(request)` 使用同一套具名路由匹配，并从 Fetch 合成 `IncomingMessage`／`ServerResponse`。
 
 ### 源码地图
 
 | 文件 | 职责 |
 |---|---|
 | [`src/index.ts`](src/index.ts) | `WebServer` 服务：路由表、回退席位、index 渲染、匹配、生命周期 |
+| [`src/dispatch.ts`](src/dispatch.ts) | 进程内 `dispatch` 的 Fetch 到 node:http 合成 |
 | — | 不发布运行时不变式伴生入口；路由注册与释放通过同一服务修改同一张路由表，register/dispose 探针只会重复执行实现。真实路由与 HMR 测试负责验证该行为。 |
 | [`src/injections.ts`](src/injections.ts) | 结构化 `IndexInjection` 行与 `renderIndexInjections` 行渲染 |
 

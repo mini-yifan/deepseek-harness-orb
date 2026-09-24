@@ -22,7 +22,7 @@ Status: implemented
 
 ### 确定性请求版本
 
-`AttachmentStore.readImageRequest` 按路由拥有的总像素和编码字节预算派生请求版本。缩放公式为 `min(1, sqrt(maxPixels / (width * height)))`，不会放大小图，随后向预算内取整，确保编码光栅不超过总像素上限。DeepSeek V4 Flash Vision Exp 默认使用总像素 640,000 和原始编码字节目标 1MiB。其 catalog 只使用一个 `imagePixelBudget` 字段：正整数选择确切总像素预算，`low` 选择总像素 512×512，省略时使用路由默认值。2048×1024 规范化附件在这个硬上限下会投影为 1130×565。请求编码与规范化共用同一套 alpha 路由和 85/75/60 质量阶梯，按需执行；没有任何档位达到目标时保留最小产物（见[按 alpha 路由的质量阶梯记录](../bug-fix/2026-08-24-alpha-routed-image-quality-ladders.zh.md)）。普通 agent 轮次、直接 `ctx.llm.stream` 调用、压缩和其他辅助流都使用同一派生过程。
+`AttachmentStore.readImageRequest` 按路由拥有的总像素和编码字节预算派生请求版本。缩放公式为 `min(1, sqrt(maxPixels / (width * height)))`，不会放大小图，随后向预算内取整，确保编码光栅不超过总像素上限。DeepSeek 支持图片的 catalog 模型默认使用总计 1,690,000 像素（1300×1300）和原始编码字节目标 1MiB。catalog 只使用一个 `imagePixelBudget` 字段：正整数选择确切总像素预算，`low` 选择总像素 512×512，省略时使用路由默认值。2048×1024 规范化附件在这个硬上限下会投影为 1838×919。请求编码与规范化共用同一套 alpha 路由和 85/75/60 质量阶梯，按需执行；没有任何档位达到目标时保留最小产物（见[按 alpha 路由的质量阶梯记录](../bug-fix/2026-08-24-alpha-routed-image-quality-ladders.zh.md)）。普通 agent 轮次、直接 `ctx.llm.stream` 调用、压缩和其他辅助流都使用同一派生过程。
 
 `variantId` 和缓存路径覆盖规范化附件 ID、变换策略版本、路由像素和字节预算及固定编码参数。新缓存条目在发布前会完整解码。缓存命中只探测文件头，校验格式、8-bit sRGB/sRGBA、尺寸和透明通道，不会再次完整解码光栅；不匹配时会重新生成。因此，同一策略下的 DeepSeek Files 和 pi-ai 内联 base64 使用相同的确定性字节。内联计量使用派生字节经过 base64 膨胀后的长度，不使用规范化附件字节数。同一进程内相同 `variantId` 的调用共享一次变换和缓存写入。每个调用方可以取消自己的等待；只有全部等待方都取消时，共享变换才会中止。调用方对单数 `readImageRequest` 使用 `Promise.all` 保持结果顺序。本地实现通过一个 FIFO 限流器运行规范化和请求变换，`imageCompressionConcurrency` 的可配置范围为 1 至 8，默认值为 2。全部规范化附件准备完成后，批次仍按顺序发布。
 
@@ -30,7 +30,7 @@ Status: implemented
 
 ### 稳定句柄
 
-每张保留请求图片前都有显示名称或完整附件 ID，以及实际请求尺寸。附件提供方可以给出宿主对象位置；LLM 消费方将其与当前文件系统映射组合后，再加入绝对只读路径、规范化尺寸和媒体类型。描述会说明规范化或请求投影可能缩小或重新编码上传图片，因此模型不能从任一版本推断上传图片原本的属性。用户消息、工具结果、agent loop 请求、压缩和直接 `ctx.llm.stream` 调用共享这套投影。路径独立于确定性请求版本解析，不进入其 `variantId`、持久引用或会话日志。
+每张保留请求图片前都有显示名称或完整附件 ID。该句柄省略请求预览像素尺寸（[图片句柄省略请求预览像素](../bug-fix/2026-09-15-omit-request-preview-handle-dimensions.zh.md)）。附件提供方可以给出宿主对象位置；LLM 消费方将其与当前文件系统映射组合后，再加入绝对只读路径、规范化尺寸和媒体类型。描述会说明规范化或请求投影可能缩小或重新编码上传图片，因此模型不能从任一版本推断上传图片原本的属性。用户消息、工具结果、agent loop 请求、压缩和直接 `ctx.llm.stream` 调用共享这套投影。路径独立于确定性请求版本解析，不进入其 `variantId`、持久引用或会话日志。
 
 ### DeepSeek Files 生命周期
 

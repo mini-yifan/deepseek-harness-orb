@@ -147,6 +147,46 @@ function constructWithRoute(
   return { context: ctx, service, route: route.promise }
 }
 
+/**
+ * Same as {@link constructWithRoute} on a plugin fiber that already has
+ * `webServer`, matching Desktop Host composition.
+ */
+async function constructWithRouteOnPluginFiber(
+  packageNames: string[],
+): Promise<{ context: Context; service: ClientModuleRegistry; route: WebRoute }> {
+  const ctx = new Context()
+  ctx.baseUrl = pathToFileURL(root!).href + '/'
+  ctx.provide('loader', {
+    *entries() {
+      for (const packageName of packageNames) {
+        yield {
+          options: { name: packageName },
+          fiber: {},
+          disabled: false,
+          parent: { tree: { ctx: { baseUrl: ctx.baseUrl } } },
+        }
+      }
+    },
+  })
+  let route: WebRoute | undefined
+  const webServer: Pick<WebServer, 'port' | 'register' | 'tapIndex'> = {
+    port: 0,
+    register: (candidate) => {
+      if (candidate.path === '/plugins') route = candidate
+      return () => {}
+    },
+    tapIndex: () => () => {},
+  }
+  ctx.provide('webServer', webServer as WebServer)
+  let service: ClientModuleRegistry | undefined
+  await ctx.plugin((pluginCtx: Context) => {
+    service = new ClientModuleRegistry(pluginCtx)
+  })
+  if (service === undefined) throw new Error('client module registry was not constructed')
+  if (route === undefined) throw new Error('client bundle route was not registered')
+  return { context: ctx, service, route }
+}
+
 /** Construct the node-half service over the enabled fixture entries. */
 function construct(packageNames: string[]): ClientModuleRegistry {
   return constructWithRoute(packageNames).service
@@ -291,6 +331,13 @@ describe('HTML bootstrap facade', () => {
 })
 
 describe('client bundle activation', () => {
+  it('registers /plugins when webServer is already provided on a plugin fiber', async () => {
+    writeBuiltPackage('@fixture/plugin-fiber-webserver', {})
+    const { route } = await constructWithRouteOnPluginFiber(['@fixture/plugin-fiber-webserver'])
+    expect(route.kind).toBe('prefix')
+    expect(route.path).toBe('/plugins')
+  })
+
   it.each(['v1', 'v2'] as const)(
     'resolves %s package metadata from the owning entry tree',
     (version) => {

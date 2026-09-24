@@ -7,6 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { SlotRendererHost } from '@deepseek-ai/dsh-client-ui-slots'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
+import {
+  OVERLAY_SHELL_ORIGIN,
+  OVERLAY_THEME_MESSAGE_TYPE,
+} from '@deepseek-ai/dsh-api-session-controller/client'
 import { apply as themeApply, inject as themeInject, ThemeRuntime } from '@deepseek-ai/dsh-client-ui-theme/client'
 import { apply, inject, LayoutController } from '@deepseek-ai/dsh-client-ui-layout/client'
 import { apply as nodeApply } from '@deepseek-ai/dsh-client-ui-layout'
@@ -91,6 +95,39 @@ describe('ui-layout client apply', () => {
     expect(slots.spec('rightbar')).toEqual({ kind: 'single', scope: 'root' })
     expect(slots.spec('shell.overlay')).toEqual({ kind: 'list', scope: 'root' })
     expect(slots.spec('shell.leading')).toEqual({ kind: 'single', scope: 'root' })
+  })
+
+  it('skips AppFrame root on the overlay surface and still provides ctx.layout', async () => {
+    vi.stubGlobal('location', { search: '?surface=overlay' })
+    const parent = vi.spyOn(window.parent, 'postMessage')
+    try {
+      const { ctx, slots } = await bench()
+      const fiber = ctx.plugin({ inject: [...inject], apply })
+      await fiber.await()
+      expect(ctx.get('layout')).toBeInstanceOf(LayoutController)
+      expect(slots.entries('root')).toHaveLength(0)
+      expect(slots.spec('sidebar')).toBeUndefined()
+      expect(document.documentElement.style.colorScheme).toBe('light')
+      expect(document.body.hasAttribute('data-ds-dark-theme')).toBe(false)
+      expect(parent).toHaveBeenCalledWith(
+        { type: OVERLAY_THEME_MESSAGE_TYPE, colorScheme: 'light' },
+        OVERLAY_SHELL_ORIGIN,
+      )
+      const theme = ctx.get('theme') as ThemeRuntime
+      theme.setTheme('dark')
+      expect(document.documentElement.style.colorScheme).toBe('dark')
+      expect(document.body.hasAttribute('data-ds-dark-theme')).toBe(true)
+      expect(parent).toHaveBeenCalledWith(
+        { type: OVERLAY_THEME_MESSAGE_TYPE, colorScheme: 'dark' },
+        OVERLAY_SHELL_ORIGIN,
+      )
+      parent.mockClear()
+      await fiber.dispose()
+      theme.setTheme('light')
+      expect(parent).not.toHaveBeenCalled()
+    } finally {
+      parent.mockRestore()
+    }
   })
 
   it('shares a pre-created instance between service actions, root rendering, and panelInfo', async () => {

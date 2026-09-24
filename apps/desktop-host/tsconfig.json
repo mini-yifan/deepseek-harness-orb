@@ -28,6 +28,8 @@
     },
     {
       "path": "../../packages/credentials/deepseek-account"
-    }
+    },
+    { "path": "../../packages/core/session" },
+    { "path": "../../packages/interaction/permission-presets" }
   ]
 }

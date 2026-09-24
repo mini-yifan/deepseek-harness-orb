@@ -6,24 +6,32 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
   height: calc(28px + var(--dsh-content-font-delta, 0px));
 }
 
 /* The user clock keeps the secondary tier. */
 .timeStart {
+  min-width: 0;
+  overflow: hidden;
   padding-right: 12px;
   font-size: var(--dsh-content-font-size-secondary, 13px);
   line-height: calc(24px + var(--dsh-content-font-delta, 0px));
   color: var(--dsw-alias-label-tertiary);
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 /* Assistant-tail metadata keeps the smaller information size while sharing
    the action icons' resting color. */
 .timeEnd {
+  min-width: 0;
+  overflow: hidden;
   font-size: calc(var(--dsh-content-font-size-secondary, 13px) - 1px);
   line-height: calc(24px + var(--dsh-content-font-delta, 0px));
   color: inherit;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -60,8 +68,11 @@
   }
 }
 
+/* Icons keep a 28px hit box; the clock (timeStart/timeEnd) is the overflow
+   absorber. */
 .action {
   display: inline-flex;
+  flex: none;
   align-items: center;
   justify-content: center;
   width: calc(28px + var(--dsh-content-font-delta, 0px));

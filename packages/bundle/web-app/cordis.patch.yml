@@ -223,6 +223,10 @@
     - id: ui-layout
       name: '@deepseek-ai/dsh-client-ui-layout'
 
+    # Overlay Compact Chat occupies 'root' only when ?surface=overlay.
+    - id: ui-overlay-chat
+      name: '@deepseek-ai/dsh-client-ui-overlay-chat'
+
     - id: ui-renderer
       name: '@deepseek-ai/dsh-client-ui-renderer'
 
@@ -268,6 +272,9 @@
 
     - id: ui-settings-models
       name: '@deepseek-ai/dsh-client-ui-settings-models'
+
+    - id: ui-settings-orb
+      name: '@deepseek-ai/dsh-client-ui-settings-orb'
 
     # Plugin management: the sidebar Plugins page installs, enables, disables,
     # and removes the profile's bundles through the `pluginManager` Remote.
