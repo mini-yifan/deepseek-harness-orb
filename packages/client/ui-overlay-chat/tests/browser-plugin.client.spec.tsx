@@ -159,7 +159,13 @@ describe('OverlayChatRoot', () => {
       _options?: { only: string },
     ) => <span>chat</span>)
     const props = {
-      useSessions: (select: (state: { current: string }) => unknown) => select({ current: 'session-orb' }),
+      useSessions: (select: (state: {
+        ids: string[]
+        byId: Record<string, { retainedBy: { mainView?: number } }>
+      }) => unknown) => select({
+        ids: ['session-orb'],
+        byId: { 'session-orb': { retainedBy: { mainView: 1 } } },
+      }),
       SessionProvider: ({
         children, empty,
       }: { children: unknown; empty?: () => unknown }) => {
@@ -184,8 +190,10 @@ describe('OverlayChatRoot', () => {
   it('renders no conversation.view until a Session is current', () => {
     const view = vi.fn()
     const props = {
-      useSessions: (select: (state: { current: string | undefined }) => unknown) =>
-        select({ current: undefined }),
+      useSessions: (select: (state: {
+        ids: string[]
+        byId: Record<string, { retainedBy: { mainView?: number } }>
+      }) => unknown) => select({ ids: [], byId: {} }),
       SessionProvider: ({
         children, empty,
       }: { children: unknown; empty?: () => unknown }) => {

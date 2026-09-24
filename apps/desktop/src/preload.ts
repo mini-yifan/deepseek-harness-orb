@@ -70,4 +70,19 @@ const selection = {
   },
 }
 
-contextBridge.exposeInMainWorld('dshDesktop', { protocolVersion: 1, floating, selection })
+const backend = {
+  status: () => ipcRenderer.invoke(DESKTOP_IPC.backendStatus),
+  subscribe: (listener: (state: unknown) => void) => {
+    const handle = (_event: Electron.IpcRendererEvent, state: unknown): void => { listener(state) }
+    ipcRenderer.on(DESKTOP_IPC.backendState, handle)
+    return () => { ipcRenderer.off(DESKTOP_IPC.backendState, handle) }
+  },
+}
+
+contextBridge.exposeInMainWorld('dshDesktop', {
+  protocolVersion: 1,
+  locale: () => ipcRenderer.invoke(DESKTOP_IPC.floatingLocale),
+  backend,
+  floating,
+  selection,
+})

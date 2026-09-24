@@ -78,12 +78,14 @@ function mirrorDependencyLinks(sourceRoot: string, destinationRoot: string): str
       mkdirSync(join(destinationRoot, entry.name), { recursive: true })
       for (const scoped of readdirSync(source, { withFileTypes: true })) {
         if (!scoped.isDirectory() && !scoped.isSymbolicLink()) continue
-        linkDirectory(join(source, scoped.name), join(destinationRoot, entry.name, scoped.name))
+        const scopedSource = join(source, scoped.name)
+        if (!existsSync(join(scopedSource, 'package.json'))) continue
+        linkDirectory(scopedSource, join(destinationRoot, entry.name, scoped.name))
         names.push(`${entry.name}/${scoped.name}`)
       }
       continue
     }
-    if (entry.isDirectory() || entry.isSymbolicLink()) {
+    if ((entry.isDirectory() || entry.isSymbolicLink()) && existsSync(join(source, 'package.json'))) {
       linkDirectory(source, join(destinationRoot, entry.name))
       names.push(entry.name)
     }

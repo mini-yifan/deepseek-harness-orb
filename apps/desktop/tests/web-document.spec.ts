@@ -79,6 +79,21 @@ it('replaces the immutable cache header of plugin bundles with no-store and leav
   expect(asset.headers.get('cache-control')).toBe(immutable)
 })
 
+it('forwards a floating-ball shell request to the Host', async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response('ok'))
+  vi.stubGlobal('fetch', fetch)
+  const response = await forwardWebRequest(
+    new Request('dsh-app://app/api/session/create', { method: 'POST', headers: { origin: 'dsh-app://shell' }, body: '{}' }),
+    'http://127.0.0.1:1234/',
+    'session=owned',
+  )
+  expect(response.status).toBe(200)
+  expect(fetch).toHaveBeenCalledOnce()
+  const init = fetch.mock.calls[0]?.[1] as RequestInit
+  expect(new Headers(init.headers).get('origin')).toBeNull()
+  expect(new Headers(init.headers).get('cookie')).toBe('session=owned')
+})
+
 it('refuses another page origin without forwarding its request', async () => {
   const fetch = vi.fn()
   vi.stubGlobal('fetch', fetch)

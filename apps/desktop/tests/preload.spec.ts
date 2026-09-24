@@ -34,6 +34,10 @@ it('exposes overlay expand, clamp, dsh_orb workspace, and selection IPC', async 
     onSelectionAttach: expect.any(Function),
     onCreateSession: expect.any(Function),
   })
+  expect(api.backend).toMatchObject({
+    status: expect.any(Function),
+    subscribe: expect.any(Function),
+  })
   expect(api.selection).toMatchObject({
     search: expect.any(Function),
     translate: expect.any(Function),
@@ -45,6 +49,7 @@ it('exposes overlay expand, clamp, dsh_orb workspace, and selection IPC', async 
   })
   expect(api.floating).not.toHaveProperty('toggle')
   expect(api.floating).not.toHaveProperty('dock')
+  await api.locale()
   await api.floating.setExpanded(true)
   await api.floating.clamp()
   await api.floating.unsnap()
@@ -63,7 +68,9 @@ it('exposes overlay expand, clamp, dsh_orb workspace, and selection IPC', async 
   await api.selection.search()
   await api.selection.interact()
   await api.selection.setContentSize({ width: 280, height: 120 })
+  await api.backend.status()
   expect(electron.ipcRenderer.invoke.mock.calls).toEqual([
+    [DESKTOP_IPC.floatingLocale],
     [DESKTOP_IPC.floatingSetExpanded, true],
     [DESKTOP_IPC.floatingClamp, undefined],
     [DESKTOP_IPC.floatingUnsnap],
@@ -75,12 +82,13 @@ it('exposes overlay expand, clamp, dsh_orb workspace, and selection IPC', async 
     [DESKTOP_IPC.floatingAvatarGet],
     [DESKTOP_IPC.floatingOverlayModelGet],
     [DESKTOP_IPC.floatingOverlayPermissionGet],
-    [DESKTOP_IPC.floatingOverlayPermissionSet, 'workspace-write'],
+    [DESKTOP_IPC.floatingOverlayPermissionSet, 'workspace-write', undefined],
     [DESKTOP_IPC.floatingTccGet],
     [DESKTOP_IPC.floatingTccOpen, 'screen'],
     [DESKTOP_IPC.floatingTccRelaunch],
     [DESKTOP_IPC.selectionSearch],
     [DESKTOP_IPC.selectionInteract],
     [DESKTOP_IPC.selectionSetContentSize, { width: 280, height: 120 }],
+    [DESKTOP_IPC.backendStatus],
   ])
 })

@@ -8,6 +8,71 @@ const MIME: Readonly<Record<string, string>> = {
   '.woff2': 'font/woff2', '.png': 'image/png', '.ico': 'image/x-icon',
 }
 const BOOT = '<script>globalThis.__DSH_BOOT_READY__ = Promise.withResolvers()</script>'
+const OVERLAY_READY = '<script>(globalThis.__DSH_BOOT_READY__ ??= Promise.withResolvers()).resolve()</script>'
+
+/** One Host index-injection row. Matches the web server's injection table. */
+type IndexInjection =
+  | { kind: 'global'; name: string; value: unknown }
+  | { kind: 'script'; placement: 'head' | 'body'; text: string }
+  | { kind: 'script-src'; placement: 'head' | 'body'; src: string }
+  | { kind: 'script-preload'; src: string }
+  | { kind: 'style'; text: string }
+  | { kind: 'html'; placement: 'head' | 'body'; html: string }
+
+function escapeHtmlAttribute(value: string): string {
+  return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+}
+
+/** Render Host boot rows into index.html and resolve the boot gate in the body. */
+function renderOverlayInjections(html: string, rows: readonly IndexInjection[]): string {
+  let head = ''
+  let body = ''
+  for (const row of rows) {
+    switch (row.kind) {
+      case 'global': {
+        const name = JSON.stringify(row.name).replaceAll('<', '\\u003c')
+        const value = row.value === undefined ? 'undefined' : JSON.stringify(row.value).replaceAll('<', '\\u003c')
+        head += `<script>globalThis[${name}] = ${value}</script>`
+        break
+      }
+      case 'script':
+        if (row.placement === 'head') head += `<script>${row.text}</script>`
+        else body += `<script>${row.text}</script>`
+        break
+      case 'script-src': {
+        const tag = `<script src="${escapeHtmlAttribute(row.src)}"></script>`
+        if (row.placement === 'head') head += tag
+        else body += tag
+        break
+      }
+      case 'script-preload':
+        head += `<link rel="preload" as="script" href="${escapeHtmlAttribute(row.src)}">`
+        break
+      case 'style':
+        head += `<style>${row.text}</style>`
+        break
+      case 'html':
+        if (row.placement === 'head') head += row.html
+        else body += row.html
+        break
+      default: {
+        const unexpected: never = row
+        throw new Error(`desktop overlay: unknown index injection ${JSON.stringify(unexpected)}`)
+      }
+    }
+  }
+  body += OVERLAY_READY
+  let out = html
+  if (head !== '') {
+    const open = /<head(?:\s[^>]*)?>/i.exec(out)
+    out = open === null ? `${head}${out}` : `${out.slice(0, open.index + open[0].length)}${head}${out.slice(open.index + open[0].length)}`
+  }
+  if (body !== '') {
+    const open = /<body(?:\s[^>]*)?>/i.exec(out)
+    out = open === null ? `${out}${body}` : `${out.slice(0, open.index + open[0].length)}${body}${out.slice(open.index + open[0].length)}`
+  }
+  return out
+}
 
 /**
  * Read an application-owned static asset; the index waits for asynchronous Host injections.
@@ -32,6 +97,33 @@ export async function serveWebDocument(request: Request, root: string): Promise<
     ? body.toString().replace('<head>', '<head>' + BOOT) : new Uint8Array(body)
   return new Response(request.method === 'HEAD' ? null : content, {
     headers: { 'content-type': MIME[extname(target)] ?? 'application/octet-stream' },
+  })
+}
+
+/**
+ * Serve the overlay transcript document with Host injections already in the HTML.
+ * That iframe does not run the main-window preload, so it cannot resolve the
+ * boot gate itself. The rendered tail resolves the gate after the rows.
+ * @param request - Overlay `index.html` request.
+ * @param root - Packaged Web dist directory.
+ * @param injections - Host boot rows for this launch.
+ * @param streamBaseUrl - HTTP origin of the owned Host. The page origin is `dsh-app`, so the event stream cannot use `document.baseURI`.
+ * @returns The rendered document, or a missing-file response.
+ */
+export async function serveOverlayDocument(
+  request: Request, root: string, injections: readonly unknown[], streamBaseUrl: string,
+): Promise<Response> {
+  if (!['GET', 'HEAD'].includes(request.method)) return new Response(null, { status: 405 })
+  const target = resolve(root, 'index.html')
+  let html: string
+  try { html = await readFile(target, 'utf8') } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return new Response(null, { status: 404 })
+    throw error
+  }
+  const transport = `<script>globalThis.__DSH_TRANSPORT__=${JSON.stringify({ ownsHost: true, streamBaseUrl })}</script>`
+  const rendered = renderOverlayInjections(html.replace('<head>', `<head>${transport}`), injections as readonly IndexInjection[])
+  return new Response(request.method === 'HEAD' ? null : rendered, {
+    headers: { 'content-type': MIME['.html'] ?? 'text/html; charset=utf-8' },
   })
 }
 
@@ -69,7 +161,7 @@ const PLUGIN_BUNDLE_PATH = /^\/plugins\//u
  * Plugin bundle responses lose their `cache-control` for `no-store`: the Host marks them immutable
  * under a revision that changes every launch, so Chromium's disk cache would only accumulate bundles
  * no later launch can reuse.
- * @param request - Request from the application origin.
+ * @param request - Request from the application window or the floating-ball shell.
  * @param host - Owned Host URL.
  * @param cookie - Host-issued authentication cookie.
  * @returns Host response without connection-level headers.
@@ -77,7 +169,10 @@ const PLUGIN_BUNDLE_PATH = /^\/plugins\//u
 export async function forwardWebRequest(request: Request, host: string, cookie: string): Promise<Response> {
   const source = new URL(request.url)
   const origin = request.headers.get('origin')
-  if (origin !== null && origin !== 'dsh-app://app') return new Response(null, { status: 403 })
+  // The floating-ball shell calls the Host from dsh-app://shell. Every other page origin stays refused.
+  if (origin !== null && origin !== 'dsh-app://app' && origin !== 'dsh-app://shell') {
+    return new Response(null, { status: 403 })
+  }
   const target = new URL(host)
   target.pathname = source.pathname
   target.search = source.search

@@ -2,8 +2,8 @@
 
 import { useEffect, useState, type ReactNode } from 'react'
 import {
-  IconCheckOutline16,
-  IconChevronDownOutline14,
+  IconCheckOutlineRegular,
+  IconChevronDownOutlineRegular,
   Menu,
   type MenuEntry,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -69,7 +69,7 @@ export function OrbModelPicker(props: OrbModelPickerProps): ReactNode {
         >
           <span className={css.triggerLabel}>{modelLabel}</span>
           {effortLabel === undefined ? null : <span className={css.triggerEffort}>{effortLabel}</span>}
-          <IconChevronDownOutline14 className={css.chevron} />
+          <IconChevronDownOutlineRegular className={css.chevron} />
         </button>
       )}
     />
@@ -132,7 +132,7 @@ function modelMenuItem(
         id: effortRowId(provider, model.id, undefined),
         label: defaultEffortLabel,
         ...selected && current.reasoningEffort === undefined
-          ? { icon: <IconCheckOutline16 /> }
+          ? { icon: <IconCheckOutlineRegular /> }
           : {},
       }]
       : [],
@@ -141,7 +141,7 @@ function modelMenuItem(
       return {
         id: effortRowId(provider, model.id, effort.id),
         label: effort.name,
-        ...selected && effective === effort.id ? { icon: <IconCheckOutline16 /> } : {},
+        ...selected && effective === effort.id ? { icon: <IconCheckOutlineRegular /> } : {},
       }
     }),
   ]

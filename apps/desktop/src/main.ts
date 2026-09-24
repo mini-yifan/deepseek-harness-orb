@@ -42,7 +42,7 @@ import { readOrbAgentModels } from './orb-agent-models.ts'
 import { readOrbPermission } from './orb-permission.ts'
 import { claimDesktopSingleInstance } from './single-instance.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
-import { serveWebDocument, authenticateWebHost, forwardWebRequest } from './web-document.ts'
+import { serveWebDocument, serveOverlayDocument, authenticateWebHost, forwardWebRequest } from './web-document.ts'
 import { DesktopFatalRecovery } from './fatal-recovery.ts'
 import { pruneCrashReports, RendererConsoleTail, writeCrashReport, type CrashReportSource } from './crash-report.ts'
 import { openWelcomeWindow } from './welcome-window.ts'
@@ -307,9 +307,10 @@ async function main(): Promise<void> {
   const updateJournal = journalDirectory === undefined ? undefined : new DesktopUpdateJournal(journalDirectory, app.getVersion())
   const resources = runtimeResources()
   const paths = resolveDesktopPaths()
-  const computerUsePatch = join(app.getAppPath(), 'packages/experimental/tool-computer-use/cordis.patch.yml')
-  if (existsSync(computerUsePatch)) process.env.DSH_COMPUTER_USE_PATCH = computerUsePatch
   const development = !app.isPackaged
+  const computerUsePatch = join(development ? join(app.getAppPath(), '..', '..') : app.getAppPath(),
+    'packages/experimental/tool-computer-use/cordis.patch.yml')
+  if (existsSync(computerUsePatch)) process.env.DSH_COMPUTER_USE_PATCH = computerUsePatch
   const primaryRuntime = development
     ? developmentPrimaryRuntime()
     : join(process.resourcesPath, 'runtime', 'primary-runtime')
@@ -319,6 +320,9 @@ async function main(): Promise<void> {
   let startup: Promise<void> | undefined
   let workspaceRecovery: Promise<void> | undefined
   let mainWindow: BrowserWindow | undefined
+  // The backend listener is registered before this window exists and reads the binding later.
+  // eslint-disable-next-line prefer-const -- assigned once when the floating window is created
+  let floatingShell: BrowserWindow | undefined
   let welcomeWindow: BrowserWindow | undefined
   let enteredWorkspace = false
   let shellInstallerOwnsQuit = false
@@ -442,6 +446,11 @@ async function main(): Promise<void> {
   }, (state) => {
     if (state.phase === 'error') reportFatal(state.failure, 'host')
     else if (!shuttingDown) backendReady = state.phase === 'ready'
+    if (floatingShell !== undefined && !floatingShell.isDestroyed()) {
+      floatingShell.webContents.send(DESKTOP_IPC.backendState, state.phase === 'error'
+        ? { phase: 'error', message: state.message }
+        : { phase: state.phase })
+    }
   })
 
   const updateErrors = new WeakMap<DesktopUpdateState, Promise<void>>()
@@ -576,9 +585,14 @@ async function main(): Promise<void> {
     // Shell-owned documents live in the application bundle and never pass through the Host.
     if (url.hostname === 'shell') return serveWebDocument(request, join(app.getAppPath(), 'renderer'))
     if (url.hostname === 'app') {
+      const webRoot = join(resources.dsh, 'node_modules', '@deepseek-ai', 'dsh-web-frontend', 'dist')
+      if ((url.pathname === '/' || url.pathname === '/index.html') && url.searchParams.get('surface') === 'overlay') {
+        if (injections.length === 0 || hostUrl === undefined) return Promise.resolve(new Response(null, { status: 503 }))
+        return serveOverlayDocument(request, webRoot, injections, new URL(hostUrl).origin)
+      }
       if (url.pathname === '/' || url.pathname === '/index.html' || url.pathname.startsWith('/assets/')
         || ['/favicon.svg', '/manifest.webmanifest'].includes(url.pathname)) {
-        return serveWebDocument(request, join(resources.dsh, 'node_modules', '@deepseek-ai', 'dsh-web-frontend', 'dist'))
+        return serveWebDocument(request, webRoot)
       }
       if (backend.host === undefined || hostUrl === undefined || hostCookie === undefined) {
         return Promise.resolve(new Response(null, { status: 503 }))
@@ -589,7 +603,7 @@ async function main(): Promise<void> {
   })
 
   const shellPreload = fileURLToPath(new URL('./preload.cjs', import.meta.url))
-  const floatingWindow = createFloatingWindow(shellPreload, currentDesktopLocale().messages, () => {
+  const floatingWindow = floatingShell = createFloatingWindow(shellPreload, currentDesktopLocale().messages, () => {
     if (mainWindow !== undefined && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus() }
   }, () => { app.quit() })
   floatingWindow.once('ready-to-show', () => { floatingWindow.showInactive() })
@@ -653,7 +667,16 @@ async function main(): Promise<void> {
   })
   ipcMain.handle(DESKTOP_IPC.floatingTccGet, (event) => {
     shellSender(event)
-    return { screen: 'unknown', accessibility: 'unknown' }
+    return { applicable: false, screen: 'unknown', accessibility: 'unknown' }
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingLocale, (event) => {
+    shellSender(event)
+    return currentDesktopLocale()
+  })
+  ipcMain.handle(DESKTOP_IPC.backendStatus, (event) => {
+    shellSender(event)
+    const state = backend.state
+    return state.phase === 'error' ? { phase: 'error', message: state.message } : { phase: state.phase }
   })
 
   installDesktopDirectoryPicker(() => mainWindow)
@@ -685,7 +708,9 @@ async function main(): Promise<void> {
   })
 
   session.defaultSession.webRequest.onBeforeSendHeaders({ urls: ['ws://127.0.0.1/*'] }, (details, callback) => {
-    if (hostUrl === undefined || hostCookie === undefined || details.webContentsId !== mainWindow?.webContents.id) {
+    const ownedWebContents = details.webContentsId === mainWindow?.webContents.id
+      || details.webContentsId === floatingShell?.webContents.id
+    if (hostUrl === undefined || hostCookie === undefined || !ownedWebContents) {
       callback({})
       return
     }

@@ -2524,6 +2524,9 @@ importers:
       '@deepseek-ai/dsh-cordis-host-runner':
         specifier: workspace:*
         version: link:../../extensions/cordis-host-runner
+      '@deepseek-ai/dsh-experimental-tool-computer-use':
+        specifier: workspace:*
+        version: link:../../experimental/tool-computer-use
       '@deepseek-ai/dsh-file-reference':
         specifier: workspace:*
         version: link:../../context/file-reference

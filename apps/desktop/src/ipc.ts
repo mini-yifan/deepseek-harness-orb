@@ -44,6 +44,9 @@ export const DESKTOP_IPC = {
   floatingTccRelaunch: 'dsh-desktop:floating-tcc-relaunch',
   floatingTcc: 'dsh-desktop:floating-tcc',
   floatingCreateSession: 'dsh-desktop:floating-create-session',
+  floatingLocale: 'dsh-desktop:floating-locale',
+  backendStatus: 'dsh-desktop:backend-status',
+  backendState: 'dsh-desktop:backend-state',
   selectionPrompt: 'dsh-desktop:selection-prompt',
   selectionAttach: 'dsh-desktop:selection-attach',
   selectionSearch: 'dsh-desktop:selection-search',
@@ -57,6 +60,12 @@ export const DESKTOP_IPC = {
 /** Floating-ball shell bridge. The product window uses {@link DshDesktopProductApi}. */
 export interface DshDesktopApi {
   readonly protocolVersion: 1
+  /** Shell dictionary for the floating ball and the selection toolbar. */
+  locale(): Promise<{ readonly id: 'en' | 'zh-CN'; readonly messages: Readonly<Record<string, string>> }>
+  readonly backend: {
+    status(): Promise<{ readonly phase: 'starting' | 'ready' | 'error'; readonly message?: string }>
+    subscribe(listener: (state: { readonly phase: 'starting' | 'ready' | 'error'; readonly message?: string }) => void): () => void
+  }
   readonly floating: {
     setExpanded(expanded: boolean): Promise<unknown>
     clamp(canDock?: boolean): Promise<unknown>

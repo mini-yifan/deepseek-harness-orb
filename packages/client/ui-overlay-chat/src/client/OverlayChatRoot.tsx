@@ -22,7 +22,7 @@ function ignoreRequest(): void {}
 export function OverlayChatRoot({
   renderSlot, SessionProvider, useSessions,
 }: OverlayChatRootProps) {
-  const sessionId = useSessions(s => s.current)
+  const sessionId = useSessions(state => state.ids.find(id => (state.byId[id]?.retainedBy.mainView ?? 0) > 0))
   return (
     <div className={css.shell} data-conversation-scroll="" data-overlay-chat="">
       <SessionProvider empty={() => null}>
@@ -31,6 +31,7 @@ export function OverlayChatRoot({
           : (
             <>
               {renderSlot('conversation.view', {
+                inspectCall: undefined,
                 viewRequest: null,
                 openView: ignoreView,
                 completeViewRequest: ignoreRequest,
