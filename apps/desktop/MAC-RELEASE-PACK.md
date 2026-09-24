@@ -389,7 +389,7 @@ DSH_DESKTOP_APP_ID='com.miniyifan.deepseek-orb' pnpm package:mac:arm64:unsigned
 | `pnpm package:mac:x64` | Intel Mac,或 Apple Silicon + Rosetta |
 | `pnpm package:win:x64` | 必须在 Windows x64 主机上执行;需要 EV 代码签名证书 + SafeNet USB 令牌 + SignTool(`DSH_DESKTOP_WINDOWS_*` 四个环境变量;PIN 不能含 `]`、引号、换行) |
 
-详细要求见 `apps/desktop/README.md`(§macOS 打包、§Windows EV signing)与 `apps/desktop/UNSIGNED-MAC-PACK.md`。
+详细要求见 `apps/desktop/README.md`(§macOS 打包、§Windows EV signing)、`apps/desktop/UNSIGNED-MAC-PACK.md` 与 `apps/desktop/UNSIGNED-WIN-PACK.md`。Windows 本地未签名安装包按 `UNSIGNED-WIN-PACK.md` 打。
 
 ---
 
