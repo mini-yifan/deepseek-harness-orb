@@ -413,6 +413,39 @@ describe('apply overlay guard wiring', () => {
     expect(text(result)).toContain('cloaked-input')
   })
 
+  it('wraps when computerUseOverlayGuard is provided after apply', async () => {
+    const host = new Context()
+    contexts.push(host)
+    const home = await mkdtemp(join(tmpdir(), 'dsh-cu-guard-late-'))
+    homes.push(home)
+    await host.plugin(SystemPrompt)
+    await host.plugin(ToolRuntime)
+    await host.plugin(LocalAttachmentStore, { dshHome: home })
+    await host.plugin(LlmRuntime)
+    host.llm.registerAdapter(['visual'], new CatalogAdapter([
+      { provider: 'visual', id: 'vision-model', name: 'Vision', inputModalities: ['text', 'image'] },
+    ]))
+    apply(host, { postActionWaitMs: 0 })
+    host.provide('computerUseOverlayGuard', idleGuard({
+      withCapture: () => Promise.reject(new Error('cloaked-capture')),
+      withInput: () => Promise.reject(new Error('cloaked-input')),
+    }))
+    platformBackend.click.mockClear()
+    const result = await host.tools.execute({
+      signal: SIGNAL,
+      callId: ToolCallId('guard-late-click'),
+      name: 'click',
+      arguments: { screen_index: 0, position: [0, 0] },
+      agent: {
+        options: {},
+        session: { requestHeader: () => ({ config: { provider: 'visual', model: 'vision-model' } }) },
+      } as never,
+    })
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('cloaked-input')
+    expect(platformBackend.click).not.toHaveBeenCalled()
+  })
+
   it('wraps when computerUseOverlayGuard is provided on a parent context', async () => {
     const host = new Context()
     contexts.push(host)

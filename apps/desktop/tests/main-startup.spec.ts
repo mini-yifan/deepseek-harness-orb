@@ -17,6 +17,7 @@ type InvokeEvent = { sender?: unknown; senderFrame: { url: string } }
 type InvokeHandler = (event: InvokeEvent, ...args: unknown[]) => unknown
 
 vi.mock('../src/web-document.ts', () => ({ authenticateWebHost: async () => 'test-cookie', serveWebDocument: vi.fn(), forwardWebRequest: vi.fn() }))
+vi.mock('../src/selection-monitor.ts', () => ({ startSelectionMonitor: () => undefined }))
 // Report persistence has its own unit tests; here it resolves within microtasks so the fatal
 // dialog never outlives the test that triggered it.
 vi.mock('../src/crash-report.ts', async importOriginal => ({
@@ -34,6 +35,8 @@ const harness = await vi.hoisted(async () => {
     return { promise, resolve, reject }
   }
   const windows: FakeWindow[] = []
+  const cursor = { x: -1, y: -1 }
+  let nextMediaSourceId = 4242
   let windowFailure: Error | undefined
   const powerMonitor = new EventEmitter()
   const hosts: FakeHost[] = []
@@ -59,6 +62,12 @@ const harness = await vi.hoisted(async () => {
   const menu = Object.assign(menuBuilder, { buildFromTemplate: menuBuilder, setApplicationMenu: vi.fn() })
   class FakeWindow extends EventEmitter {
     destroyed = false
+    contentProtection = false
+    ignoreMouseEvents = false
+    ignoreMouseEventsForward: boolean | undefined = undefined
+    focused = true
+    bounds = { x: 0, y: 0, width: 72, height: 72 }
+    readonly mediaSourceId: string
     readonly urls: string[] = []
     readonly webContents = Object.assign(new EventEmitter(), {
       id: 42,
@@ -67,6 +76,8 @@ const harness = await vi.hoisted(async () => {
       removeInsertedCSS: vi.fn(async () => {}),
       openDevTools: vi.fn(),
       getURL: () => this.urls.at(-1) ?? '',
+      isLoading: () => false,
+      executeJavaScript: vi.fn(async () => undefined),
       mainFrame: { url: '' },
       getZoomFactor: () => 1,
       focus: vi.fn(),
@@ -75,17 +86,43 @@ const harness = await vi.hoisted(async () => {
         if (channel === 'dsh-desktop:mandatory-state' && state.policy?.blocking) policyBlocked.resolve()
       }),
     })
-    readonly show = vi.fn()
-    readonly hide = vi.fn()
-    readonly focus = vi.fn()
+    readonly show = vi.fn(() => { this.visible = true; this.focused = true })
+    readonly showInactive = vi.fn(() => { this.visible = true })
+    readonly hide = vi.fn(() => { this.visible = false })
+    readonly focus = vi.fn(() => { this.focused = true })
+    readonly blur = vi.fn(() => { this.focused = false })
     readonly restore = vi.fn()
+    readonly moveTop = vi.fn()
     readonly setSize = vi.fn()
     readonly setTitleBarOverlay = vi.fn()
     readonly setVibrancy = vi.fn()
     readonly setBackgroundColor = vi.fn()
-    constructor(readonly options: { show: boolean; modal?: boolean }) {
-      super(); if (windowFailure !== undefined) throw windowFailure; windows.push(this)
+    readonly setAlwaysOnTop = vi.fn()
+    constructor(readonly options: {
+      show?: boolean
+      modal?: boolean
+      type?: string
+      focusable?: boolean
+      roundedCorners?: boolean
+      x?: number
+      y?: number
+      width?: number
+      height?: number
+      minWidth?: number
+      skipTaskbar?: boolean
+    }) {
+      super()
+      if (windowFailure !== undefined) throw windowFailure
+      this.mediaSourceId = `window:${String(nextMediaSourceId++)}:0`
+      if (typeof options.x === 'number') this.bounds.x = options.x
+      if (typeof options.y === 'number') this.bounds.y = options.y
+      if (typeof options.width === 'number') this.bounds.width = options.width
+      if (typeof options.height === 'number') this.bounds.height = options.height
+      this.visible = options.skipTaskbar === true ? options.show === true : true
+      if (options.minWidth !== undefined) windows.unshift(this)
+      else windows.push(this)
     }
+    getMediaSourceId() { return this.mediaSourceId }
     isDestroyed() { return this.destroyed }
     fullscreen = false
     isFullScreen() { return this.fullscreen }
@@ -93,7 +130,15 @@ const harness = await vi.hoisted(async () => {
     isMinimized() { return this.minimized }
     visible = true
     isVisible() { return this.visible }
-    isFocused() { return true }
+    isFocused() { return this.focused }
+    setContentProtection(value: boolean) { this.contentProtection = value }
+    setIgnoreMouseEvents(value: boolean, options?: { forward?: boolean }) {
+      this.ignoreMouseEvents = value
+      this.ignoreMouseEventsForward = options?.forward
+    }
+    setVisibleOnAllWorkspaces() {}
+    getBounds() { return { ...this.bounds } }
+    setContentBounds(next: { x: number; y: number; width: number; height: number }) { this.bounds = { ...next } }
     async loadURL(url: string) {
       this.urls.push(url)
       this.webContents.mainFrame.url = url
@@ -119,6 +164,8 @@ const harness = await vi.hoisted(async () => {
     readonly exited = deferred()
     readonly stopping = deferred()
     readonly start = vi.fn(() => { hostStarted.resolve(); return this.ready.promise.then(() => ({ url: this.url, injections: [] })) })
+    readonly sendOrb = vi.fn()
+    readonly sendOrbCodeAgentModel = vi.fn()
     readonly stop = vi.fn(() => {
       this.stopping.resolve()
       this.ready.reject(new Error('child stopped'))
@@ -129,6 +176,27 @@ const harness = await vi.hoisted(async () => {
       readonly inspectPort?: number, readonly environment?: NodeJS.ProcessEnv, readonly onFailure?: (error: Error) => void,
       readonly primaryRuntime?: string,
       readonly packageManager?: { pnpm: string; nodeBin: string },
+      readonly onPlatformSession?: (session: unknown) => void,
+      readonly orb?: {
+        onOverlayGuard?: (event: {
+          type: 'overlay-guard'
+          requestId: number
+          action: 'begin' | 'end'
+          mode: 'capture' | 'input'
+        }) => readonly number[] | Promise<readonly number[]>
+        onObservationFrame?: (event: {
+          type: 'observation-frame'
+          requestId: number
+          bounds: { x: number; y: number; width: number; height: number } | null
+        }) => void | Promise<void>
+        onSckCapture?: (event: {
+          type: 'sck-capture'
+          requestId: number
+          region: string
+          excludeWindowIds: readonly number[]
+          output: string
+        }) => void | Promise<void>
+      },
     ) { hosts.push(this) }
   }
   const app = Object.assign(new EventEmitter(), {
@@ -185,6 +253,7 @@ const harness = await vi.hoisted(async () => {
     get preparing() { return preparing }, get prepared() { return prepared },
     get hostStarted() { return hostStarted }, get navigated() { return navigated },
     get dialogShown() { return dialogShown }, get quitCompleted() { return quitCompleted },
+    cursor,
     get policyBlocked() { return policyBlocked },
     get embeddedPolicy() { return embeddedPolicy },
     set embeddedPolicy(value: unknown) { embeddedPolicy = value },
@@ -196,6 +265,9 @@ const harness = await vi.hoisted(async () => {
     reset() {
       accountListener = undefined
       windows.length = 0; hosts.length = 0; handlers.clear(); app.removeAllListeners()
+      nextMediaSourceId = 4242
+      cursor.x = -1
+      cursor.y = -1
       powerMonitor.removeAllListeners()
       app.isPackaged = true
       windowFailure = undefined
@@ -246,6 +318,26 @@ vi.mock('electron', () => ({
   } },
   protocol: { registerSchemesAsPrivileged: vi.fn(), handle: harness.protocolHandle },
   powerMonitor: harness.powerMonitor,
+  screen: {
+    getPrimaryDisplay: () => ({
+      workArea: { x: 0, y: 0, width: 1440, height: 900 },
+      bounds: { x: 0, y: 0, width: 1440, height: 900 },
+      scaleFactor: 1,
+    }),
+    getDisplayNearestPoint: () => ({
+      workArea: { x: 0, y: 0, width: 1440, height: 900 },
+      bounds: { x: 0, y: 0, width: 1440, height: 900 },
+      scaleFactor: 1,
+    }),
+    getDisplayMatching: () => ({ bounds: { x: 0, y: 0, width: 1440, height: 900 }, scaleFactor: 1 }),
+    getCursorScreenPoint: () => ({ x: harness.cursor.x, y: harness.cursor.y }),
+    dipToScreenRect: (_window: unknown, rect: { x: number; y: number; width: number; height: number }) => rect,
+    screenToDipRect: (_window: unknown, rect: { x: number; y: number; width: number; height: number }) => rect,
+  },
+  systemPreferences: {
+    isTrustedAccessibilityClient: () => true,
+    getMediaAccessStatus: () => 'granted',
+  },
 }))
 vi.mock('node:fs/promises', async (importOriginal) => {
   const original = await importOriginal<typeof import('node:fs/promises')>()
@@ -296,6 +388,10 @@ vi.mock('../src/welcome-backend.ts', () => ({
     account: { watch: harness.watchAccount, state: async () => ({ status: 'signed-out', attempt: null }) },
   }),
 }))
+
+function productWindows(): typeof harness.windows {
+  return harness.windows.filter(window => window.options.skipTaskbar !== true)
+}
 
 function invoke(channel: string, origin = channel === DESKTOP_IPC.boot ? 'app' : 'shell', ...args: unknown[]): unknown {
   const handler = harness.handlers.get(channel)
@@ -1000,7 +1096,7 @@ describe('desktop main startup', () => {
     await harness.policyBlocked.promise
     const modal = harness.windows[0]!
     expect(modal).toBeDefined()
-    expect(harness.windows).toHaveLength(1)
+    expect(productWindows()).toHaveLength(1)
     const status = harness.handlers.get(MANDATORY_IPC.status)!
     const action = harness.handlers.get(MANDATORY_IPC.action)!
     const owned = { sender: modal.webContents, senderFrame: modal.webContents.mainFrame }
@@ -1309,7 +1405,7 @@ describe('desktop main startup', () => {
     expect(replacement.updateTasks.mock.calls).toEqual([['inspect']])
     expect(replacement.stop).not.toHaveBeenCalled()
     if (mandatory) {
-      expect(harness.windows).toHaveLength(1)
+      expect(productWindows()).toHaveLength(1)
       expect(harness.windows[0]!.isDestroyed()).toBe(false)
     }
   })
@@ -1346,7 +1442,7 @@ describe('desktop main startup', () => {
     expect(replacement.updateTasks.mock.calls).toEqual([['inspect']])
     expect(replacement.stop).not.toHaveBeenCalled()
     if (mandatory) {
-      expect(harness.windows).toHaveLength(1)
+      expect(productWindows()).toHaveLength(1)
       expect(harness.windows[0]!.isDestroyed()).toBe(false)
     }
   })
@@ -1494,7 +1590,11 @@ describe('desktop main startup', () => {
   it('reports a rejected document load without navigating to a recovery page', async () => {
     const shown = Promise.withResolvers<undefined>()
     harness.dialog.showMessageBox.mockImplementation(() => { shown.resolve(undefined); return new Promise(() => {}) })
-    vi.spyOn(harness.FakeWindow.prototype, 'loadURL').mockRejectedValueOnce(new Error('document missing'))
+    vi.spyOn(harness.FakeWindow.prototype, 'loadURL').mockImplementation(async function (this: { urls: string[]; webContents: { mainFrame: { url: string } } }, url: string) {
+      if (url === 'dsh-app://app/') throw new Error('document missing')
+      this.urls.push(url)
+      this.webContents.mainFrame.url = url
+    })
     await import('../src/main.ts')
     await shown.promise
     expect(harness.dialog.showMessageBox).toHaveBeenCalledOnce()
@@ -1587,7 +1687,7 @@ describe('desktop main startup', () => {
   it('prepares recovery offscreen and starts one Host before choosing the first visible window', async () => {
     await import('../src/main.ts')
     await harness.preparing.promise
-    expect(harness.windows).toHaveLength(1)
+    expect(productWindows()).toHaveLength(1)
     const window = harness.windows[0]!
     expect(window.options.show).toBe(false)
     expect(window.show).not.toHaveBeenCalled()
@@ -1610,7 +1710,7 @@ describe('desktop main startup', () => {
     })
     expect(harness.hosts[0]!.environment).toBe(process.env)
     expect(harness.hosts[0]!.start).toHaveBeenCalledTimes(1)
-    expect(harness.windows).toHaveLength(1)
+    expect(productWindows()).toHaveLength(1)
     expect(window.urls).toEqual(['dsh-app://app/'])
   })
 
@@ -1694,7 +1794,7 @@ describe('desktop main startup', () => {
     await harness.quitCompleted.promise
     expect(host.stop).toHaveBeenCalledTimes(1)
     expect(window.urls).toEqual(['dsh-app://app/'])
-    expect(harness.windows).toHaveLength(1)
+    expect(productWindows()).toHaveLength(1)
   })
 })
 
@@ -1732,4 +1832,101 @@ it.each([['light', false], ['dark', true]] as const)('opens Platform authorizati
   harness.publishAccount(state)
   harness.publishAccount(state)
   expect(harness.openExternal).toHaveBeenCalledExactlyOnceWith(`https://platform.deepseek.com/dsh/authorize?state=state-1&theme=${theme}`)
+})
+
+describe('computer use overlay cloak', () => {
+  function windowId(window: { getMediaSourceId(): string }): number {
+    const match = /^window:(\d+)/u.exec(window.getMediaSourceId())
+    if (match === null) throw new Error('missing window id')
+    return Number(match[1])
+  }
+
+  async function startDarwin(): Promise<void> {
+    vi.stubGlobal('process', { ...process, platform: 'darwin', arch: 'arm64', resourcesPath: 'desktop-test-resources' })
+    await import('../src/main.ts')
+    await harness.preparing.promise
+    harness.prepared.resolve()
+    await harness.hostStarted.promise
+    harness.hosts[0]!.ready.resolve()
+    await harness.navigated.promise
+  }
+
+  it('omits visible overlay chrome from capture, click-throughs HID, and clears the ribbon on stop', async () => {
+    await startDarwin()
+    const overlay = harness.windows.find(window => window.urls.includes('dsh-app://shell/floating.html'))
+    const toolbar = harness.windows.find(window => window.urls.includes('dsh-app://shell/selection-toolbar.html'))
+    const host = harness.hosts[0]!
+    expect(overlay).toBeDefined()
+    expect(toolbar).toBeDefined()
+    expect(overlay!.contentProtection).toBe(false)
+    expect(host.orb?.onOverlayGuard?.({
+      type: 'overlay-guard', requestId: 1, action: 'begin', mode: 'capture',
+    })).toEqual([windowId(overlay!)])
+    host.orb?.onOverlayGuard?.({ type: 'overlay-guard', requestId: 2, action: 'end', mode: 'capture' })
+    await host.orb?.onObservationFrame?.({
+      type: 'observation-frame',
+      requestId: 3,
+      bounds: { x: 100, y: 80, width: 400, height: 300 },
+    })
+    const frame = harness.windows.find(window => window.urls.includes('dsh-app://shell/observation-frame.html'))
+    expect(frame?.visible).toBe(true)
+    expect(frame?.ignoreMouseEvents).toBe(true)
+    expect(frame?.ignoreMouseEventsForward).toBe(true)
+    expect(overlay!.moveTop).toHaveBeenCalled()
+    const frameScript = frame?.webContents.executeJavaScript as ReturnType<typeof vi.fn>
+    expect(String(frameScript.mock.calls[0]?.[0])).toContain('--glow-top')
+    expect(host.orb?.onOverlayGuard?.({
+      type: 'overlay-guard', requestId: 4, action: 'begin', mode: 'capture',
+    })).toEqual([windowId(overlay!), windowId(frame!)])
+    await host.orb?.onObservationFrame?.({ type: 'observation-frame', requestId: 5, bounds: null })
+    expect(frame?.visible).toBe(false)
+    expect(host.orb?.onOverlayGuard?.({
+      type: 'overlay-guard', requestId: 6, action: 'begin', mode: 'capture',
+    })).toEqual([windowId(overlay!)])
+    const inputBegin = host.orb?.onOverlayGuard?.({
+      type: 'overlay-guard', requestId: 7, action: 'begin', mode: 'input',
+    })
+    expect(overlay!.ignoreMouseEvents).toBe(true)
+    expect(overlay!.ignoreMouseEventsForward).toBe(false)
+    expect(toolbar!.hide).toHaveBeenCalled()
+    expect(inputBegin).toBeInstanceOf(Promise)
+    await vi.advanceTimersByTimeAsync(80)
+    await inputBegin
+    host.orb?.onOverlayGuard?.({ type: 'overlay-guard', requestId: 8, action: 'end', mode: 'input' })
+    expect(overlay!.ignoreMouseEvents).toBe(false)
+    await host.orb?.onObservationFrame?.({
+      type: 'observation-frame',
+      requestId: 9,
+      bounds: { x: 40, y: 40, width: 200, height: 120 },
+    })
+    expect(frame?.visible).toBe(true)
+    host.stop.mockImplementation(() => {
+      host.stopping.resolve()
+      return host.exited.promise
+    })
+    harness.app.quit()
+    await host.stopping.promise
+    host.exited.resolve()
+    await harness.quitCompleted.promise
+    expect(overlay!.contentProtection).toBe(false)
+    expect(overlay!.ignoreMouseEvents).toBe(false)
+    expect(frame?.visible).toBe(false)
+  })
+
+  it('does not focus the main window when the pointer is over the overlay during Computer Use', async () => {
+    await startDarwin()
+    const overlay = harness.windows.find(window => window.urls.includes('dsh-app://shell/floating.html'))!
+    const main = harness.windows.find(window => window.urls.includes('dsh-app://app/'))!
+    harness.handlers.get(DESKTOP_IPC.floatingRunning)!({
+      sender: overlay.webContents,
+      senderFrame: overlay.webContents.mainFrame,
+    }, true)
+    overlay.bounds = { x: 10, y: 20, width: 80, height: 80 }
+    harness.cursor.x = 20
+    harness.cursor.y = 30
+    main.focus.mockClear()
+    harness.app.emit('activate')
+    expect(main.focus).not.toHaveBeenCalled()
+    expect(main.blur).toHaveBeenCalled()
+  })
 })

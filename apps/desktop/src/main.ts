@@ -17,6 +17,7 @@ import {
   nativeTheme,
   net,
   protocol,
+  screen,
   session,
   shell,
   systemPreferences,
@@ -25,7 +26,8 @@ import {
 } from 'electron'
 import { resolveDesktopPaths } from './paths.ts'
 import { DesktopProjectManager } from './project-manager.ts'
-import { DesktopHostFatalError, DesktopHostProcess, DesktopHostUncleanExitError, type DesktopHostOrbCommand } from './host-process.ts'
+import { DesktopHostFatalError, DesktopHostProcess, DesktopHostUncleanExitError, type DesktopHostOrbCommand, type DesktopOrbHostHandlers } from './host-process.ts'
+import { captureExcludedRegionOnElectron } from './macos-sck-napi.ts'
 import { DesktopPlatformView, PLATFORM_IPC, platformBounds } from './platform-view.ts'
 import { installDesktopDirectoryPicker } from './directory-picker.ts'
 import { installMicrophonePermissions } from './microphone-permissions.ts'
@@ -33,9 +35,13 @@ import { DesktopBackendController } from './backend-controller.ts'
 import { DESKTOP_IPC, SCHEME, assertDesktopSender, type DesktopUpdateState, type OrbMillifractionWriteResult, type OrbSettingsSnapshot } from './ipc.ts'
 import { formatDesktopMessage, resolveDesktopLocale, resolveDesktopStartupLocale } from './locale.ts'
 import {
+  applyFloatingOverlayGuard,
   clampFloatingWindow,
   createFloatingWindow,
   moveFloatingBall,
+  OVERLAY_GUARD_INPUT_APPLY_MS,
+  overlayWindowExcludeIds,
+  resetFloatingOverlayGuard,
   setFloatingExpanded,
   unsnapDockedBall,
 } from './floating-window.ts'
@@ -57,7 +63,13 @@ import { applyMillifractionCoordinates } from './millifraction-coordinates-apply
 import { orbCoordinateModeFor, readMillifractionCoordinates, writeMillifractionCoordinates } from './millifraction-coordinates.ts'
 import { isTccRight, TccController } from './tcc.ts'
 import { SelectionToolbarController } from './selection-toolbar-controller.ts'
-import { createSelectionToolbarWindow, hideSelectionToolbar } from './selection-toolbar-window.ts'
+import { createSelectionToolbarWindow, hideSelectionToolbar, pointInWindow } from './selection-toolbar-window.ts'
+import {
+  createObservationFrameWindow,
+  hideObservationFrame,
+  raiseOverlayAboveObservationFrame,
+  showObservationFrame,
+} from './observation-frame-window.ts'
 import type { FloatingModelCatalog } from './floating-agent-menu.ts'
 import { claimDesktopSingleInstance } from './single-instance.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
@@ -206,6 +218,13 @@ function chromeFallbackFill(): string {
  * @param authorizeUrl - validated Platform authorization URL.
  * @returns the authorization URL carrying `theme=light` or `theme=dark`.
  */
+function overlayGuardInputApplyDelay(): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, OVERLAY_GUARD_INPUT_APPLY_MS)
+    timer.unref()
+  })
+}
+
 function platformLoginUrl(authorizeUrl: string): string {
   const url = new URL(authorizeUrl)
   url.searchParams.set('theme', nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
@@ -342,6 +361,9 @@ async function main(): Promise<void> {
   // The backend listener is registered before this window exists and reads the binding later.
   // eslint-disable-next-line prefer-const -- assigned once when the floating window is created
   let floatingShell: BrowserWindow | undefined
+  let observationFrameWindow: BrowserWindow | undefined
+  let restoreOverlayGuard = (): void => {}
+  const orbHostHandlers: DesktopOrbHostHandlers = {}
   let overlayTextEditing = false
   let millifractionApplying: Promise<OrbMillifractionWriteResult> | undefined
   let welcomeWindow: BrowserWindow | undefined
@@ -418,9 +440,12 @@ async function main(): Promise<void> {
   const backend = new DesktopBackendController((onFailure) => {
     const hostInspectPort = developmentHostInspectPort(development)
     const host = new DesktopHostProcess(resources.node, resources.dsh, activeProject,
-      hostInspectPort, process.env, onFailure,
+      hostInspectPort, process.env, (error) => {
+        restoreOverlayGuard()
+        onFailure(error)
+      },
       primaryRuntime,
-      resources, (next) => { platformView.setSession(next) })
+      resources, (next) => { platformView.setSession(next) }, orbHostHandlers)
     return {
       start: async () => {
         const ready = await host.start()
@@ -461,6 +486,8 @@ async function main(): Promise<void> {
           if (!requireCleanStop || !(error instanceof DesktopHostUncleanExitError)) throw error
           // Backend cleanup succeeded; installation still rejects the unsuccessful task teardown.
           updateStopFailure = error
+        } finally {
+          restoreOverlayGuard()
         }
       },
       updateTasks: (action: 'inspect' | 'lock' | 'unlock') => host.updateTasks(action),
@@ -817,6 +844,60 @@ async function main(): Promise<void> {
   toolbar.webContents.once('did-finish-load', () => { selectionController?.publishState() })
   void toolbar.loadURL(`${SCHEME}://shell/selection-toolbar.html`)
   selectionController.start()
+  const ensureObservationFrameWindow = (): void => {
+    if (observationFrameWindow !== undefined && !observationFrameWindow.isDestroyed()) return
+    observationFrameWindow = createObservationFrameWindow()
+    observationFrameWindow.once('closed', () => { observationFrameWindow = undefined })
+    void observationFrameWindow.loadURL(`${SCHEME}://shell/observation-frame.html`)
+  }
+  const blurMainIfFocused = (): void => {
+    const window = mainWindow
+    if (window === undefined || window.isDestroyed() || !window.isFocused()) return
+    window.blur()
+  }
+  restoreOverlayGuard = (): void => {
+    hideObservationFrame(observationFrameWindow)
+    if (floatingShell !== undefined && !floatingShell.isDestroyed()) resetFloatingOverlayGuard(floatingShell)
+    const toolbarWindow = selectionController.window()
+    if (toolbarWindow !== undefined && !toolbarWindow.isDestroyed()) resetFloatingOverlayGuard(toolbarWindow)
+    selectionController.setHidInput(false)
+  }
+  orbHostHandlers.onOverlayGuard = (event) => {
+    if (floatingShell === undefined || floatingShell.isDestroyed()) return []
+    applyFloatingOverlayGuard(floatingShell, event.mode, event.action)
+    const toolbarWindow = selectionController.window()
+    if (toolbarWindow !== undefined && !toolbarWindow.isDestroyed()) {
+      applyFloatingOverlayGuard(toolbarWindow, event.mode, event.action)
+    }
+    if (event.mode === 'input') selectionController.setHidInput(event.action === 'begin')
+    const ids = overlayWindowExcludeIds(floatingShell, toolbarWindow, observationFrameWindow)
+    if (event.mode === 'input' && event.action === 'begin') {
+      blurMainIfFocused()
+      try {
+        selectionController.restoreLastFrontApp()
+      } catch (error: unknown) {
+        // Restoring the previous app is separate from the cloak. A throw must not fail the Host ack.
+        console.error('dsh desktop: restore front app failed', error)
+      }
+      return overlayGuardInputApplyDelay().then(() => ids)
+    }
+    return ids
+  }
+  orbHostHandlers.onObservationFrame = (event) => {
+    if (event.bounds === null) {
+      hideObservationFrame(observationFrameWindow)
+      return
+    }
+    ensureObservationFrameWindow()
+    if (observationFrameWindow === undefined || observationFrameWindow.isDestroyed()) return
+    showObservationFrame(observationFrameWindow, event.bounds)
+    raiseOverlayAboveObservationFrame(floatingShell, selectionController.window())
+  }
+  orbHostHandlers.onSckCapture = event => captureExcludedRegionOnElectron({
+    region: event.region,
+    excludeWindowIds: event.excludeWindowIds,
+    output: event.output,
+  })
   const shellSender = (event: IpcMainInvokeEvent): void => {
     if (event.sender !== floatingWindow.webContents) throw new Error('dsh desktop: rejected floating IPC')
   }
@@ -1479,7 +1560,14 @@ async function main(): Promise<void> {
   })
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) focusPrimaryWindow()
+    if (BrowserWindow.getAllWindows().length === 0) {
+      focusPrimaryWindow()
+      return
+    }
+    if (!pointInWindow(floatingShell, screen.getCursorScreenPoint())) return
+    if (selectionController.isSessionRunning() !== true || overlayTextEditing) return
+    blurMainIfFocused()
+    selectionController.restoreLastFrontApp()
   })
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit()

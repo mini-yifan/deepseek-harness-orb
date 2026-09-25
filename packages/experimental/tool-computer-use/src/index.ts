@@ -6,6 +6,7 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import { createPlatformBackend } from './backend.ts'
+import type { OverlayExcludedRegionCapture } from './macos.ts'
 import { Config, resolveComputerUseConfig } from './config.ts'
 import { wrapDesktopBackend } from './overlay-guard.ts'
 import { applyComputerUse, PLUGIN_NAME } from './plugin.ts'
@@ -52,18 +53,54 @@ export const name = PLUGIN_NAME
 export const inject = ['tools', 'systemPrompt', 'attachments']
 
 /**
+ * Resolve the overlay cloak when a desktop method runs.
+ * Desktop Host installs `computerUseOverlayGuard` after profile plugins apply, so a one-time read during `apply` stays empty.
+ * @param ctx - plugin context that may later provide `computerUseOverlayGuard`.
+ * @param inner - platform backend. Its overlay-exclude capture also reads the guard at call time.
+ * @returns a backend that cloaks only while the guard service is present.
+ */
+function desktopBackend(ctx: Context, inner: ReturnType<typeof createPlatformBackend>): ReturnType<typeof createPlatformBackend> {
+  const resolve = (): ReturnType<typeof createPlatformBackend> => {
+    const guard = ctx.get('computerUseOverlayGuard')
+    return guard === undefined ? inner : wrapDesktopBackend(inner, guard)
+  }
+  return {
+    withGuiTurn: (run, signal) => resolve().withGuiTurn(run, signal),
+    listScreens: signal => resolve().listScreens(signal),
+    capture: (screen, signal) => resolve().capture(screen, signal),
+    inspectForeground: signal => resolve().inspectForeground(signal),
+    listApps: signal => resolve().listApps(signal),
+    openApp: (input, signal) => resolve().openApp(input, signal),
+    click: (input, signal) => resolve().click(input, signal),
+    typeText: (input, signal) => resolve().typeText(input, signal),
+    scroll: (input, signal) => resolve().scroll(input, signal),
+    hotkey: (input, signal) => resolve().hotkey(input, signal),
+    longPress: (input, signal) => resolve().longPress(input, signal),
+    drag: (input, signal) => resolve().drag(input, signal),
+    openInBrowser: (input, signal) => resolve().openInBrowser(input, signal),
+    openInFinder: (input, signal) => resolve().openInFinder(input, signal),
+    copyImageToClipboard: (input, signal) => resolve().copyImageToClipboard(input, signal),
+  }
+}
+
+/**
  * Mount Computer Use with the host-platform backend.
  * When Desktop Host provides `computerUseOverlayGuard`, capture, inspect, listScreens, HID, and withGuiTurn run
  * inside overlay-guard intervals, `listScreens` waits for the observation-frame ribbon ack, and overlay-exclude
  * capture runs ScreenCaptureKit in the Electron process.
+ * The guard is read on each desktop call, including when Host installs it after this plugin applies.
  * @param ctx - registration scope; `inject` must already be satisfied.
  * @param config - optional tunables; omitted fields use schema defaults.
  */
 export function apply(ctx: Context, config: Config = {}): void {
-  const guard = ctx.get('computerUseOverlayGuard')
-  const backend = createPlatformBackend(
-    process.platform,
-    guard?.captureExcludedRegion?.bind(guard),
-  )
-  applyComputerUse(ctx, guard === undefined ? backend : wrapDesktopBackend(backend, guard), resolveComputerUseConfig(config))
+  const excludedRegionCapture: OverlayExcludedRegionCapture = (input) => {
+    const capture = ctx.get('computerUseOverlayGuard')?.captureExcludedRegion
+    if (capture === undefined) {
+      return Promise.reject(new Error('dsh desktop: overlay-exclude capture is not attached'))
+    }
+    const { signal, ...region } = input
+    return capture(region, signal)
+  }
+  const backend = createPlatformBackend(process.platform, excludedRegionCapture)
+  applyComputerUse(ctx, desktopBackend(ctx, backend), resolveComputerUseConfig(config))
 }
