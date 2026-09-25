@@ -36,7 +36,7 @@ On startup the ball rests at the right edge of the primary display, slightly bel
 
 - **Hover** expands the panel, **click** pins it, and it collapses when the pointer leaves.
 - **Drag** moves the ball; release it after dragging about a fifth of it beyond the left or right screen edge and it docks into a thin gray tab — hover again to slide it back.
-- **Right-click** opens the menu: open the main window, floating-ball agent settings and background agent settings (each track picks its own model and thinking level), the selection-toolbar toggle, the coordinate-encoding toggle (pixel by default, switchable to millifraction), and quit DeepSeek Orb.
+- **Right-click** opens the menu: open the main window, floating-ball agent settings and background agent settings (each track picks its own model and thinking level), the selection-toolbar toggle, the coordinate-encoding toggle (millifraction by default, switchable to pixels), and quit DeepSeek Orb.
 - The panel carries the same conversation history as the main window, a composer that grows around the ball (Enter sends, Shift+Enter inserts a newline), the **Access** chip (view-only / workspace edits / full access, full by default, applying to the ball's commands and the background sessions it dispatches), **History** (the ball's Computer Use conversations), and **New**. When the agent asks you a question, the question card is answered right on the ball.
 - Drag-selecting text in any app pops up a toolbar: **Search** (opens Bing in your default browser), **Translate** (the result is written into the ball's current conversation), and **Send to agent** (the text sits by the input; Enter sends it together with your instruction).
 - The ball avatar can be replaced with a custom GIF / PNG / WebP (2 MB cap) in main-window Settings → Floating Ball.
@@ -45,7 +45,7 @@ Closing the main window does not quit the app; only "Quit DeepSeek Orb" in the r
 
 ## Computer Use
 
-Every conversation on the ball runs Computer Use: the first message automatically attaches a screenshot of the frontmost app's visible windows, and another screenshot follows every action, so the model always sees the latest screen state. Screenshots automatically omit the ball, the expanded panel, the selection toolbar, and the observation border, and the overlay never blocks clicks while an operation runs. The observed window gets a glowing observation border around it, marking what the agent is looking at. Coordinates are pixel-encoded by default; switch to 0–1000 millifraction encoding in the ball's right-click menu or in main-window Settings → Floating Ball.
+Every conversation on the ball runs Computer Use: the first message automatically attaches a screenshot of the frontmost app's visible windows, and another screenshot follows every action, so the model always sees the latest screen state. Screenshots automatically omit the ball, the expanded panel, the selection toolbar, and the observation border, and the overlay never blocks clicks while an operation runs. The observed window gets a glowing observation border around it, marking what the agent is looking at. Coordinates use 0–1000 millifraction encoding by default; switch to pixels in the ball's right-click menu or in main-window Settings → Floating Ball.
 
 Tool list: `click` (single/double/right click, hold modifiers), `input_text`, `scroll`, `hotkey`, `long_press`, `drag`, `wait`, `long_wait`, `screenshot` (saved to the Desktop and copied to the clipboard), `open_in_browser`, `open_in_finder`, `list_apps`, `open_app`.
 

@@ -11,12 +11,12 @@ export const ORB_COORDINATE_MODES = ['millifraction', 'pixel'] as const
 /** One overlay Computer Use click encoding. */
 export type OrbCoordinateMode = (typeof ORB_COORDINATE_MODES)[number]
 
-/** Shipped encoding until Electron pushes a stored preference. New overlay chats start in pixels. */
-export const DEFAULT_ORB_COORDINATE_MODE: OrbCoordinateMode = 'pixel'
+/** Shipped encoding until Electron pushes a stored preference. New overlay chats start in millifraction. */
+export const DEFAULT_ORB_COORDINATE_MODE: OrbCoordinateMode = 'millifraction'
 
 /** Live overlay click encoding for Computer Use blank creates. */
 export interface OrbCoordinateModeService {
-  /** @returns the latest Electron-pushed encoding, or pixel before the first push. */
+  /** @returns the latest Electron-pushed encoding, or millifraction before the first push. */
   currentMode(): OrbCoordinateMode
 }
 
@@ -51,7 +51,7 @@ export function setOrbCoordinateMode(next: OrbCoordinateMode): void {
 }
 
 /**
- * Restore the shipped pixel default. Tests reset module state between cases.
+ * Restore the shipped millifraction default. Tests reset module state between cases.
  * @returns nothing; module state is {@link DEFAULT_ORB_COORDINATE_MODE} afterwards.
  */
 export function clearOrbCoordinateMode(): void {

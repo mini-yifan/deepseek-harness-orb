@@ -31,7 +31,7 @@ Computer Use 的 click、type、scroll、drag、long-press 的 `position` 是已
 
 有两件可以不一致的事实：
 
-1. **新建 overlay Computer Use 会话的 Desktop 默认值** — 右键菜单项和主窗口设置页开关反映的就是它。默认千分比关闭。写在 `millifraction-coordinates.json`，与其他 orb 偏好同级，不要写进 `floating-session.json`。
+1. **新建 overlay Computer Use 会话的 Desktop 默认值** — 右键菜单项和主窗口设置页开关反映的就是它。默认千分比打开。写在 `millifraction-coordinates.json`，与其他 orb 偏好同级，不要写进 `floating-session.json`。
 2. **每条会话的合同** — 空白新建时记下的 `'computer-use/coordinate-mode'`，必须能从会话日志重建，因为它对模型可见。不可忽略，也不是插件通知：旧读端若跳过通知，仍会按 0–1000 映射。某次请求的 POLICY、工具 schema、信封、校验和映射，读的是**这条会话**的合同，不是当前 Desktop 默认值。普通事件词表增长不提升 `SESSION_FORMAT_VERSION`。
 
 用户关掉千分比之后，继续一条旧的千分比会话，仍走千分比。该开关之后的新建 overlay 会话（包括 overlay New）走像素。History 认领不得用 Desktop 默认值重盖会话合同：已有编码事件或 `session/end-seed` 的日志不动。Overlay 创建、历史接上和新建已经会以 `saveAsDefault: false` 重套已存的 overlay **模型**（[悬浮球 Agent 模型菜单](2026-09-17-orb-agent-model-menus.zh.md)）；坐标编码不是那个字段，也不得搭 `selectModel` 的便车。

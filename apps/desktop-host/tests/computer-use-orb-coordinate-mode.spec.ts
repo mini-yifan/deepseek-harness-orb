@@ -18,11 +18,11 @@ describe('computer-use-orb-coordinate-mode plugin', () => {
     expect(name).toBe('computer-use-orb-coordinate-mode')
   })
 
-  it('publishes pixel until Electron pushes millifraction', () => {
+  it('publishes millifraction until Electron pushes pixel', () => {
     const ctx = new Context()
     apply(ctx)
-    expect(ctx.orbCoordinateMode.currentMode()).toBe('pixel')
-    expect(DEFAULT_ORB_COORDINATE_MODE).toBe('pixel')
+    expect(ctx.orbCoordinateMode.currentMode()).toBe('millifraction')
+    expect(DEFAULT_ORB_COORDINATE_MODE).toBe('millifraction')
     setOrbCoordinateMode('millifraction')
     expect(ctx.orbCoordinateMode.currentMode()).toBe('millifraction')
     setOrbCoordinateMode('pixel')

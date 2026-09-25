@@ -16,10 +16,10 @@ afterEach(() => {
 })
 
 describe('millifraction coordinates config', () => {
-  it('defaults to millifraction off', () => {
+  it('defaults to millifraction on', () => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-millifraction-'))
     roots.push(root)
-    expect(readMillifractionCoordinates(root)).toEqual({ enabled: false })
+    expect(readMillifractionCoordinates(root)).toEqual({ enabled: true })
     expect(orbCoordinateModeFor(true)).toBe('millifraction')
     expect(orbCoordinateModeFor(false)).toBe('pixel')
   })
@@ -40,8 +40,8 @@ describe('millifraction coordinates config', () => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-millifraction-bad-'))
     roots.push(root)
     writeFileSync(join(root, MILLIFRACTION_COORDINATES_FILE), '[]\n')
-    expect(readMillifractionCoordinates(root).enabled).toBe(false)
+    expect(readMillifractionCoordinates(root).enabled).toBe(true)
     writeFileSync(join(root, MILLIFRACTION_COORDINATES_FILE), '{"enabled":"no"}\n')
-    expect(readMillifractionCoordinates(root).enabled).toBe(false)
+    expect(readMillifractionCoordinates(root).enabled).toBe(true)
   })
 })

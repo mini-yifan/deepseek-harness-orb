@@ -66,7 +66,7 @@ const IDLE: OrbSettingsState = {
   overlay: { provider: '', model: '' },
   background: { provider: '', model: '' },
   selectionEnabled: true,
-  millifractionEnabled: false,
+  millifractionEnabled: true,
   tcc: { applicable: false, appName: '', screen: 'granted', accessibility: 'granted' },
   catalog: undefined,
   busy: false,
