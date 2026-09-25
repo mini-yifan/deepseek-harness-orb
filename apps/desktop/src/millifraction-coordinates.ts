@@ -12,7 +12,7 @@ export interface MillifractionCoordinatesConfig {
 }
 
 const DEFAULT_CONFIG: MillifractionCoordinatesConfig = {
-  enabled: true,
+  enabled: false,
 }
 
 /**

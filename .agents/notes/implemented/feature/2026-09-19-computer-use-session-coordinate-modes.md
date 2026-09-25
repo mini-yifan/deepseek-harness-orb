@@ -31,7 +31,7 @@ Pin pixels to the raster attached in **that** observation, not capture backing p
 
 There are two facts, and they may disagree:
 
-1. **Desktop default for new overlay Computer Use sessions** — what the right-click item and the main-window Settings switch reflect. Default is millifraction on. Persist it in `millifraction-coordinates.json` next to other orb prefs, not inside `floating-session.json`.
+1. **Desktop default for new overlay Computer Use sessions** — what the right-click item and the main-window Settings switch reflect. Default is millifraction off. Persist it in `millifraction-coordinates.json` next to other orb prefs, not inside `floating-session.json`.
 2. **Per-session contract** — `'computer-use/coordinate-mode'` on that overlay session at blank create, reconstructable from the session log because it is model-visible. Not ignorable and not a plugin notice: a skipped notice would still map as 0–1000. POLICY, tool schemas, envelopes, validation, and mapping for a request read **this session's** contract, not the current Desktop default. Ordinary event vocabulary growth does not bump `SESSION_FORMAT_VERSION`.
 
 Continuing an old millifraction session after the user has turned millifraction off still uses millifraction. New overlay sessions after that toggle, including overlay New, use pixel. History adopt must not restamp the session contract from the Desktop default: a log that already has the encoding event or `session/end-seed` is left unchanged. Overlay create, History adopt, and New still re-apply the stored overlay **model** with `saveAsDefault: false` ([floating-ball Agent model menus](2026-09-17-orb-agent-model-menus.md)); coordinate encoding is not that field and does not ride `selectModel`.
