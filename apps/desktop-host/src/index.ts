@@ -28,6 +28,7 @@ import { setOrbCoordinateMode } from './computer-use-orb-coordinate-mode.ts'
 import * as computerUseOrbCodeAgentModel from './computer-use-orb-code-agent-model.ts'
 import { setOrbCodeAgentModelSelection } from './computer-use-orb-code-agent-model.ts'
 import { existsSync } from 'node:fs'
+import { registerDesktopRemoteStream } from './remote-stream-route.ts'
 
 async function main(): Promise<void> {
   const runtimeDir = process.argv[2] as string
@@ -118,6 +119,7 @@ async function main(): Promise<void> {
   })
   process.once('disconnect', () => { void stop() })
   const { ctx } = await application
+  registerDesktopRemoteStream(ctx)
   await ctx.plugin(computerUseOverlayGuard)
   await ctx.plugin(computerUseOrbPermission)
   await ctx.plugin(computerUseOrbCoordinateMode)

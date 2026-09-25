@@ -21,6 +21,9 @@
       "path": "../../packages/boot/app-boot"
     },
     {
+      "path": "../../packages/api/gateway/tsconfig.host.json"
+    },
+    {
       "path": "../../packages/client/connection/tsconfig.host.json"
     },
     {
