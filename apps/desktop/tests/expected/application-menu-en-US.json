@@ -1,7 +1,7 @@
 [
   {
     "role": "hide",
-    "label": "Hide DeepSeek Harness"
+    "label": "Hide DeepSeek Orb"
   },
   {
     "role": "hideOthers",
@@ -13,6 +13,6 @@
   },
   {
     "role": "quit",
-    "label": "Quit DeepSeek Harness"
+    "label": "Quit DeepSeek Orb"
   }
 ]

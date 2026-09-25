@@ -31,7 +31,7 @@ pnpm run package:desktop:mac:arm64:unsigned
 - 未封装应用：`unsigned-artifacts/mac-arm64/DeepSeek Orb.app`
 - 日志里：`skipped macOS code signing  reason=identity explicitly is set to null`
 
-当前壳版本是 `0.1.5-rc.2`，所以文件名带这个号。换版本后文件名跟着变。
+当前壳版本是 `0.1.7-rc.1`，所以文件名带这个号。换版本后文件名跟着变。
 
 ---
 
@@ -40,8 +40,8 @@ pnpm run package:desktop:mac:arm64:unsigned
 `package:desktop:mac:arm64:unsigned` → `apps/desktop/scripts/package-target.ts mac-arm64 --unsigned`。顺序是：
 
 1. `pnpm run build:official`（含 Host/Client `tsc`+tsdown、Computer Use 的 `macos-sck-capture` 可执行文件和 dylib）
-2. `release:pack` 打 dsh / vendor / landlock tarball，再 pack 私有 `@deepseek-ai/dsh-desktop-host`
-3. `prepare:runtime` / `prepare:packages` / `prepare:dsh`：上游 Node、pnpm、把生产依赖树铺进该 target 的 `dsh/`
+2. `release:pack` 打 dsh / vendor / landlock tarball，再 pack 私有 `@deepseek-ai/dsh-desktop-host` 和 `@deepseek-ai/dsh-experimental-tool-computer-use`（`private: true`，不进 dsh family）
+3. `prepare:runtime` / `prepare:packages` / `prepare:dsh`：上游 Node、pnpm、把生产依赖树铺进该 target 的 `dsh/`。`DSH_DESKTOP_UNSIGNED=1` 时跳过 `sign:dsh-native` 和 `sign:primary-native`
 4. 从 npm 拉 `dshmarket@1.50.0` 写成 `plugins/dshmarket-1.50.0.tgz`
 5. Desktop 自己的 `build`：`tsc`、tsdown、**`macos-selection-napi.node` + `libmacos-selection.dylib`**、**`macos-sck-napi.node` + `libmacos-sck-capture.dylib`**
 6. electron-builder：`DSH_DESKTOP_UNSIGNED=1`，`identity: null`，只出 DMG（没有 ZIP 更新载荷），清掉签名相关环境变量

@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-experimental-tool-computer-use",
   "description": "Experimental GUI tools that attach desktop screenshots to the existing agent-loop",
-  "version": "0.1.5-rc.2",
+  "version": "0.1.7-rc.1",
   "private": true,
   "repository": {
     "type": "git",
@@ -24,9 +24,7 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "lib/index.js",
-    "lib/preset-root.js",
-    "lib/code-agent.js",
+    "lib/*.js",
     "presets",
     "lib/macos-sck-capture",
     "lib/libmacos-sck-capture.dylib",

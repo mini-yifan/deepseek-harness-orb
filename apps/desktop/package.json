@@ -25,6 +25,7 @@
     "restore:mac-proxy": "tsx scripts/macos-notarization-proxy.ts",
     "package:dir": "tsx scripts/package-target.ts --dir",
     "package:mac:arm64": "tsx scripts/package-target.ts mac-arm64",
+    "package:mac:arm64:unsigned": "tsx scripts/package-target.ts mac-arm64 --unsigned",
     "package:mac:arm64:dir": "tsx scripts/package-target.ts mac-arm64 --dir",
     "package:mac:x64": "tsx scripts/package-target.ts mac-x64",
     "package:mac:x64:dir": "tsx scripts/package-target.ts mac-x64 --dir",
@@ -37,6 +38,7 @@
   },
   "dependencies": {
     "electron-updater": "^6.8.9",
+    "koffi": "^3.1.0",
     "semver": "^7.8.5",
     "ws": "^8.21.0",
     "@deepseek-ai/dsh-api-gateway": "workspace:*",
@@ -59,7 +61,6 @@
     "electron-builder": "^26.15.3",
     "extract-zip": "^2.0.1",
     "js-yaml": "^4.2.0",
-    "koffi": "^3.1.0",
     "pnpm": "11.7.0",
     "typescript": "^6.0.3",
     "@deepseek-ai/dsh-deepseek-account": "workspace:*",

@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-overlay-chat",
   "description": "Compact Chat root for the Desktop floating-ball overlay iframe",
-  "version": "0.1.5-rc.2",
+  "version": "0.1.7-rc.1",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",

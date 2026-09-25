@@ -346,8 +346,9 @@ async function main(): Promise<void> {
   const resources = runtimeResources()
   const paths = resolveDesktopPaths()
   const development = !app.isPackaged
-  const computerUsePatch = join(development ? join(app.getAppPath(), '..', '..') : app.getAppPath(),
-    'packages/experimental/tool-computer-use/cordis.patch.yml')
+  const computerUsePatch = development
+    ? join(app.getAppPath(), '..', '..', 'packages/experimental/tool-computer-use/cordis.patch.yml')
+    : join(process.resourcesPath, 'computer-use', 'cordis.patch.yml')
   if (existsSync(computerUsePatch)) process.env.DSH_COMPUTER_USE_PATCH = computerUsePatch
   const primaryRuntime = development
     ? developmentPrimaryRuntime()
@@ -1328,7 +1329,7 @@ async function main(): Promise<void> {
   })
 
   app.setAboutPanelOptions({
-    applicationName: 'DeepSeek Harness',
+    applicationName: 'DeepSeek Orb',
     applicationVersion: app.getVersion(),
     // The release has no separate build number; omit Electron's bundle version.
     version: '',
