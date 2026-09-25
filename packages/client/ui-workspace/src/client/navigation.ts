@@ -2,12 +2,13 @@
 
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { ClientRemote, DirectoryListing, RemoteFailure } from '@deepseek-ai/dsh-api-remotes/client'
-import type {
-  ISessions,
-  SessionCreateError,
-  SessionReference,
-  SessionTarget,
-  SessionListState,
+import {
+  overlayClientSurface,
+  type ISessions,
+  type SessionCreateError,
+  type SessionReference,
+  type SessionTarget,
+  type SessionListState,
 } from '@deepseek-ai/dsh-api-session-controller/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SubagentAddress } from '@deepseek-ai/dsh-subagent/client'
@@ -128,7 +129,8 @@ class UiWorkspaceService extends Service implements UiWorkspace {
   private readonly connecting = new Map<WorkspaceId, Promise<SessionId>>()
   private readonly lifetime = new AbortController()
   private readonly selection = createSnapshotStore<MainSelection>(
-    {}, { persist: { name: 'dsh.sessions.current' } },
+    {},
+    overlayClientSurface() ? undefined : { persist: { name: 'dsh.sessions.current' } },
   )
   private mainReference: SessionReference | undefined
 
@@ -150,6 +152,14 @@ class UiWorkspaceService extends Service implements UiWorkspace {
   ) {
     super(ctx, 'uiWorkspace')
     ctx.effect(() => {
+      // The overlay iframe shares dsh-app://app storage with the main window.
+      // Restoring dsh.sessions.current here would retain that Session as mainView
+      // and leave Compact Chat on the main-window transcript.
+      if (overlayClientSurface()) {
+        return () => {
+          // Overlay Compact Chat owns this document's main view.
+        }
+      }
       const stop = this.watchNavigation()
       return () => {
         stop()

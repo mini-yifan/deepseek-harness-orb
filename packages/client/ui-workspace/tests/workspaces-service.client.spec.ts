@@ -793,6 +793,18 @@ describe('UiWorkspaceService', () => {
     expect(b.sessions.create).toHaveBeenCalledExactlyOnceWith({ workspaceId: wid('a') })
   })
 
+  it('does not restore the main-window Session on the overlay document', async () => {
+    vi.stubGlobal('location', { search: '?surface=overlay' })
+    persistSelection({ sessionId: sid('saved') })
+    const b = bench({
+      sessions: sessionState([summary('saved')]),
+      workspaces: workspaceState([workspace('a', [sid('saved')])]),
+    })
+    await setImmediate()
+    expect(b.sessions.retain).not.toHaveBeenCalled()
+    expect(b.sessions.create).not.toHaveBeenCalled()
+  })
+
   it('restores a saved ungrouped blank directly', () => {
     persistSelection({ sessionId: sid('saved') })
     const b = bench({

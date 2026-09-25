@@ -2,6 +2,8 @@
 
 import type { IpcMainInvokeEvent } from 'electron'
 import type { DesktopBrowserBridge } from '@deepseek-ai/dsh-client-ui-sidebar-browser/types'
+import type { OrbAgentModelSelection } from './orb-agent-models.ts'
+import type { TccRight, TccStatus } from './tcc.ts'
 
 /** IPC channel names kept private to the desktop application bundle. */
 export const DESKTOP_IPC = {
@@ -55,6 +57,15 @@ export const DESKTOP_IPC = {
   selectionInteract: 'dsh-desktop:selection-interact',
   selectionSetContentSize: 'dsh-desktop:selection-set-content-size',
   selectionState: 'dsh-desktop:selection-state',
+  orbSupported: 'dsh-desktop:orb-supported',
+  orbSnapshot: 'dsh-desktop:orb-snapshot',
+  orbPickAvatar: 'dsh-desktop:orb-pick-avatar',
+  orbRestoreAvatar: 'dsh-desktop:orb-restore-avatar',
+  orbSetOverlayModel: 'dsh-desktop:orb-set-overlay-model',
+  orbSetBackgroundModel: 'dsh-desktop:orb-set-background-model',
+  orbSetSelectionEnabled: 'dsh-desktop:orb-set-selection-enabled',
+  orbSetMillifractionEnabled: 'dsh-desktop:orb-set-millifraction-enabled',
+  orbOpenTcc: 'dsh-desktop:orb-open-tcc',
 } as const
 
 /** Floating-ball shell bridge. The product window uses {@link DshDesktopProductApi}. */
@@ -128,6 +139,30 @@ export interface DesktopUpdatePresentation {
   readonly failure?: DesktopUpdateFailureKind
 }
 
+/** Current floating-ball preferences the Settings page reads. */
+export interface OrbSettingsSnapshot {
+  readonly supported: boolean
+  readonly avatarUrl: string
+  readonly overlay: OrbAgentModelSelection
+  readonly background: OrbAgentModelSelection
+  readonly selectionEnabled: boolean
+  readonly millifractionEnabled: boolean
+  readonly tcc: TccStatus
+}
+
+/** Result of confirming a millifraction-coordinates default change. */
+export type OrbMillifractionWriteResult =
+  | { readonly cancelled: true }
+  | { readonly cancelled: false; readonly snapshot: OrbSettingsSnapshot }
+
+/** Why a custom ball image was not installed. */
+export type OrbAvatarWriteError = 'cancelled' | 'too-large' | 'invalid-type'
+
+/** Result of picking a custom ball image. */
+export type OrbAvatarWriteResult =
+  | { readonly ok: true; readonly snapshot: OrbSettingsSnapshot }
+  | { readonly ok: false; readonly error: OrbAvatarWriteError }
+
 /** Product documents cannot supply update versions, package URLs, or installation authorization. */
 export interface DshDesktopProductApi {
   readonly protocolVersion: 1
@@ -136,6 +171,17 @@ export interface DshDesktopProductApi {
     status(): Promise<DesktopUpdatePresentation>
     open(): Promise<void>
     subscribe(listener: (state: DesktopUpdatePresentation) => void): () => void
+  }
+  readonly orb: {
+    supported(): Promise<boolean>
+    snapshot(): Promise<OrbSettingsSnapshot>
+    pickAvatar(): Promise<OrbAvatarWriteResult>
+    restoreAvatar(): Promise<OrbSettingsSnapshot>
+    setOverlayModel(selection: OrbAgentModelSelection): Promise<void>
+    setBackgroundModel(selection: OrbAgentModelSelection): Promise<void>
+    setSelectionEnabled(enabled: boolean): Promise<void>
+    setMillifractionEnabled(enabled: boolean): Promise<OrbMillifractionWriteResult>
+    openTcc(right: TccRight): Promise<OrbSettingsSnapshot>
   }
 }
 

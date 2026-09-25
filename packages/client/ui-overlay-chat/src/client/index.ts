@@ -48,7 +48,10 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => {
     let pending: string | undefined
     let held: { release(): void } | undefined
+    let opening = false
     const tryOpen = (id: string): void => {
+      if (opening) return
+      opening = true
       pending = id
       try {
         const next = ctx.sessions.retain(overlaySessionId(id), { source: 'mainView' })
@@ -58,6 +61,8 @@ export function apply(ctx: ClientContext): void {
       } catch (error) {
         // retain can reject an id the Host list has not published yet.
         if (!(error instanceof Error) || !/unknown session/.test(error.message)) throw error
+      } finally {
+        opening = false
       }
     }
     const onMessage = (event: MessageEvent): void => {

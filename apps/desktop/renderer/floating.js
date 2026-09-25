@@ -569,7 +569,8 @@ async function main() {
     try {
       target.postMessage({ type: OVERLAY_SESSION_MESSAGE_TYPE, sessionId }, OVERLAY_APP_ORIGIN)
     } catch (error) {
-      // JSDOM and an iframe that has not yet loaded Compact Chat have no target origin.
+      // The iframe is still the shell origin until Compact Chat finishes loading.
+      if (error instanceof DOMException) return
       if (!(error instanceof TypeError)) throw error
     }
   }

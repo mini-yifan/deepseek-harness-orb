@@ -17,6 +17,32 @@ vi.mock('../src/preload-mandatory-overlay.ts', () => ({ installMandatoryUpdateOv
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.clearAllMocks(); vi.resetModules() })
 
+it('exposes floating-ball Settings on the application document', async () => {
+  vi.stubGlobal('location', new URL('dsh-app://app/index.html'))
+  await import('../src/preload-app.ts')
+  const api = electron.contextBridge.exposeInMainWorld.mock.calls.find(([name]) => name === 'dshDesktop')?.[1] as DshDesktopProductApi
+  await api.orb.supported()
+  await api.orb.snapshot()
+  await api.orb.pickAvatar()
+  await api.orb.restoreAvatar()
+  await api.orb.setOverlayModel({ provider: 'deepseek-official', model: 'deepseek-flash' })
+  await api.orb.setBackgroundModel({ provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'max' })
+  await api.orb.setSelectionEnabled(true)
+  await api.orb.setMillifractionEnabled(false)
+  await api.orb.openTcc('screen')
+  expect(electron.ipcRenderer.invoke.mock.calls).toEqual([
+    [DESKTOP_IPC.orbSupported],
+    [DESKTOP_IPC.orbSnapshot],
+    [DESKTOP_IPC.orbPickAvatar],
+    [DESKTOP_IPC.orbRestoreAvatar],
+    [DESKTOP_IPC.orbSetOverlayModel, { provider: 'deepseek-official', model: 'deepseek-flash' }],
+    [DESKTOP_IPC.orbSetBackgroundModel, { provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'max' }],
+    [DESKTOP_IPC.orbSetSelectionEnabled, true],
+    [DESKTOP_IPC.orbSetMillifractionEnabled, false],
+    [DESKTOP_IPC.orbOpenTcc, 'screen'],
+  ])
+})
+
 it('limits product documents to update status and a native confirmation action', async () => {
   vi.stubGlobal('location', new URL('dsh-app://app/index.html'))
   await import('../src/preload-app.ts')

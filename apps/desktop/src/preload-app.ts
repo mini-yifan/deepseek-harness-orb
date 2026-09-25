@@ -1,7 +1,9 @@
 /** Origin-scoped boot, native directory selection, host paths of picked files, and update presentation with native confirmation actions. */
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { DESKTOP_IPC, SCHEME, type DshDesktopProductApi, type DesktopUpdatePresentation } from './ipc.ts'
+import { DESKTOP_IPC, SCHEME, type DshDesktopProductApi, type DesktopUpdatePresentation, type OrbAvatarWriteResult, type OrbMillifractionWriteResult, type OrbSettingsSnapshot } from './ipc.ts'
+import type { OrbAgentModelSelection } from './orb-agent-models.ts'
+import type { TccRight } from './tcc.ts'
 import { PLATFORM_IPC } from './platform-ipc.ts'
 import { markDocumentPlatform, syncWindowFullscreen } from './preload-platform.ts'
 import { syncNativeTheme } from './preload-theme.ts'
@@ -21,6 +23,25 @@ function createProductApi(): DshDesktopProductApi {
         ipcRenderer.on(DESKTOP_IPC.updatesPresentation, handle)
         return () => { ipcRenderer.off(DESKTOP_IPC.updatesPresentation, handle) }
       },
+    },
+    orb: {
+      supported: () => ipcRenderer.invoke(DESKTOP_IPC.orbSupported) as Promise<boolean>,
+      snapshot: () => ipcRenderer.invoke(DESKTOP_IPC.orbSnapshot) as Promise<OrbSettingsSnapshot>,
+      pickAvatar: () => ipcRenderer.invoke(DESKTOP_IPC.orbPickAvatar) as Promise<OrbAvatarWriteResult>,
+      restoreAvatar: () => ipcRenderer.invoke(DESKTOP_IPC.orbRestoreAvatar) as Promise<OrbSettingsSnapshot>,
+      setOverlayModel: (selection: OrbAgentModelSelection) => (
+        ipcRenderer.invoke(DESKTOP_IPC.orbSetOverlayModel, selection) as Promise<void>
+      ),
+      setBackgroundModel: (selection: OrbAgentModelSelection) => (
+        ipcRenderer.invoke(DESKTOP_IPC.orbSetBackgroundModel, selection) as Promise<void>
+      ),
+      setSelectionEnabled: (enabled: boolean) => (
+        ipcRenderer.invoke(DESKTOP_IPC.orbSetSelectionEnabled, enabled) as Promise<void>
+      ),
+      setMillifractionEnabled: (enabled: boolean) => (
+        ipcRenderer.invoke(DESKTOP_IPC.orbSetMillifractionEnabled, enabled) as Promise<OrbMillifractionWriteResult>
+      ),
+      openTcc: (right: TccRight) => ipcRenderer.invoke(DESKTOP_IPC.orbOpenTcc, right) as Promise<OrbSettingsSnapshot>,
     },
   }
 }

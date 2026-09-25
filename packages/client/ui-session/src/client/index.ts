@@ -432,21 +432,39 @@ export class UiSession extends Service {
     return record.source
   }
 
+  private publishingMain = false
+  private publishMainAgain = false
+
   private publishMain(): void {
     if (!this.active) return
-    const byId = this.sessions.list.getSnapshot().byId
-    const currentId = this.current.value.key as SessionId | undefined
-    const currentIsMain = currentId !== undefined
-      && (this.sessions.retainInfo(currentId).getSnapshot().retainedBy.mainView ?? 0) > 0
-    const nextId = currentIsMain
-      ? currentId
-      : Object.values(byId).find(candidate => (candidate.retainedBy.mainView ?? 0) > 0)?.id
-    this.watchMainRetention(nextId)
-    const owner = nextId === undefined ? undefined : this.sessions.binding(nextId)
-    const value = owner === undefined ? this.absent.value : this.sourceFor(owner).value
-    if (this.current.value === value) return
-    this.current.value = value
-    notifySubscribers(this.current.listeners, '[ui-session] main binding')
+    if (this.publishingMain) {
+      if (!this.publishMainAgain) {
+        this.publishMainAgain = true
+        queueMicrotask(() => {
+          this.publishMainAgain = false
+          this.publishMain()
+        })
+      }
+      return
+    }
+    this.publishingMain = true
+    try {
+      const byId = this.sessions.list.getSnapshot().byId
+      const currentId = this.current.value.key as SessionId | undefined
+      const currentIsMain = currentId !== undefined
+        && (this.sessions.retainInfo(currentId).getSnapshot().retainedBy.mainView ?? 0) > 0
+      const nextId = currentIsMain
+        ? currentId
+        : Object.values(byId).find(candidate => (candidate.retainedBy.mainView ?? 0) > 0)?.id
+      this.watchMainRetention(nextId)
+      const owner = nextId === undefined ? undefined : this.sessions.binding(nextId)
+      const value = owner === undefined ? this.absent.value : this.sourceFor(owner).value
+      if (this.current.value === value) return
+      this.current.value = value
+      notifySubscribers(this.current.listeners, '[ui-session] main binding')
+    } finally {
+      this.publishingMain = false
+    }
   }
 
   private watchMainRetention(sessionId: SessionId | undefined): void {

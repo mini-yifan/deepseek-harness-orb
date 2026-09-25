@@ -4,6 +4,9 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { join } from 'node:path'
 import type { PlatformSession } from '@deepseek-ai/dsh-deepseek-account'
 import { desktopNodeEnvironment } from './node-environment.ts'
+import type { OrbAgentModelSelection } from './orb-agent-models.ts'
+import type { OrbPermissionPreset } from './orb-permission.ts'
+import type { OrbCoordinateMode } from './millifraction-coordinates.ts'
 
 interface ReadyEvent {
   readonly type: 'ready'
@@ -50,6 +53,17 @@ type DesktopHostEvent = ReadyEvent | FatalEvent | PlatformSessionEvent | Overlay
   readonly active: boolean
   readonly error?: string
 }
+
+/** Main-to-host facts the floating ball persists and the Host applies. */
+export type DesktopHostOrbCommand =
+  | { readonly type: 'orb-permission'; readonly preset: OrbPermissionPreset; readonly sessionId?: string }
+  | { readonly type: 'orb-coordinate-mode'; readonly mode: OrbCoordinateMode }
+  | {
+    readonly type: 'orb-code-agent-model'
+    readonly provider: string
+    readonly model: string
+    readonly reasoningEffort?: string
+  }
 
 /** Electron-side handlers for Computer Use overlay IPC. */
 export interface DesktopOrbHostHandlers {
@@ -279,6 +293,29 @@ export class DesktopHostProcess {
    * @returns Whether live tasks would be affected. Locking drains admitted API requests before inspecting tasks;
    * an unanswered drain fails at the control-request deadline without authorizing installation.
    */
+  /**
+   * Send one floating-ball preference to the Host. A missing child drops the message.
+   * @param command - permission, coordinate mode, or background model.
+   */
+  sendOrb(command: DesktopHostOrbCommand): void {
+    const child = this.child
+    if (child === undefined || !child.connected || this.stopping) return
+    child.send(command)
+  }
+
+  /**
+   * Push the stored background `code_agent` model.
+   * @param selection - provider, model, and optional effort.
+   */
+  sendOrbCodeAgentModel(selection: OrbAgentModelSelection): void {
+    this.sendOrb({
+      type: 'orb-code-agent-model',
+      provider: selection.provider,
+      model: selection.model,
+      ...(selection.reasoningEffort === undefined ? {} : { reasoningEffort: selection.reasoningEffort }),
+    })
+  }
+
   async updateTasks(action: 'inspect' | 'lock' | 'unlock'): Promise<boolean> {
     const child = this.child
     if (child === undefined || !child.connected || this.failureReported || this.stopping) {

@@ -25,11 +25,11 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-把本插件挂进 Web 组合。在主窗口文档上它是空操作。在 `dsh-app://app/index.html?surface=overlay` 上它拥有 `'root'`，声明会话作用域的 `conversation.view` 与 `conversation.input.overlay`，并且只渲染 ChatView。悬浮球 shell 会 post 球会话 id；本插件调用 `sessions.open`，不整页重载。没有 Config。
+把本插件挂进 Web 组合。在主窗口文档上它是空操作。在 `dsh-app://app/index.html?surface=overlay` 上它拥有 `'root'`，声明会话作用域的 `conversation.view` 与 `conversation.input.overlay`，并且只渲染 ChatView。悬浮球 shell 会 post 球会话 id；本插件以 `mainView` retain 该会话，不整页重载。没有 Config。
 
 ### 隔离
 
-iframe 与主窗口共享 `dsh-app://app` 源。ClientSessions 选中项持久化在 `dsh.overlay.sessions.current`，而不是 `dsh.sessions.current`，因此打开球上的对话不会抢走主窗口选中项。
+iframe 与主窗口共享 `dsh-app://app` 源。此处不运行工作区导航，因此该文档不读取、也不 retain `dsh.sessions.current`。shell post 的球会话是唯一的 `mainView`。
 
 -----
 
@@ -39,7 +39,7 @@ iframe 与主窗口共享 `dsh-app://app` 源。ClientSessions 选中项持久�
 <details>
 <summary>实现内部——点击展开</summary>
 
-除非 `overlayClientSurface()` 为真，否则插件立即返回。一个 effect 把 `OverlayChatRoot` 注册到 `'root'` 并声明 `conversation.view` 与 `conversation.input.overlay`；`ui-layout` 在该文档上跳过 AppFrame，因此不会出现两个 `'root'` 占用者。`ui-conversation` 等待注入 `main.conversation`，在此从不声明 `conversation.view`。shell 从 `dsh-app://shell` 发送 `{ type: 'dsh.overlay.session', sessionId }`；iframe 回复 `{ type: 'dsh.overlay.ready' }`，并重试 `sessions.open` 直到 Host 列表包含该 id。Overlay CSS 设置 `--dsh-chat-content-width: 100%`、`--dsh-composer-side-clearance: 0px`，隐藏 `[data-chat-turn-rail]`，并以 `--dsw-alias-bg-base` 绘制文档。`ui-chat` 强制 Compact。`ui-user-questions` 始终 `next()`，因此原生 `floating.js` 仍是 overlay waterfall 认领方。iframe 设置 `allow="clipboard-write"`；[overlay 消息操作](../../../.agents/notes/implemented/bug-fix/2026-09-17-overlay-message-actions-narrow.zh.md) 拥有该许可、IconActions 时钟省略，以及零尺寸 input-overlay 宿主。[overlay Compact ChatView Agent Note](../../../.agents/notes/implemented/feature/2026-09-16-overlay-compact-chat.zh.md) 拥有 Compact 根决策。[overlay 外观](../../../.agents/notes/implemented/feature/2026-09-18-overlay-appearance-follows-host.zh.md) 拥有在不写入设置的前提下跟随 Host。
+除非 `overlayClientSurface()` 为真，否则插件立即返回。一个 effect 把 `OverlayChatRoot` 注册到 `'root'` 并声明 `conversation.view` 与 `conversation.input.overlay`；`ui-layout` 在该文档上跳过 AppFrame，因此不会出现两个 `'root'` 占用者。`ui-conversation` 等待注入 `main.conversation`，在此从不声明 `conversation.view`。shell 从 `dsh-app://shell` 发送 `{ type: 'dsh.overlay.session', sessionId }`；iframe 回复 `{ type: 'dsh.overlay.ready' }`，并以 `mainView` 重试 `sessions.retain`，直到 Host 列表包含该 id。Overlay CSS 设置 `--dsh-chat-content-width: 100%`、`--dsh-composer-side-clearance: 0px`，隐藏 `[data-chat-turn-rail]`，并以 `--dsw-alias-bg-base` 绘制文档。`ui-chat` 强制 Compact。`ui-user-questions` 始终 `next()`，因此原生 `floating.js` 仍是 overlay waterfall 认领方。iframe 设置 `allow="clipboard-write"`；[overlay 消息操作](../../../.agents/notes/implemented/bug-fix/2026-09-17-overlay-message-actions-narrow.zh.md) 拥有该许可、IconActions 时钟省略，以及零尺寸 input-overlay 宿主。[overlay Compact ChatView Agent Note](../../../.agents/notes/implemented/feature/2026-09-16-overlay-compact-chat.zh.md) 拥有 Compact 根决策。[overlay 外观](../../../.agents/notes/implemented/feature/2026-09-18-overlay-appearance-follows-host.zh.md) 拥有在不写入设置的前提下跟随 Host。
 
 </details>
 

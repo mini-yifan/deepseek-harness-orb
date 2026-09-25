@@ -1,6 +1,7 @@
 import { WINDOWS_TITLEBAR_HEIGHT } from './windows-layout.ts'
 /** Electron shell: desktop project ownership, custom protocol, windows, and lifecycle. */
 
+import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -18,17 +19,18 @@ import {
   protocol,
   session,
   shell,
+  systemPreferences,
   type IpcMainInvokeEvent,
   type MenuItemConstructorOptions,
 } from 'electron'
 import { resolveDesktopPaths } from './paths.ts'
 import { DesktopProjectManager } from './project-manager.ts'
-import { DesktopHostFatalError, DesktopHostProcess, DesktopHostUncleanExitError } from './host-process.ts'
+import { DesktopHostFatalError, DesktopHostProcess, DesktopHostUncleanExitError, type DesktopHostOrbCommand } from './host-process.ts'
 import { DesktopPlatformView, PLATFORM_IPC, platformBounds } from './platform-view.ts'
 import { installDesktopDirectoryPicker } from './directory-picker.ts'
 import { installMicrophonePermissions } from './microphone-permissions.ts'
 import { DesktopBackendController } from './backend-controller.ts'
-import { DESKTOP_IPC, SCHEME, assertDesktopSender, type DesktopUpdateState } from './ipc.ts'
+import { DESKTOP_IPC, SCHEME, assertDesktopSender, type DesktopUpdateState, type OrbMillifractionWriteResult, type OrbSettingsSnapshot } from './ipc.ts'
 import { formatDesktopMessage, resolveDesktopLocale, resolveDesktopStartupLocale } from './locale.ts'
 import {
   clampFloatingWindow,
@@ -38,8 +40,25 @@ import {
   unsnapDockedBall,
 } from './floating-window.ts'
 import { ensureOrbWorkspaceDir, readFloatingSessionId, writeFloatingSessionId } from './floating-session.ts'
-import { readOrbAgentModels } from './orb-agent-models.ts'
-import { readOrbPermission } from './orb-permission.ts'
+import { isOrbAgentModelSelection, readOrbAgentModels, writeOrbAgentModels, type OrbAgentModelSelection } from './orb-agent-models.ts'
+import { isOrbPermissionPreset, readOrbPermission, writeOrbPermission } from './orb-permission.ts'
+import {
+  assertOrbSettingsWritable,
+  DEFAULT_ORB_AVATAR_FILE,
+  installOrbAvatarFromPath,
+  ORB_AVATAR_PATH,
+  orbAvatarCacheToken,
+  orbAvatarUrl,
+  orbSettingsSupported,
+  restoreOrbAvatar,
+  serveOrbAvatar,
+} from './orb-avatar.ts'
+import { applyMillifractionCoordinates } from './millifraction-coordinates-apply.ts'
+import { orbCoordinateModeFor, readMillifractionCoordinates, writeMillifractionCoordinates } from './millifraction-coordinates.ts'
+import { isTccRight, TccController } from './tcc.ts'
+import { SelectionToolbarController } from './selection-toolbar-controller.ts'
+import { createSelectionToolbarWindow, hideSelectionToolbar } from './selection-toolbar-window.ts'
+import type { FloatingModelCatalog } from './floating-agent-menu.ts'
 import { claimDesktopSingleInstance } from './single-instance.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
 import { serveWebDocument, serveOverlayDocument, authenticateWebHost, forwardWebRequest } from './web-document.ts'
@@ -323,6 +342,8 @@ async function main(): Promise<void> {
   // The backend listener is registered before this window exists and reads the binding later.
   // eslint-disable-next-line prefer-const -- assigned once when the floating window is created
   let floatingShell: BrowserWindow | undefined
+  let overlayTextEditing = false
+  let millifractionApplying: Promise<OrbMillifractionWriteResult> | undefined
   let welcomeWindow: BrowserWindow | undefined
   let enteredWorkspace = false
   let shellInstallerOwnsQuit = false
@@ -432,6 +453,7 @@ async function main(): Promise<void> {
         }, () => {
           // The stream reconnects; a transport failure does not change account state.
         })
+        pushStoredOrbPreferences(host)
       },
       stop: async () => {
         try { await host.stop(requireCleanStop) }
@@ -442,6 +464,8 @@ async function main(): Promise<void> {
         }
       },
       updateTasks: (action: 'inspect' | 'lock' | 'unlock') => host.updateTasks(action),
+      sendOrb: (command: DesktopHostOrbCommand) => { host.sendOrb(command) },
+      sendOrbCodeAgentModel: (selection: OrbAgentModelSelection) => { host.sendOrbCodeAgentModel(selection) },
     }
   }, (state) => {
     if (state.phase === 'error') reportFatal(state.failure, 'host')
@@ -580,8 +604,153 @@ async function main(): Promise<void> {
     return updates.install(version)
   }
 
+  const tcc = new TccController({
+    platform: process.platform,
+    appName: () => app.name,
+    screenGranted: () => systemPreferences.getMediaAccessStatus('screen') === 'granted',
+    accessibilityGranted: () => systemPreferences.isTrustedAccessibilityClient(false),
+    openExternal: url => shell.openExternal(url),
+  })
+
+  function pushStoredOrbPreferences(host: DesktopHostProcess): void {
+    host.sendOrbCodeAgentModel(readOrbAgentModels(paths.profile).background)
+    host.sendOrb({ type: 'orb-permission', preset: readOrbPermission(paths.profile) })
+    host.sendOrb({
+      type: 'orb-coordinate-mode',
+      mode: orbCoordinateModeFor(readMillifractionCoordinates(paths.profile).enabled),
+    })
+  }
+
+  function publishTcc(): ReturnType<TccController['status']> {
+    const status = tcc.status()
+    if (floatingShell !== undefined && !floatingShell.isDestroyed()) {
+      floatingShell.webContents.send(DESKTOP_IPC.floatingTcc, status)
+    }
+    return status
+  }
+
+  function requestOverlayNewSession(): void {
+    const window = floatingShell
+    if (window === undefined || window.isDestroyed()) return
+    const send = (): void => {
+      if (!window.isDestroyed()) window.webContents.send(DESKTOP_IPC.floatingCreateSession)
+    }
+    if (window.webContents.isLoading()) {
+      window.webContents.once('did-finish-load', send)
+      return
+    }
+    send()
+  }
+
+  function persistOverlayModel(next: OrbAgentModelSelection): void {
+    const current = readOrbAgentModels(paths.profile)
+    writeOrbAgentModels(paths.profile, { overlay: next, background: current.background })
+    if (floatingShell !== undefined && !floatingShell.isDestroyed()) {
+      floatingShell.webContents.send(DESKTOP_IPC.floatingOverlayModel, next)
+    }
+  }
+
+  function persistBackgroundModel(next: OrbAgentModelSelection): void {
+    const current = readOrbAgentModels(paths.profile)
+    writeOrbAgentModels(paths.profile, { overlay: current.overlay, background: next })
+    backend.host?.sendOrbCodeAgentModel(next)
+  }
+
+  function publishAvatar(): void {
+    if (floatingShell === undefined || floatingShell.isDestroyed()) return
+    floatingShell.webContents.send(
+      DESKTOP_IPC.floatingAvatar,
+      orbAvatarUrl('shell', orbAvatarCacheToken(paths.profile)),
+    )
+  }
+
+  function orbSnapshotFor(hostname: string): OrbSettingsSnapshot {
+    const models = readOrbAgentModels(paths.profile)
+    return {
+      supported: orbSettingsSupported(process.platform),
+      avatarUrl: orbAvatarUrl(hostname, orbAvatarCacheToken(paths.profile)),
+      overlay: models.overlay,
+      background: models.background,
+      selectionEnabled: selectionController?.enabled() ?? true,
+      millifractionEnabled: readMillifractionCoordinates(paths.profile).enabled,
+      tcc: tcc.status(),
+    }
+  }
+
+  async function confirmMillifractionEnabled(
+    enabled: boolean,
+    parent?: BrowserWindow,
+  ): Promise<OrbMillifractionWriteResult> {
+    if (millifractionApplying !== undefined) return millifractionApplying
+    const run = (async (): Promise<OrbMillifractionWriteResult> => {
+      const result = await applyMillifractionCoordinates({
+        requestedEnabled: enabled,
+        currentEnabled: readMillifractionCoordinates(paths.profile).enabled,
+        messages: currentDesktopLocale().messages,
+        dialog: {
+          async show(options) {
+            const box = {
+              type: 'question' as const,
+              title: options.title,
+              message: options.message,
+              detail: options.detail,
+              buttons: [options.confirm, options.cancel],
+              defaultId: 0,
+              cancelId: 1,
+            }
+            const response = parent === undefined
+              ? await dialog.showMessageBox(box)
+              : await dialog.showMessageBox(parent, box)
+            return response.response === 0
+          },
+        },
+        persist: (next) => { writeMillifractionCoordinates(paths.profile, { enabled: next }) },
+        pushHost: (mode) => { backend.host?.sendOrb({ type: 'orb-coordinate-mode', mode }) },
+        createOverlaySession: requestOverlayNewSession,
+      })
+      if (!result.applied) return { cancelled: true }
+      return { cancelled: false, snapshot: orbSnapshotFor('app') }
+    })()
+    millifractionApplying = run
+    try {
+      return await run
+    } finally {
+      millifractionApplying = undefined
+    }
+  }
+
+  async function loadFloatingModelCatalog(): Promise<FloatingModelCatalog | undefined> {
+    if (hostUrl === undefined || hostCookie === undefined) return undefined
+    const rpcId = randomUUID()
+    const response = await net.fetch(new URL('/api/session/modelCatalog', hostUrl).href, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', cookie: hostCookie },
+      body: JSON.stringify({
+        type: 'client-request',
+        rpcId,
+        method: 'session/modelCatalog',
+        payload: { args: {} },
+      }),
+    })
+    if (!response.ok) return undefined
+    const envelope: unknown = await response.json()
+    if (typeof envelope !== 'object' || envelope === null) return undefined
+    const record = envelope as { type?: unknown; rpcId?: unknown; result?: { ok?: unknown; value?: unknown } }
+    if (record.type !== 'server-response' || record.rpcId !== rpcId || record.result?.ok !== true) return undefined
+    const value = record.result.value
+    if (typeof value !== 'object' || value === null || !('groups' in value) || !Array.isArray(value.groups)) return undefined
+    return value as FloatingModelCatalog
+  }
+
   protocol.handle(SCHEME, (request) => {
     const url = new URL(request.url)
+    if (url.pathname === ORB_AVATAR_PATH && (url.hostname === 'shell' || url.hostname === 'app')) {
+      return serveOrbAvatar(
+        paths.profile,
+        join(app.getAppPath(), 'renderer', DEFAULT_ORB_AVATAR_FILE),
+        request.method,
+      )
+    }
     // Shell-owned documents live in the application bundle and never pass through the Host.
     if (url.hostname === 'shell') return serveWebDocument(request, join(app.getAppPath(), 'renderer'))
     if (url.hostname === 'app') {
@@ -603,13 +772,59 @@ async function main(): Promise<void> {
   })
 
   const shellPreload = fileURLToPath(new URL('./preload.cjs', import.meta.url))
-  const floatingWindow = floatingShell = createFloatingWindow(shellPreload, currentDesktopLocale().messages, () => {
+  const messages = currentDesktopLocale().messages
+  const selectionController = new SelectionToolbarController(paths.profile, {
+    electronPid: process.pid,
+    openExternal: url => shell.openExternal(url),
+    promptOverlay(text) {
+      if (floatingShell === undefined || floatingShell.isDestroyed()) return
+      floatingShell.showInactive()
+      floatingShell.webContents.send(DESKTOP_IPC.selectionPrompt, { text })
+      hideSelectionToolbar(selectionController?.window())
+    },
+    attachOverlay(text) {
+      if (floatingShell === undefined || floatingShell.isDestroyed()) return
+      floatingShell.show()
+      floatingShell.focus()
+      floatingShell.webContents.send(DESKTOP_IPC.selectionAttach, { text })
+      hideSelectionToolbar(selectionController?.window())
+    },
+    requestAccessibility: () => systemPreferences.isTrustedAccessibilityClient(true),
+  })
+  const floatingWindow = floatingShell = createFloatingWindow(shellPreload, messages, () => {
     if (mainWindow !== undefined && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus() }
-  }, () => { app.quit() })
+  }, () => { app.quit() }, {
+    enabled: () => selectionController?.enabled() === true,
+    toggle: () => { selectionController?.toggle() },
+  }, {
+    loadCatalog: loadFloatingModelCatalog,
+    overlay: () => readOrbAgentModels(paths.profile).overlay,
+    background: () => readOrbAgentModels(paths.profile).background,
+    onSelectOverlay: persistOverlayModel,
+    onSelectBackground: persistBackgroundModel,
+  }, {
+    enabled: () => readMillifractionCoordinates(paths.profile).enabled,
+    toggle: () => {
+      const current = readMillifractionCoordinates(paths.profile).enabled
+      void confirmMillifractionEnabled(!current, floatingShell)
+    },
+  })
   floatingWindow.once('ready-to-show', () => { floatingWindow.showInactive() })
+  floatingWindow.on('focus', () => { publishTcc() })
   void floatingWindow.loadURL(`${SCHEME}://shell/floating.html`)
+  const toolbar = createSelectionToolbarWindow(shellPreload)
+  selectionController.setToolbarWindow(toolbar)
+  toolbar.webContents.once('did-finish-load', () => { selectionController?.publishState() })
+  void toolbar.loadURL(`${SCHEME}://shell/selection-toolbar.html`)
+  selectionController.start()
   const shellSender = (event: IpcMainInvokeEvent): void => {
     if (event.sender !== floatingWindow.webContents) throw new Error('dsh desktop: rejected floating IPC')
+  }
+  const shellDocumentSender = (event: IpcMainInvokeEvent): void => {
+    if (event.sender === floatingWindow.webContents) return
+    const toolbar = selectionController?.window()
+    if (toolbar !== undefined && !toolbar.isDestroyed() && event.sender === toolbar.webContents) return
+    throw new Error('dsh desktop: rejected shell IPC')
   }
   ipcMain.handle(DESKTOP_IPC.floatingMove, (event, x: unknown, y: unknown, canDock: unknown) => {
     shellSender(event)
@@ -658,25 +873,153 @@ async function main(): Promise<void> {
     shellSender(event)
     app.quit()
   })
-  ipcMain.handle(DESKTOP_IPC.floatingRunning, (event) => { shellSender(event) })
-  ipcMain.handle(DESKTOP_IPC.floatingEditing, (event) => { shellSender(event) })
-  ipcMain.handle(DESKTOP_IPC.floatingRestoreFront, (event) => { shellSender(event) })
+  ipcMain.handle(DESKTOP_IPC.floatingOverlayPermissionSet, (event, preset: unknown, sessionId: unknown) => {
+    shellSender(event)
+    if (!isOrbPermissionPreset(preset)) throw new Error('dsh desktop: overlay permission must be a known Access preset')
+    writeOrbPermission(paths.profile, preset)
+    const id = typeof sessionId === 'string' && sessionId !== '' ? sessionId : undefined
+    backend.host?.sendOrb({ type: 'orb-permission', preset, ...(id === undefined ? {} : { sessionId: id }) })
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingRunning, (event, running: unknown) => {
+    shellSender(event)
+    if (typeof running !== 'boolean') throw new Error('dsh desktop: floating running requires a boolean')
+    selectionController?.setSessionRunning(running)
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingEditing, (event, editing: unknown) => {
+    shellSender(event)
+    if (typeof editing !== 'boolean') throw new Error('dsh desktop: floating editing requires a boolean')
+    overlayTextEditing = editing
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingRestoreFront, (event) => {
+    shellSender(event)
+    if (selectionController?.isSessionRunning() !== true || overlayTextEditing) return
+    selectionController.restoreFrontApp()
+  })
   ipcMain.handle(DESKTOP_IPC.floatingAvatarGet, (event) => {
     shellSender(event)
-    return `${SCHEME}://shell/deepseek-avatar-square.gif`
+    return orbAvatarUrl('shell', orbAvatarCacheToken(paths.profile))
   })
   ipcMain.handle(DESKTOP_IPC.floatingTccGet, (event) => {
     shellSender(event)
-    return { applicable: false, screen: 'unknown', accessibility: 'unknown' }
+    return tcc.status()
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingTccOpen, async (event, right: unknown) => {
+    shellSender(event)
+    if (!isTccRight(right)) throw new Error('dsh desktop: TCC right must be screen or accessibility')
+    await tcc.open(right)
+    return publishTcc()
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingTccRelaunch, (event) => {
+    shellSender(event)
+    app.relaunch()
+    app.quit()
   })
   ipcMain.handle(DESKTOP_IPC.floatingLocale, (event) => {
-    shellSender(event)
+    shellDocumentSender(event)
     return currentDesktopLocale()
   })
   ipcMain.handle(DESKTOP_IPC.backendStatus, (event) => {
-    shellSender(event)
+    shellDocumentSender(event)
     const state = backend.state
     return state.phase === 'error' ? { phase: 'error', message: state.message } : { phase: state.phase }
+  })
+
+  const requireSelectionToolbar = (event: IpcMainInvokeEvent): SelectionToolbarController => {
+    assertDesktopSender(event, ['shell'])
+    if (selectionController === undefined) throw new Error('dsh desktop: selection toolbar is unavailable')
+    const window = BrowserWindow.fromWebContents(event.sender)
+    if (window === null || window !== selectionController.window()) {
+      throw new Error('dsh desktop: rejected selection IPC from an unowned renderer')
+    }
+    return selectionController
+  }
+
+  ipcMain.handle(DESKTOP_IPC.orbSupported, (event) => {
+    assertProductSender(event)
+    return orbSettingsSupported(process.platform)
+  })
+  ipcMain.handle(DESKTOP_IPC.orbSnapshot, (event) => {
+    assertProductSender(event)
+    return orbSnapshotFor('app')
+  })
+  ipcMain.handle(DESKTOP_IPC.orbPickAvatar, async (event) => {
+    assertProductSender(event)
+    assertOrbSettingsWritable(process.platform)
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const options: Electron.OpenDialogOptions = {
+      properties: ['openFile'],
+      filters: [{ name: 'Images', extensions: ['gif', 'png', 'webp'] }],
+    }
+    const picked = parent === null
+      ? await dialog.showOpenDialog(options)
+      : await dialog.showOpenDialog(parent, options)
+    const filePath = picked.filePaths[0]
+    if (picked.canceled || filePath === undefined) return { ok: false, error: 'cancelled' as const }
+    const installed = installOrbAvatarFromPath(paths.profile, filePath)
+    if (!installed.ok) return installed
+    publishAvatar()
+    return { ok: true as const, snapshot: orbSnapshotFor('app') }
+  })
+  ipcMain.handle(DESKTOP_IPC.orbRestoreAvatar, (event) => {
+    assertProductSender(event)
+    assertOrbSettingsWritable(process.platform)
+    restoreOrbAvatar(paths.profile)
+    publishAvatar()
+    return orbSnapshotFor('app')
+  })
+  ipcMain.handle(DESKTOP_IPC.orbSetOverlayModel, (event, selection: unknown) => {
+    assertProductSender(event)
+    assertOrbSettingsWritable(process.platform)
+    if (!isOrbAgentModelSelection(selection)) throw new Error('dsh desktop: overlay model selection is invalid')
+    persistOverlayModel(selection)
+  })
+  ipcMain.handle(DESKTOP_IPC.orbSetBackgroundModel, (event, selection: unknown) => {
+    assertProductSender(event)
+    assertOrbSettingsWritable(process.platform)
+    if (!isOrbAgentModelSelection(selection)) throw new Error('dsh desktop: background model selection is invalid')
+    persistBackgroundModel(selection)
+  })
+  ipcMain.handle(DESKTOP_IPC.orbSetSelectionEnabled, (event, enabled: unknown) => {
+    assertProductSender(event)
+    assertOrbSettingsWritable(process.platform)
+    if (typeof enabled !== 'boolean') throw new Error('dsh desktop: selection enablement requires a boolean')
+    if (selectionController === undefined) throw new Error('dsh desktop: selection toolbar is unavailable')
+    selectionController.setEnabled(enabled)
+  })
+  ipcMain.handle(DESKTOP_IPC.orbSetMillifractionEnabled, async (event, enabled: unknown) => {
+    assertProductSender(event)
+    assertOrbSettingsWritable(process.platform)
+    if (typeof enabled !== 'boolean') throw new Error('dsh desktop: millifraction enablement requires a boolean')
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    return confirmMillifractionEnabled(enabled, parent === null ? undefined : parent)
+  })
+  ipcMain.handle(DESKTOP_IPC.orbOpenTcc, async (event, right: unknown) => {
+    assertProductSender(event)
+    assertOrbSettingsWritable(process.platform)
+    if (!isTccRight(right)) throw new Error('dsh desktop: TCC right must be screen or accessibility')
+    await tcc.open(right)
+    publishTcc()
+    return orbSnapshotFor('app')
+  })
+  ipcMain.handle(DESKTOP_IPC.selectionSearch, event => requireSelectionToolbar(event).search())
+  ipcMain.handle(DESKTOP_IPC.selectionTranslate, (event) => { requireSelectionToolbar(event).translate() })
+  ipcMain.handle(DESKTOP_IPC.selectionAttach, (event) => { requireSelectionToolbar(event).sendToAgent() })
+  ipcMain.handle(DESKTOP_IPC.selectionSetLanguage, (event, language: unknown) => {
+    if (language !== 'zh' && language !== 'en') throw new Error('dsh desktop: translate language must be zh or en')
+    requireSelectionToolbar(event).setLanguage(language)
+  })
+  ipcMain.handle(DESKTOP_IPC.selectionInteract, (event) => { requireSelectionToolbar(event) })
+  ipcMain.handle(DESKTOP_IPC.selectionSetContentSize, (event, size: unknown) => {
+    if (typeof size !== 'object' || size === null || Array.isArray(size)) {
+      throw new Error('dsh desktop: toolbar size requires width and height')
+    }
+    const record = size as { width?: unknown; height?: unknown }
+    if (typeof record.width !== 'number' || typeof record.height !== 'number'
+      || !Number.isFinite(record.width) || !Number.isFinite(record.height)
+      || record.width < 1 || record.height < 1) {
+      throw new Error('dsh desktop: toolbar size requires positive finite dimensions')
+    }
+    return requireSelectionToolbar(event).setContentSize(record.width, record.height)
   })
 
   installDesktopDirectoryPicker(() => mainWindow)
@@ -1152,6 +1495,7 @@ async function main(): Promise<void> {
     if (quitting) return
     event.preventDefault()
     quitting = true
+    selectionController?.stop()
     stopAccount?.()
     if (welcomeWindow !== undefined && !welcomeWindow.isDestroyed()) welcomeWindow.hide()
     if (mainWindow !== undefined && !mainWindow.isDestroyed()) mainWindow.hide()
