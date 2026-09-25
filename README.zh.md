@@ -17,7 +17,7 @@ DeepSeek Orb 是非官方的个人开源项目，与 DeepSeek AI 没有隶属关
 悬浮球里的 Computer Use Agent 自己判断你说的每段话怎么走，运行时没有单独的任务分类器：
 
 ```mermaid
-flowchart td
+flowchart TD
     user["你在悬浮球里说话"] --> orb["Computer Use Agent"]
     orb -->|"看得见的 GUI 操作"| gui["13 个 GUI 工具<br>直接在当前窗口执行"]
     orb -->|"短查询：天气、新闻"| web["web_search / web_fetch<br>直接在球上回答"]

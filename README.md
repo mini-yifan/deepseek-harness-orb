@@ -17,7 +17,7 @@ The app collects no telemetry.
 The Computer Use Agent inside the floating ball decides how every message is handled; there is no separate task classifier at runtime:
 
 ```mermaid
-flowchart td
+flowchart TD
     user["You speak to the floating ball"] --> orb["Computer Use Agent"]
     orb -->|"Visible GUI actions"| gui["13 GUI tools<br>executed in the current window"]
     orb -->|"Quick lookups: weather, news"| web["web_search / web_fetch<br>answered on the ball"]
