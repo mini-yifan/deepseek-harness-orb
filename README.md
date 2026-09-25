@@ -1,71 +1,75 @@
-<p align="center"><img src="apps/desktop/build/icon.png" width="128" alt="DeepSeek Orb 应用图标" /></p>
+<p align="center"><img src="apps/desktop/build/icon.png" width="128" alt="DeepSeek Orb app icon" /></p>
 
 # DeepSeek Orb
 
-常驻电脑待命的桌面 AI Agent 助手，支持 macOS 和 Windows，基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh 0.1.7）构建。
+English | [中文](README.zh.md)
 
-屏幕边缘始终停着一颗悬浮球。向它说一句话，看得见的快速操作它直接操纵当前应用当场办完（Computer Use）；耗时的复杂任务它派给后台代码会话去跑，完成后把结果带回球里。主窗口沿用完整的 dsh Web UI，会话管理、插件市场、模型设置一应俱全，你仍然可以在里面写代码、改文件、跑命令。
+A desktop AI agent assistant that stays on call, for macOS and Windows, built on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh 0.1.7).
 
-应用不收集任何遥测数据。
+DeepSeek Orb is an unofficial community project and is not affiliated with DeepSeek AI.
 
-## 双轨 Agent 架构
+A floating ball rests at the edge of your screen. Tell it what you need: quick, visible actions are executed directly in the current app, finished in front of you through Computer Use; long-running complex tasks are dispatched to a background coding session, and the result comes back to the ball when it finishes. The main window keeps the full dsh Web UI — session management, the plugin market, and model settings — so you can still write code, edit files, and run commands in it.
 
-悬浮球里的 Computer Use Agent 自己判断你说的每段话怎么走，运行时没有单独的任务分类器：
+The app collects no telemetry.
+
+## Dual-track agent architecture
+
+The Computer Use Agent inside the floating ball decides how every message is handled; there is no separate task classifier at runtime:
 
 ```mermaid
-flowchart TD
-    user["你在悬浮球里说话"] --> orb["Computer Use Agent"]
-    orb -->|"看得见的 GUI 操作"| gui["13 个 GUI 工具<br>直接在当前窗口执行"]
-    orb -->|"短查询：天气、新闻"| web["web_search / web_fetch<br>直接在球上回答"]
-    orb -->|"翻文件、产出文档或网站"| bg["code_agent 后台会话<br>排队执行，立即返回"]
-    bg -->|"完成通知"| orb
+flowchart td
+    user["You speak to the floating ball"] --> orb["Computer Use Agent"]
+    orb -->|"Visible GUI actions"| gui["13 GUI tools<br>executed in the current window"]
+    orb -->|"Quick lookups: weather, news"| web["web_search / web_fetch<br>answered on the ball"]
+    orb -->|"Dig through files, produce documents or websites"| bg["code_agent background session<br>queued, returns immediately"]
+    bg -->|"Completion notice"| orb
 ```
 
-- **前台轨 · Computer Use**：打开 App、点按钮、填表单、改设置这类看得见的操作，用 GUI 工具直接在你眼前执行，每一步都基于当前最前窗口的实时截图。天气、新闻标题这类短查询也留在球上，用 `web_search` / `web_fetch` 直接回答。
-- **后台轨 · Code Agent**：翻找文件、产出 Word/PPT/Excel、搭建网站这类复杂任务，通过 `code_agent` 派给一条后台标准会话排队执行。派发立即返回，球马上告诉你后台正在跑，你可以继续聊别的；后台会话结束并且球空闲时，完成摘要自动回到球里，由 Computer Use Agent 决定下一段——继续点击、再派一段后台工作，还是直接收尾。
+- **Foreground track · Computer Use**: visible operations — opening apps, clicking buttons, filling forms, changing settings — are executed with GUI tools right in front of you, each step based on a live screenshot of the frontmost window. Quick lookups such as weather or news headlines stay on the ball too, answered directly with `web_search` / `web_fetch`.
+- **Background track · Code Agent**: complex tasks — digging through files, producing Word/PPT/Excel documents, building a website — are dispatched through `code_agent` to a background standard session. Dispatch returns immediately; the ball tells you the background is running and you can keep chatting. When the background session ends and the ball is idle, the completion summary returns to the ball automatically, and the Computer Use Agent decides the next move — keep clicking, dispatch more background work, or wrap up.
 
-后台会话与你在主窗口手动新建的会话是同一种东西，出现在主窗口侧栏的 `dsh_orb` 文件夹下，可以打开、接着聊、停止；只有发起它的那条球对话能续写或停止它。同一份产物的后续修改发回同一条后台会话，无关的新工作另开一条。悬浮球上的停止按钮只取消球的 Computer Use 会话，不影响后台会话。
+A background session is the same kind of session you create manually in the main window; it appears in the `dsh_orb` folder in the main-window sidebar, where you can open, continue, or stop it. Only the ball conversation that started it can continue or stop it. Follow-up changes to the same deliverable go back to the same background session; unrelated new work opens another one. The Stop button on the floating ball only cancels the ball's Computer Use session and never affects a background session.
 
-## 悬浮球
+## The floating ball
 
-应用启动后，球停在主显示器右沿、垂直方向中间稍下的位置，始终置顶。默认模型是 DeepSeek-V41-Flash、思考强度 Max。
+On startup the ball rests at the right edge of the primary display, slightly below vertical center, always on top. The default model is DeepSeek-V41-Flash at Max thinking.
 
-- **悬停**展开面板，**单击**固定面板，指针离开后自动折叠。
-- **拖动**移动球；大约五分之一拖出左右屏幕边缘后松手，球停靠成一根灰色细条，再次悬停即滑回。
-- **右键**打开菜单：打开主窗口、悬浮球 Agent 设置与后台 Agent 设置（两条轨各自独立选择模型和思考强度）、划词工具条开关、坐标编码开关（默认像素，可切千分比）、退出 DeepSeek Orb。
-- 面板内有与主窗口一致的对话记录、绕球折行生长的输入框（回车发送，Shift+Enter 换行）、**Access** 权限芯片（仅可查看 / 工作区内修改 / 完全权限，默认完全权限，对球上的命令和它派出的后台会话生效）、**历史**（列出球上的 Computer Use 对话）和**新建**。Agent 向你提问时，问题卡片直接在球上作答。
-- 在任意应用里拖拽划选文字会弹出工具条：**搜索**（用默认浏览器打开 Bing）、**翻译**（结果写入球当前对话）、**发给 Agent**（原文贴在输入框旁，回车连同你的指令一起发出）。
-- 球头像可在主窗口设置 → 悬浮球里换成自定义 GIF / PNG / WebP（2 MB 上限）。
+- **Hover** expands the panel, **click** pins it, and it collapses when the pointer leaves.
+- **Drag** moves the ball; release it after dragging about a fifth of it beyond the left or right screen edge and it docks into a thin gray tab — hover again to slide it back.
+- **Right-click** opens the menu: open the main window, floating-ball agent settings and background agent settings (each track picks its own model and thinking level), the selection-toolbar toggle, the coordinate-encoding toggle (pixel by default, switchable to millifraction), and quit DeepSeek Orb.
+- The panel carries the same conversation history as the main window, a composer that grows around the ball (Enter sends, Shift+Enter inserts a newline), the **Access** chip (view-only / workspace edits / full access, full by default, applying to the ball's commands and the background sessions it dispatches), **History** (the ball's Computer Use conversations), and **New**. When the agent asks you a question, the question card is answered right on the ball.
+- Drag-selecting text in any app pops up a toolbar: **Search** (opens Bing in your default browser), **Translate** (the result is written into the ball's current conversation), and **Send to agent** (the text sits by the input; Enter sends it together with your instruction).
+- The ball avatar can be replaced with a custom GIF / PNG / WebP (2 MB cap) in main-window Settings → Floating Ball.
 
-关闭主窗口不会退出应用；只有右键菜单里的「退出 DeepSeek Orb」会结束进程。
+Closing the main window does not quit the app; only "Quit DeepSeek Orb" in the right-click menu ends the process.
 
 ## Computer Use
 
-球上的对话全部走 Computer Use：第一条消息发出时自动附上当前最前应用的可见窗口截图，每次操作后再截一张，模型始终看得到屏幕的最新状态。截图会自动省略球、展开面板、划词工具条和观察边框，操作期间 overlay 也不会挡住点击。被观察的窗口四周会亮起一圈观察边框，标示 Agent 正在看哪里。坐标默认用像素编码，可在悬浮球右键菜单或主窗口设置 → 悬浮球里切换成 0–1000 千分比编码。
+Every conversation on the ball runs Computer Use: the first message automatically attaches a screenshot of the frontmost app's visible windows, and another screenshot follows every action, so the model always sees the latest screen state. Screenshots automatically omit the ball, the expanded panel, the selection toolbar, and the observation border, and the overlay never blocks clicks while an operation runs. The observed window gets a glowing observation border around it, marking what the agent is looking at. Coordinates are pixel-encoded by default; switch to 0–1000 millifraction encoding in the ball's right-click menu or in main-window Settings → Floating Ball.
 
-工具清单：`click`（单击/双击/右键/按住修饰键）、`input_text`、`scroll`、`hotkey`、`long_press`、`drag`、`wait`、`long_wait`、`screenshot`（保存到桌面并复制进剪贴板）、`open_in_browser`、`open_in_finder`、`list_apps`、`open_app`。
+Tool list: `click` (single/double/right click, hold modifiers), `input_text`, `scroll`, `hotkey`, `long_press`, `drag`, `wait`, `long_wait`, `screenshot` (saved to the Desktop and copied to the clipboard), `open_in_browser`, `open_in_finder`, `list_apps`, `open_app`.
 
-- **macOS**：首次展开面板时需要授予「屏幕录制」与「辅助功能」权限，引导层会打开系统设置对应页面，两项都授予后自动消失；访达自动化在首次使用时弹出授权。
-- **Windows**：无需系统权限引导；以管理员身份运行的窗口会拒绝被点击和输入。
-- 运行前请阅读 [SAFETY.md](SAFETY.md) 的安全须知。
+- **macOS**: the first time you expand the panel you must grant Screen Recording and Accessibility permissions; the onboarding layer opens the matching System Settings pages and disappears once both are granted. Finder automation asks for authorization on first use.
+- **Windows**: no system-permission onboarding is needed; windows running as administrator refuse to be clicked or typed into.
+- Read the safety notice in [SAFETY.md](SAFETY.md) before running.
 
-## 平台支持
+## Platform support
 
-| 平台 | 悬浮球与 Computer Use | 安装包 |
+| Platform | Floating ball and Computer Use | Installers |
 |---|---|---|
-| macOS（Apple Silicon / Intel） | 完整支持；需屏幕录制 + 辅助功能权限 | 签名 DMG / ZIP；本地未签名预览包 |
-| Windows x64 | 完整支持；管理员窗口拒绝被操作 | NSIS 安装包（.exe）；本地未签名包 |
-| Linux | 不创建悬浮球；主窗口可用，设置页控件禁用 | 非发布目标 |
+| macOS (Apple Silicon / Intel) | Fully supported; Screen Recording + Accessibility permissions required | Signed DMG / ZIP; local unsigned preview build |
+| Windows x64 | Fully supported; administrator windows refuse to be operated | NSIS installer (.exe); local unsigned build |
+| Linux | No floating ball; the main window works, settings controls are disabled | Not a release target |
 
-## 启动
+## Getting started
 
-### 准备
+### Prerequisites
 
-- Node.js `^22.19.0 || >=24.0.0`，pnpm `11.7.0`。
-- [DeepSeek API 密钥](https://platform.deepseek.com/)：启动后在主窗口**设置 → 模型**里保存，或启动前 `export DEEPSEEK_API_KEY=…`。密钥存放在 `~/.dsh/.credentials.yaml`，与 dsh CLI 共享。
-- 主窗口选中工作区后输入框才可用；悬浮球自动使用自己的 `dsh_orb` 工作区，无需配置。
+- Node.js `^22.19.0 || >=24.0.0`, pnpm `11.7.0`.
+- A [DeepSeek API key](https://platform.deepseek.com/): save it in the main window under **Settings → Models** after startup, or `export DEEPSEEK_API_KEY=…` before starting. Keys live in `~/.dsh/.credentials.yaml`, shared with the dsh CLI.
+- The main window's input is available only after a workspace is selected; the floating ball always uses its own `dsh_orb` workspace, no configuration needed.
 
-### 从源码运行
+### Run from source
 
 ```sh
 git clone https://github.com/mini-yifan/deepseek-harness-orb.git
@@ -74,33 +78,33 @@ pnpm install
 pnpm run dev:desktop
 ```
 
-`dev:desktop` 构建 Host、客户端、Web 前端和 Electron 壳，并启动未打包的应用；已经构建过时用 `pnpm run start:desktop` 跳过构建。主窗口先显示「正在启动 DeepSeek Orb…」，就绪后载入 Web UI，屏幕边缘出现悬浮球。
+`dev:desktop` builds the Host, clients, Web frontend, and the Electron shell, then launches the unpackaged app; once everything is built, `pnpm run start:desktop` skips the build. The main window shows a splash screen first, loads the Web UI when ready, and the floating ball appears at the screen edge.
 
-### 本地打包
+### Local packaging
 
-| 目标 | 命令 | 说明 |
+| Target | Command | Notes |
 |---|---|---|
-| macOS（Apple Silicon） | `pnpm run package:desktop:mac:arm64` | 签名发布流程见 [MAC-RELEASE-PACK.md](apps/desktop/MAC-RELEASE-PACK.md)，未签名预览包见 [UNSIGNED-MAC-PACK.md](apps/desktop/UNSIGNED-MAC-PACK.md) |
-| Windows x64（未签名） | `pnpm run package:desktop:win:x64:unsigned` | 环境变量与工具缓存见 [UNSIGNED-WIN-PACK.md](apps/desktop/UNSIGNED-WIN-PACK.md)；SmartScreen 会拦截，选择仍要运行 |
+| macOS (Apple Silicon) | `pnpm run package:desktop:mac:arm64` | Signed release flow in [MAC-RELEASE-PACK.md](apps/desktop/MAC-RELEASE-PACK.md); unsigned preview build in [UNSIGNED-MAC-PACK.md](apps/desktop/UNSIGNED-MAC-PACK.md) |
+| Windows x64 (unsigned) | `pnpm run package:desktop:win:x64:unsigned` | Environment variables and tool cache in [UNSIGNED-WIN-PACK.md](apps/desktop/UNSIGNED-WIN-PACK.md); SmartScreen will block it — choose "Run anyway" |
 
-打包细节与平台要求见 [apps/desktop/README.zh.md](apps/desktop/README.zh.md)。
+Packaging details and platform requirements: [apps/desktop/README.md](apps/desktop/README.md).
 
-## 与 DeepSeek Harness 的关系
+## Relationship to DeepSeek Harness
 
-本仓库基于 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 的 dsh 0.1.7 构建，`main` 分支承载 DeepSeek Orb 产品，并持续合并上游更新。dsh 是 DeepSeek AI 开源的「万物皆插件」agent harness，本产品的会话、插件、工具与 Web UI 都由它驱动。继续深入：
+This repository is an unofficial derivative of [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness), built on dsh 0.1.7 and not affiliated with DeepSeek AI. The `main` branch carries the DeepSeek Orb product and merges upstream updates continuously. dsh is DeepSeek AI's open-source everything-is-a-plugin agent harness; this product's sessions, plugins, tools, and Web UI are all driven by it. To go deeper:
 
-- [使用桌面端](docs/user/guide/desktop.zh.md) — 悬浮球与后台派发的完整用户指南
-- [Computer Use 包](packages/experimental/tool-computer-use/README.zh.md) — GUI 工具、坐标编码与权限细节
-- [apps/desktop/README.zh.md](apps/desktop/README.zh.md) — 开发变量、打包与更新
-- [docs/architecture.md](docs/architecture.md)、[packages/README.md](packages/README.md) — 底层 harness 的架构与包地图
+- [Using the desktop app](docs/user/guide/desktop.md) — the full user guide for the floating ball and background dispatch
+- [Computer Use package](packages/experimental/tool-computer-use/README.md) — GUI tools, coordinate encoding, and permission details
+- [apps/desktop/README.md](apps/desktop/README.md) — development variables, packaging, and updates
+- [docs/architecture.md](docs/architecture.md) and [packages/README.md](packages/README.md) — the underlying harness architecture and the package map
 
-## 已知限制
+## Known limitations
 
-- 不支持语音输入、屏幕圈选截图和逐次点击审批。
-- 只有悬浮球系统排除在 Computer Use 截图之外；主窗口始终可被截图、可被点击。
-- Computer Use 是 experimental 包，以内置 runtime extra 形式随应用分发，不是 Desktop Host 的 npm 依赖。
-- Linux 上无悬浮球；Windows 本地未签名安装包会被 SmartScreen 拦截，需手动放行。
+- No voice input, no screen-region screenshot selection, and no per-click approval.
+- Only the floating-ball system is excluded from Computer Use screenshots; the main window can always be captured and clicked.
+- Computer Use is an experimental package shipped inside the app as a built-in runtime extra, not an npm dependency of the Desktop Host.
+- No floating ball on Linux; the local unsigned Windows installer is blocked by SmartScreen and must be allowed manually.
 
-## 许可
+## License
 
-[MIT](LICENSE)，继承自上游 DeepSeek Harness；第三方依赖许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+[MIT](LICENSE), inherited from upstream DeepSeek Harness; third-party dependency licenses are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
