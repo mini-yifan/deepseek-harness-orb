@@ -325,6 +325,8 @@ async function main() {
   let eventsAbort
   let eventsClientId
   let eventsBackoff = 500
+  let hostReady = false
+  let hostGeneration = 0
 
   if (sessionId !== undefined) orbSessionIds.add(sessionId)
 
@@ -576,9 +578,16 @@ async function main() {
   }
 
   function ensureTranscriptFrame() {
-    if (transcript.querySelector('iframe') !== null) return
+    if (!hostReady) return
+    const generation = String(hostGeneration)
+    const existing = transcript.querySelector('iframe')
+    if (existing !== null) {
+      if (existing.dataset.hostGeneration === generation) return
+      existing.remove()
+    }
     const frame = document.createElement('iframe')
     frame.title = messages.floatingTitle
+    frame.dataset.hostGeneration = generation
     frame.src = OVERLAY_INDEX_HREF
     frame.allow = 'clipboard-write'
     frame.setAttribute('allow', 'clipboard-write')
@@ -1086,8 +1095,17 @@ async function main() {
     eventsClientId = undefined
   }
 
+  // A second ready report for the same Host run must not rebuild the transcript iframe.
+  function noteHostReady() {
+    if (hostReady) return
+    hostReady = true
+    hostGeneration += 1
+  }
+
   function connectWhenReady() {
+    noteHostReady()
     status.textContent = ''
+    if (expanded) ensureTranscriptFrame()
     void ensureSession().then(() => {
       void refreshOverlay()
       startRemoteEvents()
@@ -1097,7 +1115,10 @@ async function main() {
   api.backend.subscribe(state => {
     status.textContent = state.phase === 'ready' ? '' : messages.floatingDisconnected
     if (state.phase === 'ready') connectWhenReady()
-    else stopRemoteEvents()
+    else {
+      hostReady = false
+      stopRemoteEvents()
+    }
   })
   const backend = await api.backend.status()
   if (backend.phase === 'ready') connectWhenReady()

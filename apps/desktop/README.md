@@ -58,7 +58,7 @@ The application preload exposes boot readiness, fatal startup reporting, native 
 
 Only the main application window enables `<webview>`. Guest attachment must match a main-issued lease and partition; guests keep sandbox, context isolation and Web security without Node integration or guest preload. Browser IPC listeners are created only for the application document. [Sidebar Browser](../../packages/client/ui-sidebar-browser/README.md) describes storage grouping and guest limitations; Host authentication remains required independently of URL filtering.
 
-The `dsh-app://shell/` origin serves packaged update documents, scripts, and styles without contacting the Host. Static requests retain GET/HEAD, path-containment, and MIME handling; each update document keeps its isolated preload and owned-window IPC checks.
+The `dsh-app://shell/` origin serves packaged update documents, scripts, and styles without contacting the Host. Static requests retain GET/HEAD, path-containment, and MIME handling; each update document keeps its isolated preload and owned-window IPC checks. The floating-ball shell page is served from that origin; its transcript iframe of `dsh-app://app/index.html?surface=overlay` is created only while the Host is ready and is rebuilt for each Host generation.
 
 The product UI retains Web actions, including "Open In..." through the shared authenticated HTTP routes. Desktop uses Web's automatic directory-picker selection and initializes new profiles with the shared Web template's bundles.
 

@@ -2257,3 +2257,134 @@ it('hides the TCC gate when both rights are already granted', async () => {
     expect(document.body.classList.contains('tcc-gating')).toBe(false)
   } finally { dom.window.close() }
 })
+
+function overlayBackendHarness(phase: 'ready' | 'starting') {
+  const dom = new JSDOM(readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8'), {
+    runScripts: 'outside-only',
+    url: 'dsh-app://shell/floating.html',
+  })
+  const fetchMock = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+    if (isRemoteStream(_input)) return hangingStreamResponse(init?.signal)
+    const rawBody = init?.body
+    if (typeof rawBody !== 'string') throw new Error('overlay rpc body must be a string')
+    const body = JSON.parse(rawBody) as { rpcId: string; method: string }
+    let value: unknown = {}
+    if (body.method === 'workspace/create') {
+      value = { workspace: { workspaceId: 'ws-orb' }, created: true }
+    }
+    if (body.method === 'session/create') value = { sessionId: 'session-orb', agentPreset: 'computer-use' }
+    if (body.method === 'session/list') {
+      value = { items: [{ sessionId: 'session-orb', running: false, projections: { asOfSeq: 0 } }] }
+    }
+    return rpcResponse(body.rpcId, value)
+  })
+  Object.defineProperty(dom.window, 'fetch', { value: fetchMock })
+  Object.defineProperty(dom.window, 'crypto', { value: globalThis.crypto })
+  const setSessionId = vi.fn()
+  let backendListener: ((state: { phase: string }) => void) | undefined
+  Object.defineProperty(dom.window, 'dshDesktop', {
+    value: {
+      locale: async () => resolveDesktopLocale('en'),
+      backend: {
+        status: async () => ({ phase }),
+        subscribe: (listener: (state: { phase: string }) => void) => { backendListener = listener },
+      },
+      floating: {
+        sessionId: async () => undefined,
+        setSessionId,
+        move: vi.fn(),
+        clamp: vi.fn(),
+        setExpanded: async (expanded: boolean) => ({ expanded, horizontal: 'left', vertical: 'up' }),
+        orbWorkspacePath: async () => '/tmp/dsh_orb',
+        setSessionRunning: vi.fn(),
+        overlayModel: async () => ({
+          provider: 'deepseek-official',
+          model: 'deepseek-flash',
+          reasoningEffort: 'max',
+        }),
+        overlayPermission: async () => 'danger-full-access',
+        setOverlayPermission: vi.fn(),
+        onOverlayModel: () => () => {},
+        onSelectionPrompt: () => () => {},
+        onSelectionAttach: () => () => {},
+        onCreateSession: () => () => {},
+      },
+    },
+  })
+  return {
+    dom,
+    sessionWrites: () => setSessionId.mock.calls,
+    emit(state: { phase: string }) {
+      if (backendListener === undefined) throw new Error('backend listener is not registered')
+      backendListener(state)
+    },
+  }
+}
+
+it('creates the transcript iframe only after the Host is ready', async () => {
+  const harness = overlayBackendHarness('starting')
+  const { dom } = harness
+  try {
+    runInContext(readFileSync(new URL('../renderer/floating.js', import.meta.url), 'utf8'), dom.getInternalVMContext())
+    const document = dom.window.document
+    await expect.poll(() => document.querySelector('#status')?.textContent).toBe('Waiting for Desktop Host…')
+    document.body.dispatchEvent(new dom.window.Event('pointerenter', { bubbles: true }))
+    await expect.poll(() => document.body.classList.contains('expanded')).toBe(true)
+    expect(document.querySelector('#transcript iframe')).toBeNull()
+    expect(harness.sessionWrites()).toEqual([])
+    harness.emit({ phase: 'ready' })
+    await expect.poll(() => document.querySelector('#transcript iframe')?.getAttribute('src')).toBe(OVERLAY_CHAT_SRC)
+    const frame = document.querySelector<HTMLIFrameElement>('#transcript iframe')
+    if (frame === null) throw new Error('missing overlay chat iframe')
+    expect(frame.dataset.hostGeneration).toBe('1')
+    await expect.poll(() => harness.sessionWrites()).toEqual([['session-orb']])
+    const posts = recordIframePosts(frame)
+    const win = document.defaultView
+    if (win === null) throw new Error('missing overlay window')
+    win.dispatchEvent(new win.MessageEvent('message', {
+      origin: 'dsh-app://app',
+      data: { type: 'dsh.overlay.ready' },
+    }))
+    expect(posts.some(post =>
+      (post.data as { type?: string; sessionId?: string }).type === 'dsh.overlay.session'
+      && (post.data as { sessionId?: string }).sessionId === 'session-orb'
+      && post.origin === 'dsh-app://app')).toBe(true)
+    harness.emit({ phase: 'ready' })
+    expect(document.querySelector('#transcript iframe')).toBe(frame)
+    expect(frame.dataset.hostGeneration).toBe('1')
+  } finally { dom.window.close() }
+})
+
+it('rebuilds the transcript iframe when the Host becomes ready again', async () => {
+  const harness = overlayBackendHarness('ready')
+  const { dom } = harness
+  try {
+    runInContext(readFileSync(new URL('../renderer/floating.js', import.meta.url), 'utf8'), dom.getInternalVMContext())
+    const document = dom.window.document
+    await expect.poll(() => harness.sessionWrites()).toEqual([['session-orb']])
+    document.body.dispatchEvent(new dom.window.Event('pointerenter', { bubbles: true }))
+    await expect.poll(() => document.querySelector('#transcript iframe')?.getAttribute('src')).toBe(OVERLAY_CHAT_SRC)
+    const first = document.querySelector<HTMLIFrameElement>('#transcript iframe')
+    if (first === null) throw new Error('missing overlay chat iframe')
+    expect(first.dataset.hostGeneration).toBe('1')
+    harness.emit({ phase: 'starting' })
+    expect(document.querySelector('#transcript iframe')).toBe(first)
+    harness.emit({ phase: 'ready' })
+    await expect.poll(() => document.querySelector('#transcript iframe')).not.toBe(first)
+    const next = document.querySelector<HTMLIFrameElement>('#transcript iframe')
+    if (next === null) throw new Error('missing rebuilt overlay chat iframe')
+    expect(next.dataset.hostGeneration).toBe('2')
+    expect(next.getAttribute('src')).toBe(OVERLAY_CHAT_SRC)
+    const posts = recordIframePosts(next)
+    const win = document.defaultView
+    if (win === null) throw new Error('missing overlay window')
+    win.dispatchEvent(new win.MessageEvent('message', {
+      origin: 'dsh-app://app',
+      data: { type: 'dsh.overlay.ready' },
+    }))
+    expect(posts.some(post =>
+      (post.data as { type?: string; sessionId?: string }).type === 'dsh.overlay.session'
+      && (post.data as { sessionId?: string }).sessionId === 'session-orb'
+      && post.origin === 'dsh-app://app')).toBe(true)
+  } finally { dom.window.close() }
+})
