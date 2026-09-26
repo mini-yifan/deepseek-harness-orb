@@ -28,6 +28,9 @@ export const SELECTION_DEDUPE_MS = 3_000
 /** Delay before a second front-app restore so Chromium's delayed activation does not keep Desktop key. */
 export const SELECTION_RESTORE_FRONT_MS = 80
 
+/** How often to re-check Accessibility after `untrusted`, until the grant arms the monitor. */
+export const SELECTION_ACCESSIBILITY_POLL_MS = 1_000
+
 /** Host-owned actions the toolbar controller must not import from Electron main. */
 export interface SelectionToolbarHost {
   readonly electronPid: number
@@ -39,6 +42,8 @@ export interface SelectionToolbarHost {
   attachOverlay(text: string): void
   /** Prompt macOS Accessibility TCC; returns whether the process is trusted. */
   requestAccessibility(): boolean
+  /** Whether this process is trusted for Accessibility, without prompting. */
+  accessibilityTrusted(): boolean
   /** Test override; production uses {@link startSelectionMonitor}. */
   startMonitor?(handlers: SelectionMonitorHandlers): SelectionMonitor | undefined
   /** Test clock; production uses `Date.now`. */
@@ -61,6 +66,7 @@ export class SelectionToolbarController {
   private sessionRunning = false
   private hidInput = false
   private promptedAccessibility = false
+  private accessibilityPoll: ReturnType<typeof setInterval> | undefined
 
   /**
    * @param profileDir - Desktop profile directory holding `selection-toolbar.json`.
@@ -107,6 +113,7 @@ export class SelectionToolbarController {
 
   /** Kill the helper and hide the toolbar. */
   stop(): void {
+    this.clearAccessibilityPoll()
     this.monitor?.stop()
     this.monitor = undefined
     if (this.restoreTimer !== undefined) {
@@ -246,9 +253,11 @@ export class SelectionToolbarController {
         this.monitor?.setExcludePids([this.host.electronPid])
         return
       case 'untrusted':
-        if (this.promptedAccessibility) return
-        this.promptedAccessibility = true
-        this.host.requestAccessibility()
+        if (!this.promptedAccessibility) {
+          this.promptedAccessibility = true
+          this.host.requestAccessibility()
+        }
+        this.watchAccessibility()
         return
       case 'mouse-down':
         if (!pointInWindow(this.toolbar, event)) hideSelectionToolbar(this.toolbar)
@@ -264,6 +273,31 @@ export class SelectionToolbarController {
         this.onSelection(event)
         return
     }
+  }
+
+  private clearAccessibilityPoll(): void {
+    if (this.accessibilityPoll === undefined) return
+    clearInterval(this.accessibilityPoll)
+    this.accessibilityPoll = undefined
+  }
+
+  private watchAccessibility(): void {
+    if (this.accessibilityPoll !== undefined) return
+    const timer = setInterval(() => {
+      if (!this.config.enabled || this.monitor === undefined) {
+        this.clearAccessibilityPoll()
+        return
+      }
+      if (!this.host.accessibilityTrusted()) return
+      this.rearmMonitor()
+    }, SELECTION_ACCESSIBILITY_POLL_MS)
+    timer.unref()
+    this.accessibilityPoll = timer
+  }
+
+  private rearmMonitor(): void {
+    this.stop()
+    this.start()
   }
 
   private pausedReads(): boolean {

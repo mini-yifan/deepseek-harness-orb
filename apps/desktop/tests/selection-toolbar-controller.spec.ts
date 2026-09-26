@@ -3,7 +3,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DESKTOP_IPC } from '../src/ipc.ts'
-import { SELECTION_DEDUPE_MS, SelectionToolbarController } from '../src/selection-toolbar-controller.ts'
+import {
+  SELECTION_ACCESSIBILITY_POLL_MS,
+  SELECTION_DEDUPE_MS,
+  SelectionToolbarController,
+} from '../src/selection-toolbar-controller.ts'
 import { DESKTOP_SELECTION_PREAMBLE } from '../src/selection-prompt.ts'
 
 vi.mock('electron', () => ({
@@ -14,6 +18,7 @@ vi.mock('electron', () => ({
 const roots: string[] = []
 
 afterEach(() => {
+  vi.useRealTimers()
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
 
@@ -58,6 +63,7 @@ describe('selection toolbar controller', () => {
       promptOverlay,
       attachOverlay,
       requestAccessibility,
+      accessibilityTrusted: () => false,
       now: () => now,
       startMonitor: () => ({
         stop: vi.fn(),
@@ -130,6 +136,7 @@ describe('selection toolbar controller', () => {
       promptOverlay: vi.fn(),
       attachOverlay: vi.fn(),
       requestAccessibility: () => false,
+      accessibilityTrusted: () => false,
       startMonitor: () => {
         starts.push(1)
         return { stop, setExcludePids: vi.fn(), activatePid: vi.fn(), lastFrontPid: () => undefined }
@@ -155,6 +162,7 @@ describe('selection toolbar controller', () => {
       promptOverlay: vi.fn(),
       attachOverlay: vi.fn(),
       requestAccessibility: () => false,
+      accessibilityTrusted: () => false,
       startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid, lastFrontPid: () => undefined }),
     })
     controller.setToolbarWindow(fakeToolbar() as never)
@@ -174,6 +182,7 @@ describe('selection toolbar controller', () => {
       promptOverlay: vi.fn(),
       attachOverlay: vi.fn(),
       requestAccessibility: () => false,
+      accessibilityTrusted: () => false,
       startMonitor: () => ({
         stop: vi.fn(),
         setExcludePids: vi.fn(),
@@ -194,6 +203,7 @@ describe('selection toolbar controller', () => {
       promptOverlay: vi.fn(),
       attachOverlay: vi.fn(),
       requestAccessibility: () => false,
+      accessibilityTrusted: () => false,
       startMonitor: () => ({
         stop: vi.fn(),
         setExcludePids: vi.fn(),
@@ -217,6 +227,7 @@ describe('selection toolbar controller', () => {
       promptOverlay: vi.fn(),
       attachOverlay,
       requestAccessibility: () => false,
+      accessibilityTrusted: () => false,
       startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid, lastFrontPid: () => undefined }),
     })
     controller.setToolbarWindow(fakeToolbar() as never)
@@ -236,6 +247,7 @@ describe('selection toolbar controller', () => {
       promptOverlay: vi.fn(),
       attachOverlay: vi.fn(),
       requestAccessibility: () => false,
+      accessibilityTrusted: () => false,
       startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid: vi.fn(), lastFrontPid: () => undefined }),
     })
     const toolbar = fakeToolbar()
@@ -270,6 +282,7 @@ describe('selection toolbar controller', () => {
       promptOverlay: vi.fn(),
       attachOverlay: vi.fn(),
       requestAccessibility: () => false,
+      accessibilityTrusted: () => false,
       startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid: vi.fn(), lastFrontPid: () => undefined }),
     })
     const toolbar = fakeToolbar()
@@ -311,6 +324,7 @@ describe('selection toolbar controller', () => {
       promptOverlay: vi.fn(),
       attachOverlay: vi.fn(),
       requestAccessibility: () => false,
+      accessibilityTrusted: () => false,
       startMonitor: () => ({ stop: vi.fn(), setExcludePids: vi.fn(), activatePid: vi.fn(), lastFrontPid: () => undefined }),
     })
     const toolbar = fakeToolbar()
@@ -323,5 +337,76 @@ describe('selection toolbar controller', () => {
       bounds: { x: 0, y: 0, width: 80, height: 16 },
     })
     expect(toolbar.setBounds).toHaveBeenCalledWith(expect.objectContaining({ x: 400, y: 308 }))
+  })
+
+  it('restarts the monitor once Accessibility is granted and does not restart while it is off', () => {
+    vi.useFakeTimers()
+    const root = mkdtempSync(join(tmpdir(), 'dsh-selection-rearm-'))
+    roots.push(root)
+    let trusted = false
+    const firstStop = vi.fn()
+    let starts = 0
+    const controller = new SelectionToolbarController(root, {
+      electronPid: 99,
+      openExternal: async () => undefined,
+      promptOverlay: vi.fn(),
+      attachOverlay: vi.fn(),
+      requestAccessibility: () => false,
+      accessibilityTrusted: () => trusted,
+      startMonitor: () => {
+        starts += 1
+        return {
+          stop: starts === 1 ? firstStop : vi.fn(),
+          setExcludePids: vi.fn(),
+          activatePid: vi.fn(),
+          lastFrontPid: () => undefined,
+        }
+      },
+    })
+    controller.start()
+    expect(starts).toBe(1)
+    controller.onHelperEvent({ type: 'untrusted' })
+    vi.advanceTimersByTime(SELECTION_ACCESSIBILITY_POLL_MS)
+    expect(starts).toBe(1)
+    trusted = true
+    vi.advanceTimersByTime(SELECTION_ACCESSIBILITY_POLL_MS)
+    expect(starts).toBe(2)
+    expect(firstStop).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(SELECTION_ACCESSIBILITY_POLL_MS * 3)
+    expect(starts).toBe(2)
+    controller.stop()
+  })
+
+  it('cancels the Accessibility poll when the toolbar stops or is disabled', () => {
+    vi.useFakeTimers()
+    const root = mkdtempSync(join(tmpdir(), 'dsh-selection-poll-cancel-'))
+    roots.push(root)
+    let trusted = false
+    let starts = 0
+    const controller = new SelectionToolbarController(root, {
+      electronPid: 99,
+      openExternal: async () => undefined,
+      promptOverlay: vi.fn(),
+      attachOverlay: vi.fn(),
+      requestAccessibility: () => false,
+      accessibilityTrusted: () => trusted,
+      startMonitor: () => {
+        starts += 1
+        return { stop: vi.fn(), setExcludePids: vi.fn(), activatePid: vi.fn(), lastFrontPid: () => undefined }
+      },
+    })
+    controller.start()
+    controller.onHelperEvent({ type: 'untrusted' })
+    controller.stop()
+    trusted = true
+    vi.advanceTimersByTime(SELECTION_ACCESSIBILITY_POLL_MS * 3)
+    expect(starts).toBe(1)
+
+    controller.start()
+    controller.onHelperEvent({ type: 'untrusted' })
+    controller.setEnabled(false)
+    vi.advanceTimersByTime(SELECTION_ACCESSIBILITY_POLL_MS * 3)
+    expect(starts).toBe(2)
+    expect(controller.enabled()).toBe(false)
   })
 })

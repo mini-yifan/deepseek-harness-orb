@@ -818,6 +818,7 @@ async function main(): Promise<void> {
       hideSelectionToolbar(selectionController?.window())
     },
     requestAccessibility: () => systemPreferences.isTrustedAccessibilityClient(true),
+    accessibilityTrusted: () => systemPreferences.isTrustedAccessibilityClient(false),
   })
   const floatingWindow = floatingShell = createFloatingWindow(shellPreload, messages, () => {
     if (mainWindow !== undefined && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus() }

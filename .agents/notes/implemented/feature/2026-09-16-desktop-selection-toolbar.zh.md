@@ -10,7 +10,7 @@ macOS 用户在其他应用里划选文字后，期望能搜索、翻译，并�
 
 ## 决策
 
-macOS Desktop 在 Electron 壳内拥有该功能。Darwin 监视器（`apps/desktop/src/macos-selection.swift`，经 `macos-selection-napi.node` 在进程内加载）监视超过 8px 的左键拖拽，然后读取 `AXSelectedText`（及选区边界），或回退到剪贴板 `Cmd+C` 并备份/恢复。它忽略 Electron PID。选区载荷始终带上鼠标松开点。工具条放在该点下方 8px，而不用 AX 矩形：浏览器常把 `kAXBoundsForRangeParameterizedAttribute` 报成窗口局部或 chrome 原点矩形，会把条钉在窗口左上角。3 秒的 `pid + bundle + text` 去重、工具条窗外的左键按下、任意按键、右键或中键按下、非惯性滚轮和新的拖拽会隐藏工具条。监视器不为剪贴板回退里它投递的 `Cmd+C` 发出 `key`，触控板惯性（`momentumPhase`）也不会隐藏，因此划选后残留的滚动不会收起工具条。辅助功能关闭时发出 `untrusted` 且不截获事件；该事件首次出现时通过 `systemPreferences.isTrustedAccessibilityClient(true)` 打开系统设置。Windows 不启动监视器。
+macOS Desktop 在 Electron 壳内拥有该功能。Darwin 监视器（`apps/desktop/src/macos-selection.swift`，经 `macos-selection-napi.node` 在进程内加载）监视超过 8px 的左键拖拽，然后读取 `AXSelectedText`（及选区边界），或回退到剪贴板 `Cmd+C` 并备份/恢复。它忽略 Electron PID。选区载荷始终带上鼠标松开点。工具条放在该点下方 8px，而不用 AX 矩形：浏览器常把 `kAXBoundsForRangeParameterizedAttribute` 报成窗口局部或 chrome 原点矩形，会把条钉在窗口左上角。3 秒的 `pid + bundle + text` 去重、工具条窗外的左键按下、任意按键、右键或中键按下、非惯性滚轮和新的拖拽会隐藏工具条。监视器不为剪贴板回退里它投递的 `Cmd+C` 发出 `key`，触控板惯性（`momentumPhase`）也不会隐藏，因此划选后残留的滚动不会收起工具条。辅助功能关闭时发出 `untrusted` 且不截获事件；该事件首次出现时通过 `systemPreferences.isTrustedAccessibilityClient(true)` 打开系统设置。控制器随后轮询授权，一旦辅助功能被授予就重启监视器，无需重新启动应用。Windows 不启动监视器。
 
 监视器是 Electron 进程里的 N-API 插件（`asarUnpack: lib/macos-selection-napi.node` 与 `lib/libmacos-selection.dylib`），不是派生的可执行文件。[Desktop 划词工具条进 Orb 进程](../architecture/2026-09-21-desktop-selection-in-process-identity.zh.md) 拥有该身份：子进程 Mach-O 是第二条辅助功能 CDHash，因此在带图标的 Orb 行上授权后，搜索 / 翻译 / 发给 Agent 也不会出现。
 

@@ -127,8 +127,9 @@ export function startSelectionMonitor(handlers: SelectionMonitorHandlers): Selec
   let addon: MacosSelectionNapiBinding
   try {
     addon = loadMacosSelectionBinding()
-  } catch {
+  } catch (error) {
     // Addon is not next to this module: unit tests import `src/`, and non-Darwin stubs are not loadable.
+    console.warn('desktop selection: monitor did not load', error)
     return undefined
   }
   addon.start((line) => {
