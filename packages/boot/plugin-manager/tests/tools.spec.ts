@@ -10,6 +10,7 @@ import SessionProjections from '@deepseek-ai/dsh-session-projection'
 import ApprovalService, { type ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import { expect, it, onTestFinished, vi } from 'vitest'
 import type PluginManager from '../src/index.ts'
+import type { BundleInfo } from '../src/types.ts'
 import * as tool from '../src/tools.ts'
 
 function resultText(result: Awaited<ReturnType<ToolRuntime['execute']>>): string {
@@ -71,6 +72,40 @@ it('preserves selected bundle load errors in the agent list result', async () =>
           },
           "name": "bundle",
           "overrides": [],
+          "rows": [],
+        },
+      ],
+      "nextOffset": null,
+      "total": 1,
+    }
+  `)
+})
+
+it('exposes an absent Official bundle installation target without display metadata', async () => {
+  const { manager, call } = await fixture()
+  const offered: BundleInfo = {
+    name: '@deepseek-ai/dsh-subagent-codex', official: true, availability: 'missing',
+    installed: false, enabled: false, optional: false, removable: false, rows: [], overrides: [],
+    installTarget: { spec: '@deepseek-ai/dsh-subagent-codex@1.2.3', version: '1.2.3' },
+    meta: { title: 'Codex subagent' },
+  }
+  manager.listBundles.mockResolvedValue([offered])
+  expect(JSON.parse(resultText(await call({ action: 'list_bundles' })))).toMatchInlineSnapshot(`
+    {
+      "entries": [
+        {
+          "availability": "missing",
+          "enabled": false,
+          "installTarget": {
+            "spec": "@deepseek-ai/dsh-subagent-codex@1.2.3",
+            "version": "1.2.3",
+          },
+          "installed": false,
+          "name": "@deepseek-ai/dsh-subagent-codex",
+          "official": true,
+          "optional": false,
+          "overrides": [],
+          "removable": false,
           "rows": [],
         },
       ],
@@ -195,10 +230,10 @@ it('keeps UI translation metadata out of model-facing plugin and bundle lists', 
     entries: [{ entryId: 'include:plugin', enabled: true }], total: 1, nextOffset: null,
   })
   manager.listBundles.mockImplementationOnce(async () => [{
-    name: 'bundle', enabled: true, meta, rows: [{ rowId: 'plugin', moduleName: 'plugin', meta }],
+    name: 'bundle', source: 'bundle@^1.0.0', enabled: true, meta, rows: [{ rowId: 'plugin', moduleName: 'plugin', meta }],
   }])
   expect(JSON.parse(resultText(await call({ action: 'list_bundles' })))).toEqual({
-    entries: [{ name: 'bundle', enabled: true, rows: [{ rowId: 'plugin', moduleName: 'plugin' }] }], total: 1, nextOffset: null,
+    entries: [{ name: 'bundle', source: 'bundle@^1.0.0', enabled: true, rows: [{ rowId: 'plugin', moduleName: 'plugin' }] }], total: 1, nextOffset: null,
   })
 })
 

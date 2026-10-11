@@ -7,9 +7,11 @@ const configurations = new WeakMap<Context, Awaited<ReturnType<typeof liveConfig
 import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import { PiAiAdapter } from '@deepseek-ai/dsh-llm-pi-ai'
 import type { ContextFormed } from '@deepseek-ai/dsh-llm'
-import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
+import { getAllBuiltinModels, getBuiltinModels, getBuiltinProviders } from '@earendil-works/pi-ai/providers/all'
 import { AssistantMessageEventStream } from '@earendil-works/pi-ai/utils/event-stream'
+import { normalizeContext } from '@earendil-works/pi-ai/utils/transcript'
 import type { Api, Model, OpenAICompletionsCompat, Provider } from '@earendil-works/pi-ai'
+import { catalogModels, catalogProvider } from '../src/catalog.ts'
 import { resolveProfiles } from '../src/config.ts'
 import { createModels, createProvider, getSupportedThinkingLevels } from '../src/models.ts'
 import { buildProvider, supportedProtocols } from '../src/provider.ts'
@@ -362,7 +364,7 @@ describe('hand-declared providers', () => {
       auth: { apiKey: { name: 'Local', resolve: () => Promise.resolve({ auth: {}, source: 'Local' }) } },
       api: { stream, streamSimple },
     })
-    const context = { messages: [] }
+    const context = normalizeContext({ messages: [] })
 
     expect(provider.stream(model, context)).toBe(direct)
     expect(provider.streamSimple(model, context)).toBe(simple)
@@ -545,7 +547,7 @@ describe('catalog routes with per-model configuration', () => {
     if (built === undefined) throw new Error('the deepseek route built no provider')
     const [model] = built.getModels()
     if (model === undefined) throw new Error('the deepseek route resolved no models')
-    const context = { messages: [{ role: 'user' as const, content: 'hi', timestamp: 0 }] }
+    const context = normalizeContext({ messages: [{ role: 'user', content: 'hi', timestamp: 0 }] })
 
     // `stream` is interface-required and unused by the harness adapter, which
     // only calls `streamSimple`; both must still reach the catalog provider.
@@ -1069,9 +1071,9 @@ describe('compat switches', () => {
   it('refuses a valueless compat key on a model entry too', () => {
     expect(() => resolveProfiles({
       deepseek: {
-        modelOverrides: { 'deepseek-v4-flash': { compat: { requiresReasoningContentOnAssistantMessages: null } } as never },
+        modelOverrides: { 'deepseek-flash': { compat: { requiresReasoningContentOnAssistantMessages: null } } as never },
       },
-    })).toThrow(/model "deepseek-v4-flash" sets compat "requiresReasoningContentOnAssistantMessages" with no value/)
+    })).toThrow(/model "deepseek-flash" sets compat "requiresReasoningContentOnAssistantMessages" with no value/)
   })
 
   it('serves the Responses compat type on every protocol pi-ai gives it to', () => {
@@ -1134,7 +1136,7 @@ describe('resolution snapshots', () => {
     const inFlight = (async () => {
       for await (const chunk of adapter.stream({
         provider: 'deepseek',
-        model: 'deepseek-v4-flash',
+        model: 'deepseek-flash',
         messages: [],
       })) chunks.push(chunk)
     })()
@@ -1163,7 +1165,7 @@ describe('resolution snapshots', () => {
     })
     const drain = async (): Promise<void> => {
       for await (const _chunk of adapter.stream({
-        provider: 'deepseek', model: 'deepseek-v4-flash', messages: [],
+        provider: 'deepseek', model: 'deepseek-flash', messages: [],
       })) { /* drain */ }
     }
 
@@ -1235,6 +1237,21 @@ describe('configurable-provider directory', () => {
     expect(offered).toContain('openai-codex')
     expect(offered).toContain('anthropic')
     expect(offered).toContain('openai')
+  })
+
+  it('leaves out an installed catalog route that ships no chat model', async () => {
+    const ctx = await harness({})
+    const offered = ctx.llm.listConfigurableProviders().map(entry => entry.provider)
+
+    // The installed catalog ships `typesafe` with classifier models only; with
+    // nothing to dispatch a chat request to, the route is not offered and is
+    // not a catalog route anywhere else either.
+    expect(getBuiltinProviders()).toContain('typesafe')
+    expect(getAllBuiltinModels('typesafe').length).toBeGreaterThan(0)
+    expect(getBuiltinModels('typesafe')).toEqual([])
+    expect(offered).not.toContain('typesafe')
+    expect(catalogProvider('typesafe')).toBeUndefined()
+    expect(catalogModels('typesafe').size).toBe(0)
   })
 
   it('lists a route a stored profile names as a catalog route, not a declared one', async () => {

@@ -20,6 +20,7 @@ import { transform } from 'lightningcss'
 import { optionalStringArray } from './modules/src/client/manifest.ts'
 import { PLATFORM_MODULES, PRELOADED_CLIENT_EXTERNALS } from './web/src/platform.ts'
 import { clientBuildEnvironmentDefines } from '../../scripts/client-build-environment.ts'
+import { isExperimentalPackageName } from '../../scripts/experimental-package-policy.ts'
 import { BundleInputIsolation, physicalBundleInput } from '../../scripts/bundle-input-isolation.ts'
 
 /**
@@ -61,7 +62,7 @@ function styleInjectionModule(
  * Everything else under @deepseek-ai/* is either a module-table entry
  * (external) or a leak the purity gate rejects.
  */
-export const INLINE_SAFE = /^(?:@deepseek-ai\/dsh-(?:file-reference|session|llm|tools|brand|deque|output-retention|typert-protocol|util-crypto|util-values|util-workspace-path)(?:\/|$)|@deepseek-ai\/dsh-token-meter\/client$|@deepseek-ai\/dsh-native-command\/types$|@deepseek-ai\/dsh-host-open-in-app\/shared$|@deepseek-ai\/dsh-plugin-manager\/registry$|@deepseek-ai\/dsh-agent-preset-registry\/display$|@deepseek-ai\/dsh-spill-policy\/notice$)/
+export const INLINE_SAFE = /^(?:@deepseek-ai\/dsh-(?:file-reference|session|llm|tools|brand|deque|output-retention|typert-protocol|util-crypto|util-values|util-workspace-path)(?:\/|$)|@deepseek-ai\/dsh-token-meter\/client$|@deepseek-ai\/dsh-native-command\/types$|@deepseek-ai\/dsh-host-open-in-app\/shared$|@deepseek-ai\/dsh-plugin-manager\/registry$|@deepseek-ai\/dsh-agent-preset-registry\/display$|@deepseek-ai\/dsh-api-workspace-controller\/default-workspace$|@deepseek-ai\/dsh-spill-policy\/notice$)/
 
 /**
  * Vendored framework libraries: rescoped into @deepseek-ai, so the gate below
@@ -101,9 +102,7 @@ function browserSourcePath(source: string, sourcemapPath: string): string {
  * original source content, into the standalone plugin map.
  * @param id - plugin id (package name), stamped into the __ModuleLoader__.load
  * handoff and onto the injected style tags.
- * @param libEntry - node-half entries, spelled at the call site so the
- * package-invariants gate can see `lib/types/invariant.js` in each package's
- * own tsdown.config.ts (a preset-side glob hides it from the mechanical check).
+ * @param libEntry - node-half entries.
  * @param options - phase placement, lib overrides, companion Node configs, and optional per-file Client banner.
  * @returns ENV-selected tsdown config for the current build face.
  */
@@ -631,7 +630,7 @@ function clientInputIsolation(id: string): {
   plugin: TsdownPlugin
   sourcePath: (source: string, mapPath: string) => string
 } {
-  const experimental = id.startsWith('@deepseek-ai/dsh-experimental-')
+  const experimental = isExperimentalPackageName(id)
   const inputs = new BundleInputIsolation(REPOSITORY_ROOT, `client bundle isolation (${id})`)
   return {
     plugin: {

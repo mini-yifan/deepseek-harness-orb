@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-17-orb-agent-model-menus.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-17-orb-agent-model-menus.md
-2026-09-17-orb-agent-model-menus.md: 62a714d238d1d84ea37bd2d8bba052f7d60d4618
-2026-09-17-orb-agent-model-menus.zh.md: 515e6ea76c1db1b80fe8be6c69dcb733da04b4cb
+/agent-note-floating-ball-and-background-agent-model-menus:
+  en: 84d2ad7e431abadf
+  zh: 165f4855b4df42b2
+/agent-note-floating-ball-and-background-agent-model-menus/problem:
+  en: ca19ce863b61fae2
+  zh: ad4bbad005557e32
+/agent-note-floating-ball-and-background-agent-model-menus/decision:
+  en: 5ddc7065767864bd
+  zh: f7c0eccf3277a7b9
+/agent-note-floating-ball-and-background-agent-model-menus/alternatives-considered:
+  en: 682b665c28cdaf12
+  zh: ec614d20b85b6329
+/agent-note-floating-ball-and-background-agent-model-menus/consequences:
+  en: 0c14190c8729c862
+  zh: cd785a9aca3782e5
+/agent-note-floating-ball-and-background-agent-model-menus/testing:
+  en: 3e2c135fb7ed2c9f
+  zh: 869ad7b075a697fe

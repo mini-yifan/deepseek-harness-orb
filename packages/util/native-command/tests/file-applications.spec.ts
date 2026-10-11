@@ -1,4 +1,5 @@
 /** File association results and explicit handler authorization at the native command adapter. */
+import { readFile } from 'node:fs/promises'
 import { describe, expect, it, vi, onTestFinished } from 'vitest'
 import * as runner from '../src/runner.ts'
 import { nativeFileApplications, openNativeFileApplication } from '../src/file-applications.ts'
@@ -11,7 +12,7 @@ describe('native file associations', () => {
     const run = vi.fn(async () => ({ stdout: JSON.stringify([application]), stderr: '' }))
     const path = '/tmp/中文 $(touch nope).mp3'
     await expect(nativeFileApplications(path, signal, { platform: 'darwin', run })).resolves.toEqual([application])
-    expect(run).toHaveBeenCalledWith('osascript', ['-l', 'JavaScript', '-e', expect.any(String), path, 'icons'], signal)
+    expect(run).toHaveBeenCalledWith('osascript', ['-l', 'JavaScript', '-e', expect.any(String), path, 'icons'], signal, 'hidden')
   })
 
   it.each(['{}', '[null]', '[{"id":1}]', '[{"id":"/a.app","default":false,"icon":null,"bundle":"b"}]', '[{"id":"/a.app","name":"A","default":false,"icon":null,"bundle":5}]', JSON.stringify([{ ...application, icon: 'javascript:alert(1)' }])])('rejects malformed native output %s', async (stdout) => {
@@ -78,8 +79,8 @@ describe('native file associations', () => {
   it('launches only a currently registered application with argv', async () => {
     const run = vi.fn(async () => ({ stdout: JSON.stringify([application]), stderr: '' }))
     await openNativeFileApplication('/file.mp3', application.id, signal, { platform: 'darwin', run })
-    expect(run).toHaveBeenNthCalledWith(1, 'osascript', ['-l', 'JavaScript', '-e', expect.any(String), '/file.mp3', 'handlers'], signal)
-    expect(run).toHaveBeenLastCalledWith('open', ['-a', application.id, '/file.mp3'], signal)
+    expect(run).toHaveBeenNthCalledWith(1, 'osascript', ['-l', 'JavaScript', '-e', expect.any(String), '/file.mp3', 'handlers'], signal, 'hidden')
+    expect(run).toHaveBeenLastCalledWith('open', ['-a', application.id, '/file.mp3'], signal, 'hidden')
     run.mockClear()
     await expect(openNativeFileApplication('/file.mp3', '/arbitrary.app', signal, { platform: 'darwin', run })).rejects.toThrow('not registered')
     expect(run).toHaveBeenCalledOnce()
@@ -94,7 +95,7 @@ describe('native file associations', () => {
     const shown = await nativeFileApplications('/file.mp3', signal, { platform: 'darwin', run })
     expect(shown.map(app => app.id)).toEqual([application.id])
     await openNativeFileApplication('/file.mp3', '/updates/Music.app', signal, { platform: 'darwin', run })
-    expect(run).toHaveBeenLastCalledWith('open', ['-a', '/updates/Music.app', '/file.mp3'], signal)
+    expect(run).toHaveBeenLastCalledWith('open', ['-a', '/updates/Music.app', '/file.mp3'], signal, 'hidden')
   })
 
   it('does not query after cancellation or on unsupported platforms', async () => {
@@ -113,21 +114,50 @@ it('uses the production command adapter and current platform when no override is
   onTestFinished(() => { run.mockRestore() })
   expect(await nativeFileApplications('/file.mp3', signal)).toEqual(process.platform === 'linux' ? [] : [application])
   await openNativeFileApplication('/file.mp3', application.id, signal, { platform: 'darwin' })
-  expect(run).toHaveBeenLastCalledWith('open', ['-a', application.id, '/file.mp3'], signal)
+  expect(run).toHaveBeenLastCalledWith('open', ['-a', application.id, '/file.mp3'], signal, 'hidden')
 })
 
 
 it('encodes Windows query and invocation data separately from native adapter source', async () => {
-  const run = vi.fn<runner.NativeCommandRunner>(async () => ({ stdout: JSON.stringify([application]), stderr: '' }))
+  const scripts: string[] = []
+  const run = vi.fn<runner.NativeCommandRunner>(async (_command, args) => {
+    scripts.push(await readFile(args.at(-1)!, 'utf8'))
+    return { stdout: JSON.stringify([application]), stderr: '' }
+  })
   const path = "C:\\测试\\a'; write-host nope.mp3"
   expect(await nativeFileApplications(path, signal, { platform: 'win32', run })).toEqual([application])
-  const query = Buffer.from(run.mock.calls[0]![1].at(-1)!, 'base64').toString('utf16le')
-  expect(query).toContain(Buffer.from(path).toString('base64'))
-  expect(query).not.toContain(path)
-  expect(query).toContain('::List($path)')
+  expect(scripts[0]!).toContain(Buffer.from(path).toString('base64'))
+  expect(scripts[0]!).not.toContain(path)
+  expect(scripts[0]!).toContain('::List($path)')
   await openNativeFileApplication(path, application.id, signal, { platform: 'win32', run })
-  expect(Buffer.from(run.mock.calls[1]![1].at(-1)!, 'base64').toString('utf16le')).toContain('::Open($path, $application)')
+  expect(scripts[1]!).toContain('::Open($path, $application)')
   expect(run.mock.calls[1]![0]).toBe('powershell.exe')
+  expect(run.mock.calls[1]![1]).toEqual(['-NoProfile', '-NonInteractive', '-STA', '-ExecutionPolicy', 'Bypass', '-File', expect.any(String)])
+  // PowerShell 5.1 reads a -File script as ANSI without the BOM.
+  expect(scripts[1]!).toMatch(/^\uFEFF/)
+})
+
+it('keeps the complete Windows command line below the CreateProcess limit for long multibyte paths', async () => {
+  const run = vi.fn<runner.NativeCommandRunner>(async () => ({ stdout: '[]', stderr: '' }))
+  const paths = [
+    // 222 characters; this path measured 32883 characters of command line while the script travelled there.
+    `C:\\work\\${'测'.repeat(210)}.txt`,
+    `C:\\work\\${'测'.repeat(3000)}.txt`,
+  ]
+  for (const path of paths) await nativeFileApplications(path, signal, { platform: 'win32', run })
+  const commandLines = run.mock.calls.map(call => [call[0], ...call[1]].join(' '))
+  expect(commandLines).toHaveLength(paths.length)
+  commandLines.forEach((line, index) => {
+    const path = paths[index]!
+    // Windows CreateProcess rejects a command line over 32767 characters; the script and
+    // the encoded path are no longer part of the line, so it stays near 100 characters.
+    expect(line.length).toBeLessThan(1_000)
+    expect(line).toContain('powershell.exe')
+    expect(line).toContain('-File')
+    // The path travels as encoded data inside the script file, never on the command line.
+    expect(line).not.toContain(path)
+    expect(line).not.toContain(Buffer.from(path).toString('base64'))
+  })
 })
 
 it('uses the Windows desktop for WSL paths and rejects an empty translation', async () => {
@@ -137,7 +167,7 @@ it('uses the Windows desktop for WSL paths and rejects an empty translation', as
   const facts = { platform: 'linux' as const, osRelease: 'microsoft', env: {}, run }
   expect(await nativeFileApplications('/mnt/c/音频.mp3', signal, facts)).toEqual([application])
   await openNativeFileApplication('/mnt/c/音频.mp3', application.id, signal, facts)
-  expect(run).toHaveBeenCalledWith('wslpath', ['-w', '/mnt/c/音频.mp3'], signal)
+  expect(run).toHaveBeenCalledWith('wslpath', ['-w', '/mnt/c/音频.mp3'], signal, 'hidden')
   const empty = async () => ({ stdout: '', stderr: '' })
   await expect(nativeFileApplications('/a', signal, { ...facts, run: empty })).rejects.toThrow('no Windows path')
 })

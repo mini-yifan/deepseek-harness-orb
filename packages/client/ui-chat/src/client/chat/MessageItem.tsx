@@ -2,7 +2,7 @@ import { Fragment, memo, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { PendingSubmission } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { MessageImageSource } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { fileExtension, FileTypeIcon, fileSizeText, JsonBlock, projectUserText, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { fileExtension, FileTypeIcon, fileSizeText, JsonBlock, projectUserText, StateDot, TextShimmer } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ChatNodeOwnerProps, ChatNodeViewProps, ChatViewSlotProps } from '../contract/slots.ts'
 import type { ModelRetryNode, TurnErrorNode, UserMessageNode } from '../contract/snapshot.ts'
 import { CompactionItem } from './CompactionItem.tsx'
@@ -52,6 +52,9 @@ function failureMessage(
   code: unknown,
   t: ChatViewSlotProps['t'],
 ): string {
+  if (code === 'ACCOUNT_SIGNED_OUT') return t('message.failure.accountSignedOut')
+  if (code === 'ACCOUNT_SIGN_IN_REQUIRED') return t('message.failure.accountSignInRequired')
+  if (code === 'QUOTA' || code === 'ACCOUNT_QUOTA') return t('message.failure.quota')
   return code === 'AUTH' ? t('message.failure.auth') : message
 }
 
@@ -104,7 +107,9 @@ function ModelRetryItem({ node, active, t }: {
     <details className={css.retryRow} data-active={active || undefined}>
       <summary className={css.retrySummary}>
         <span className={css.retryText} role="status">
-          {t('message.retry.status', { label, retry: node.retry, maximum, seconds })}
+          <TextShimmer active={active}>
+            {t('message.retry.status', { label, retry: node.retry, maximum, seconds })}
+          </TextShimmer>
         </span>
       </summary>
       <div className={css.retryDetails}>
@@ -130,7 +135,7 @@ function TurnErrorItem({ node, t }: {
     <div className={css.turnErrorRow} role="status">
       <StateDot state="error" className={css.turnErrorDot} />
       <div className={css.turnErrorCopy}>
-        <span className={css.turnErrorTitle}>{t('message.turnError')}</span>
+        <span className={css.turnErrorTitle}>{node.code === 'ACCOUNT_SIGNED_OUT' ? t('message.accountStopped') : t('message.turnError')}</span>
         <span className={css.turnErrorMessage}>{failureMessage(node.message, node.code, t)}</span>
       </div>
       {node.code !== undefined && <code className={css.turnErrorCode}>{node.code}</code>}

@@ -11,13 +11,13 @@
 # ── identity ────────────────────────────────────────────────────────────────
 
 # The preset's own persona, shadowing the deployment default for this agent.
-# `{{model}}` and `{{cwd}}` resolve from the agent's own route and workspace.
+# `{{model}}` resolves from the agent's own route; the working-directory service
+# supplies the current-directory context.
 # `complete` stays unset so later prompt sections, including Computer Use
 # POLICY, still assemble.
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
-    suffix: Your working directory is {{cwd}}.
     prefix: >-
       You are a desktop GUI agent powered by the {{model}} model.
       You operate the screen and decide each stretch yourself.

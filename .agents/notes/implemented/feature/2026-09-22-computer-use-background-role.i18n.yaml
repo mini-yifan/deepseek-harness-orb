@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-22-computer-use-background-role.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-22-computer-use-background-role.md
-2026-09-22-computer-use-background-role.md: f8977418cb9b963de51b9a39e60bb9f109ba29ab
-2026-09-22-computer-use-background-role.zh.md: 9301c32b9eb4b8f911feebf5d846a6e97f362234
+/agent-note-computer-use-background-role:
+  en: 8d2ae7c7ca2cae07
+  zh: c4ae5da5f6c5d50d
+/agent-note-computer-use-background-role/problem:
+  en: ab534aab92ead060
+  zh: 7c14b5f15dc5183e
+/agent-note-computer-use-background-role/decision:
+  en: f95f7681ef99a82a
+  zh: 514b2760c6cb60c0
+/agent-note-computer-use-background-role/alternatives-considered:
+  en: 7dda6c24bd5c98e3
+  zh: 0d7c62cfdec07561
+/agent-note-computer-use-background-role/consequences:
+  en: 49707467174d5082
+  zh: c53c8ad04c17f423
+/agent-note-computer-use-background-role/testing:
+  en: d9d821bedac9df1c
+  zh: b9140ad371283c5e

@@ -5,7 +5,7 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Browser, Locator, Page } from 'playwright'
-import { expect } from 'vitest'
+import { expect, vi, type MockInstance } from 'vitest'
 
 /** The built page under test; `pnpm run test:web` rebuilds it before running. */
 export const DIST_INDEX = fileURLToPath(new URL('../dist/index.html', import.meta.url))
@@ -40,6 +40,66 @@ export const ZH_BROWSER_LOCALE = 'zh-CN'
 
 /** Same-day anchor for seeded event times and the Asia/Shanghai browser clock. */
 export const WEB_FIXTURE_TIME = Date.parse('2026-01-15T12:00:00+08:00')
+
+/**
+ * Budget for a plugin-manager switch to republish its state after a click: the
+ * click starts a Host profile write, and the store's follow-up `load()` re-reads
+ * its inventory before the switch shows the new value. That chain measured
+ * 0.5-0.8 s on an idle host and 2.0-4.8 s across 32 samples in a 16-worker lane,
+ * so Vitest's 1-second `expect.poll` default expires first.
+ */
+export const PLUGIN_TOGGLE_SETTLE_MS = 10_000
+
+/** How often a pinned browser clock advances, in milliseconds. */
+const PINNED_CLOCK_STEP_MS = 250
+
+/**
+ * Pin the Host clock to the shared fixture day for one scenario suite.
+ *
+ * A rendered message clock gains a `clock.md` / `clock.ymd` date prefix as soon
+ * as the message's local day differs from the renderer's, so a scenario whose
+ * message times are stamped by the Host wall clock — a live composer send, or a
+ * seed anchored from `Date.now()` — renders a different aria line once the run
+ * spans `Asia/Shanghai` midnight. Reading the fixture day on both clocks makes
+ * that calendar fact part of the scenario rather than of the run.
+ *
+ * The pinned clock advances with real elapsed time, so turn deadlines, session
+ * ordering, and durations keep running.
+ * @returns the installed `Date.now` spy, restored by the caller in teardown.
+ */
+export function pinHostClock(): MockInstance<typeof Date.now> {
+  const startedAt = performance.now()
+  return vi.spyOn(Date, 'now').mockImplementation(() =>
+    WEB_FIXTURE_TIME + Math.floor(performance.now() - startedAt))
+}
+
+/**
+ * Pin a scenario page's clock to the shared fixture day, advancing with real
+ * time. Pair it with {@link pinHostClock} for a scenario that stamps its own
+ * message times, and with `seedSession`'s `createdAt` for a seeded one.
+ *
+ * The frozen instant is re-applied from the anchor on an interval rather than
+ * left at one value, because product logic reads two `Date.now()` values to
+ * decide a minimum display hold or a deadline window; a permanently frozen
+ * clock stops supplying elapsed time, so a title that owes its golden settled
+ * text keeps rendering its previous one. Both clocks therefore advance at the
+ * real rate and stay within one step of each other.
+ * @param page - page whose clock is pinned.
+ * @returns the disposer that stops re-pinning; call it in teardown.
+ */
+export async function pinBrowserClock(page: Page): Promise<() => void> {
+  const startedAt = Date.now()
+  const step = async (): Promise<void> => {
+    try {
+      await page.clock.setFixedTime(WEB_FIXTURE_TIME + (Date.now() - startedAt))
+    } catch {
+      // The page closed under the interval; teardown owns the last word.
+    }
+  }
+  await step()
+  const timer = setInterval(() => { void step() }, PINNED_CLOCK_STEP_MS)
+  return () => { clearInterval(timer) }
+}
 
 /**
  * Open the standard browser-test page advertising English before client boot.
@@ -85,7 +145,7 @@ export async function expandTurnProcesses(page: Page): Promise<void> {
 }
 
 /**
- * Expand the Turn process and secondary group containing a hidden descendant.
+ * Expand the settled Turn process and secondary group containing a hidden descendant.
  * @param page - page containing the Chat view.
  * @param target - descendant whose outer process disclosures should open.
  */
@@ -94,8 +154,10 @@ export async function expandOwningTurnProcess(page: Page, target: Locator): Prom
   const turn = await target.evaluate(element => element.closest<HTMLElement>('[data-chat-turn]')?.dataset.chatTurn)
   if (turn !== undefined) {
     const control = page.locator(`[data-turn-process="${turn}"]`)
-    await control.waitFor({ state: 'visible', timeout: 10_000 })
-    if (await control.getAttribute('aria-expanded') === 'false') await control.click()
+    if (await control.count() > 0) {
+      await control.waitFor({ state: 'visible', timeout: 10_000 })
+      if (await control.getAttribute('aria-expanded') === 'false') await control.click()
+    }
   }
   const group = target.locator('xpath=ancestor::*[@data-chat-group-key][1]')
   const header = group.locator('[data-process-activity]').first()
@@ -166,8 +228,9 @@ export async function connectFreshWorkspace(page: Page, root: string, name = 'wo
  * @param page - the browser page under test.
  * @param root - workspace parent directory.
  * @param name - directory created under `root` and connected.
+ * @param modelAvailable - require an editable composer when the selected model is available.
  */
-export async function connectFreshWorkspaceZh(page: Page, root: string, name = 'workspace'): Promise<void> {
+export async function connectFreshWorkspaceZh(page: Page, root: string, name = 'workspace', modelAvailable = true): Promise<void> {
   mkdirSync(join(root, name), { recursive: true })
   await page.getByRole('textbox', { name: '选择工作区' }).click()
   const dialog = page.getByRole('dialog', { name: '选择工作区目录' })
@@ -177,7 +240,8 @@ export async function connectFreshWorkspaceZh(page: Page, root: string, name = '
   await pathInput.fill(join(root, name))
   await pathInput.press('Enter')
   await dialog.getByRole('button', { name: '打开', exact: true }).click()
-  await page.locator('[data-composer-input][contenteditable="true"][data-placeholder="描述你想要构建的内容, / 调用指令, @ 文件或对话"]')
+  const editable = modelAvailable ? '[contenteditable="true"]' : ''
+  await page.locator(`[data-composer-input]${editable}[data-placeholder="描述你想要构建的内容, / 调用指令, @ 文件或对话"]`)
     .waitFor({ timeout: 15_000 })
 }
 

@@ -24,11 +24,12 @@ import {
   compareOrRefreshGolden,
   launchWebScaffold,
   seedSession,
+  readPersistedEvents,
   watchConsole,
   webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, saveFailureShot, writeComposerDraft } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, pinBrowserClock, saveFailureShot, WEB_FIXTURE_TIME, writeComposerDraft } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./expected/reference-composer', import.meta.url))
 const MENU_EXPECTED = join(SNAPSHOT_DIR, 'menu.expected.md')
@@ -141,14 +142,16 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
   let browser: Browser
   let page: Page
   let tripwire: ReturnType<typeof watchConsole>
+  let unpinBrowserClock: (() => void) | undefined
 
   beforeAll(async () => {
     scaffold = await launchWebScaffold({})
-    const targetCreatedAt = Date.now() - 60_000
+    const targetCreatedAt = WEB_FIXTURE_TIME - 60_000
     await seedSession(scaffold, sourceSessionFixture(), SOURCE_SESSION_ID, undefined, { createdAt: targetCreatedAt - 1 })
     await seedSession(scaffold, targetSessionFixture(), TARGET_SESSION_ID, undefined, { createdAt: targetCreatedAt })
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
+    unpinBrowserClock = await pinBrowserClock(page)
     tripwire = watchConsole(page)
     // Fixture files land before the workspace connects so the Host's file
     // index never races their creation (the connect helper mkdirs the same
@@ -168,6 +171,7 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
   }, 120_000)
 
   afterAll(async () => {
+    unpinBrowserClock?.()
     await browser?.close()
     await scaffold?.close()
   })
@@ -403,9 +407,8 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     await target.waitFor({ timeout: 15_000 })
     await target.click()
     await page.locator('[data-chat-flow-kind="user"]').filter({ hasText: 'Research notes' }).waitFor({ timeout: 15_000 })
-    const session = scaffold.ctx.sessions.get(SessionId(TARGET_SESSION_ID))
-    if (session === undefined) throw new Error('reference target session is unavailable')
-    const inputs = session.snapshotEvents().filter(event => event.type === 'user/message')
+    const events = await readPersistedEvents(scaffold, SessionId(TARGET_SESSION_ID))
+    const inputs = events.filter(event => event.type === 'user/message')
     expect(inputs.map(event => event.data.source.kind)).toEqual(['user', 'session-reference'])
     expect(inputs[0]?.seq).toBeLessThan(inputs[1]!.seq)
     expect(JSON.stringify(inputs[1]?.data)).toContain('<referenced-sessions>snapshot</referenced-sessions>')

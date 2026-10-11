@@ -51,7 +51,7 @@ Skill 保留共享目录请求自己的取消信号；`@` 查询将当前候选�
 - 没有修改 Session 格式、迁移、Host observation 的 `all | none` 策略或 `session.projections` 返回字段。
 - 没有实现全局 cold-read singleflight，也没有把所有 Agent lookup 改成只读 lookup。
 - 没有删除 `SessionManager.handleConnected()` 对此前请求目录的批量刷新；本决策不保证重连只有一次冷读。
-- 工具侧 `listDescendants` 的缓存缺失仍可能读取子会话；前端展开一个子节点也仍可能冷读该节点。普通主会话首开不等于所有后代枚举场景。
+- 工具侧 `listDescendants` 观察每个可达子级目录。观察可以复用实时状态或有效的 prepared Session，否则会读取冷日志。前端展开子节点也可能冷读该节点。普通主会话首开不等于所有后代枚举场景。
 - `@` 会话候选仍枚举 header，并从 live projection 或 projection cache 取名称；缓存缺失回退到 id。原有排序、默认 50 条上限和直接 subagent 分组规则不变，没有改成沿 `subagentCatalog` 递归发现。
 
 ## 考虑过的替代方案
@@ -84,5 +84,5 @@ Header 根目录缺失仍是明确的覆盖缺口：若它属于未打开的 par
 
 - [Session observation 与 projection 所有的客户端状态](../architecture/2026-08-25-session-observations-and-projection-owned-client-state.zh.md)继续拥有读取切面和共享值的职责划分。本记录补充缓存生产者身份与首帧消费顺序；旧记录中“包括未完成冷加载的共享”描述与当前 reader 实现不一致，不能作为本次 singleflight 已实现的依据。
 - [Client Session 引用、引用来源与 UI 状态](../architecture/2026-09-15-client-session-references.zh.md)继续拥有 `retain`、`ready`、`using` 与显式地址语义。本记录限定四类辅助读取作为独立异步操作持有临时引用，不把额外引用扩展到所有 UI 动作。
-- [Web 子代理目录消费共享 projection](../simplification/2026-09-08-web-subagent-catalog-projections.zh.md)继续拥有通用 projection store、显式目录读取和 control 更新。本次实现落实“打开会话使用 follow baseline”的规则，不替换整个目录机制。
-- [Web subagent 目录与用户继续交互](../feature/2026-07-27-web-subagent-conversations.zh.md)继续拥有展示和 continuation 授权。本记录只调整导航前置读取及根菜单刷新时机，不取消子会话自身的 Host 校验；旧记录对缺失根目录交互加载的描述需与这里的覆盖缺口一起核对。
+- [Web 子代理目录消费共享 projection](../../../../packages/client/ui-subagent/README.zh.md)继续拥有通用 projection store、显式目录读取和 control 更新。本次实现落实“打开会话使用 follow baseline”的规则，不替换整个目录机制。
+- [Web subagent 目录与用户继续交互](../../../../packages/client/ui-subagent/README.zh.md)继续拥有展示和 continuation 授权。本记录只调整导航前置读取及根菜单刷新时机，不取消子会话自身的 Host 校验；旧记录对缺失根目录交互加载的描述需与这里的覆盖缺口一起核对。

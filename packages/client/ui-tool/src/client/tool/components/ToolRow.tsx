@@ -39,10 +39,9 @@ export interface ToolRowProps {
   summary: string
   /**
    * Trailing summary fragment rendered outside the ellipsized summary text, so
-   * a narrow row clips the summary before this. For a fragment whose whole
-   * value is surviving that clip — the todo row's parallel-active count.
-   * null/absent = the summary is the whole collapsed content. Dropped on an
-   * error row, whose collapsed summary is the failure line instead.
+   * a narrow row clips the summary before this. Appears before diff totals
+   * when both are present. null/absent omits this fragment. Error and stopped
+   * rows omit both the suffix and diff totals.
    */
   summarySuffix?: string | null | undefined
   /** Original argument JSON formatted only while the row is expanded. */
@@ -55,6 +54,7 @@ export interface ToolRowProps {
   errorSummary?: string | null | undefined
   /** Terminal card; card fields are mutually exclusive and replace text sections. */
   terminal?: TerminalCardModel | null | undefined
+  /** Diff card with inline totals colored on header hover and while expanded. */
   diff?: DiffCardModel | null | undefined
   read?: ReadCardModel | null | undefined
   /**
@@ -78,19 +78,26 @@ export interface ToolRowProps {
   details?: ToolDetailsModel | null | undefined
   state: ToolRowState
   /**
-   * Filesystem path from tool args; when set with onOpenFile, the summary
-   * renders as a hover-underline link that opens the host default app.
+   * Recorded file target or a supported argument fallback. With onOpenFile,
+   * the summary opens that path through the owner's file-preview callback.
    */
   filePath?: string | undefined
   /** 1-based line the call was about; absent = open the file at its beginning. */
   filePathLine?: number | undefined
   /** Open the path (already cwd-resolved), landing on `filePathLine` when given. */
   onOpenFile?: ((path: string, options?: OpenFileOptions) => void) | undefined
+  /** Safe http(s) URL from tool args; when set, the summary renders as a link that opens it in a new tab. */
+  href?: string | undefined
   /**
    * Jump to this call in the trajectory view: a hover-revealed Inspect pill
    * over the expanded body. Absent = no affordance.
    */
   inspect?: (() => void) | undefined
+}
+
+/** Keep a summary link click from toggling the row; the browser still follows the link. */
+function stopLinkClick(event: MouseEvent<HTMLAnchorElement>): void {
+  event.stopPropagation()
 }
 
 /** Visually hidden run-state label for color-only running and settlement cues. */
@@ -135,6 +142,7 @@ export const ToolRow = memo(function ToolRow({
   filePath,
   filePathLine,
   onOpenFile,
+  href,
   inspect,
   useDisclosure,
 }: ToolRowProps) {
@@ -173,15 +181,11 @@ export const ToolRow = memo(function ToolRow({
   // amber while retaining the business icon and hidden state announcement.
   const failureLine = state === 'error' ? errorSummary ?? normalSummary : null
   const summaryText = failureLine ?? normalSummary
-  // The tool row keeps the diff's +/- totals visible while its body is collapsed.
-  // An explicit summarySuffix overrides the diff totals.
-  const diffStat = useMemo(() => {
-    if (diffBody === null) return null
-    const { added, removed } = diffTotals(diffBody.card.diffs)
-    return `+${added} -${removed}`
-  }, [diffBody])
+  // Diff totals remain visible after the optional summary suffix.
+  const diffStat = useMemo(() => diffBody === null ? null : diffTotals(diffBody.card.diffs), [diffBody])
   const settledWithCue = state === 'error' || state === 'stopped'
-  const suffix = settledWithCue ? null : summarySuffix ?? diffStat
+  const suffix = settledWithCue ? null : summarySuffix ?? null
+  const totals = settledWithCue ? null : diffStat
   const openFile = useMemo(() => filePath !== undefined && onOpenFile !== undefined && !settledWithCue
     ? (event: MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation()
@@ -189,11 +193,13 @@ export const ToolRow = memo(function ToolRow({
       else onOpenFile(filePath, { line: filePathLine })
     }
     : undefined, [filePath, filePathLine, onOpenFile, settledWithCue])
-  // Keep Enter/Space on the focused path link from bubbling to the row's
+  const linkHref = settledWithCue ? undefined : href
+  // Keep Enter/Space on the focused path or URL link from bubbling to the row's
   // keydown handler, which would preventDefault() the key and toggle expand
-  // instead of activating the link — the keyboard analogue of openFile's
-  // stopPropagation. The native button still fires its own onClick from the key.
-  const fileLinkKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>) => {
+  // instead of activating the link — the keyboard analogue of the click
+  // handlers' stopPropagation. Enter activates both links and Space activates
+  // the path button; Space on a URL link does nothing.
+  const summaryLinkKeyDown = useCallback((event: KeyboardEvent<HTMLElement>) => {
     if (event.key === 'Enter' || event.key === ' ') event.stopPropagation()
   }, [])
   // The code variant's program renders through CodeBlock (shiki), so only its
@@ -203,16 +209,27 @@ export const ToolRow = memo(function ToolRow({
     /* An empty summary drops the separator with it (a row that is only
        its title shows no trailing dot). */
     <>
-      <span className={css.sep} aria-hidden />
+      <span className={css.sep} data-shimmer-decoration aria-hidden />
       {openFile !== undefined ? (
         <button
           type="button"
           className={css.fileLink}
           onClick={openFile}
-          onKeyDown={fileLinkKeyDown}
+          onKeyDown={summaryLinkKeyDown}
         >
-          <TextShimmer active={running}>{summaryText}</TextShimmer>
+          <TextShimmer>{summaryText}</TextShimmer>
         </button>
+      ) : linkHref !== undefined ? (
+        <a
+          className={css.fileLink}
+          href={linkHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={stopLinkClick}
+          onKeyDown={summaryLinkKeyDown}
+        >
+          <TextShimmer>{summaryText}</TextShimmer>
+        </a>
       ) : (
         <span
           className={clsx(
@@ -221,14 +238,19 @@ export const ToolRow = memo(function ToolRow({
             state === 'stopped' && css.stoppedSummary,
           )}
         >
-          <TextShimmer active={running}>{summaryText}</TextShimmer>
+          <TextShimmer>{summaryText}</TextShimmer>
         </span>
       )}
       {suffix !== null && (
-        <TextShimmer className={clsx(css.summarySuffix, suffix === diffStat && css.diffStat)} active={running}>{suffix}</TextShimmer>
+        <TextShimmer className={css.summarySuffix}>{suffix}</TextShimmer>
+      )}
+      {totals !== null && (
+        <TextShimmer className={clsx(css.summarySuffix, css.diffStat)}>
+          <span className={css.diffAdded}>{`+${totals.added}`}</span>{' '}<span className={css.diffRemoved}>{`-${totals.removed}`}</span>
+        </TextShimmer>
       )}
     </>
-  ), [diffStat, fileLinkKeyDown, openFile, running, state, suffix, summaryText])
+  ), [summaryLinkKeyDown, linkHref, openFile, state, suffix, totals, summaryText])
   const expandedContent = useMemo(() => open ? (
     <div className={clsx(css.bodyWrap, detailsBody !== null && css.detailsBodyWrap)}>
       {askQuestionBody !== null
@@ -340,7 +362,6 @@ export const ToolRow = memo(function ToolRow({
         rowClassName={css.row}
         leadingClassName={css.leading}
         titleClassName={css.title}
-        chevronClassName={css.chevron}
         icon={icon}
         title={title}
         running={running}

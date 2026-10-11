@@ -46,7 +46,7 @@ await runtime.dispose()
 
 The optional render options select a keyed entry with `entryKey` or a list item with `only`; `view.update(owner)` retains that selection. `runtime.panelInfo` supplies the default `usePanelInfo` source with no global panel selected. Release it with `releasePanelInfoSource()` before mounting the production Layout owner. `dispose()` releases both default Workspace and panel-info root sources; early release is idempotent and does not remove replacement owners.
 
-The Session fixture resolves subagent addresses from explicitly supplied addresses or loaded parent projections without retaining a Session generation.
+The Session fixture resolves subagent addresses from explicitly supplied addresses or loaded parent projections without retaining a Session generation. External catalog entries have no local browsing address.
 
 ### Local DOM snapshots
 
@@ -135,7 +135,6 @@ The bench copies no production logic: it mounts the production `SlotRegistry`, p
 | [`src/assembly/remote-default-responses.ts`](src/assembly/remote-default-responses.ts) | `remoteDefaultResponses`: default responses of the Remote endpoints the roster calls at boot |
 | [`src/assembly/remote-proxies.ts`](src/assembly/remote-proxies.ts) | Contract-free `remote.<ns>` proxies over the Connection: `remoteNamespacesOf`, `remoteProxiesPlugin` |
 | [`src/assembly/bundle-roster.ts`](src/assembly/bundle-roster.ts) | `bundleRoster` and `webApp`: the browser roster read from bundle patch files with the include plugin's own schema and patch application |
-| — | No runtime invariant companion is published; this test-support package owns no production event stream or mutable data — it assembles the runtime SlotRegistry and renderer (whose packages own their invariants) around test doubles; its own behavior is exercised by its package tests. |
 
 ### Lifecycle
 

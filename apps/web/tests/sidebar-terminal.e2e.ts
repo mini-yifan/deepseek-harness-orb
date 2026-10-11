@@ -1,5 +1,6 @@
 /** Shipped sidebar terminal over the real Loader, Remote mux, Chromium and local PTY. */
 import { mkdir } from 'node:fs/promises'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium, type Browser, type Page } from 'playwright'
 import { afterEach, beforeEach, describe, expect, it, onTestFailed, vi } from 'vitest'
@@ -78,6 +79,8 @@ describe.skipIf(process.platform === 'win32')('Web sidebar terminal', () => {
     scaffold = await launchWebScaffold({ extraOverlayPath: fileURLToPath(new URL('./fixtures/sidebar-terminal.patch.yml', import.meta.url)) })
     browser = await chromium.launch()
     const context = await browser.newContext({ viewport: { width: 1680, height: 1000 }, locale: 'en-US', timezoneId: 'Asia/Shanghai' })
+    // These snapshots use the Linux Web shortcut defaults.
+    await context.addInitScript(() => { Object.defineProperty(navigator, 'platform', { configurable: true, value: 'Linux x86_64' }) })
     page = await context.newPage()
     tripwire = watchConsole(page)
     await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
@@ -244,6 +247,43 @@ describe.skipIf(process.platform === 'win32')('Web sidebar terminal', () => {
     expect(tripwire.pageErrors).toEqual([])
   })
 
+  it('starts in the current directory while earlier terminals and sandbox roots stay independent', async () => {
+    onTestFailed(() => saveFailureShot(page, 'sidebar-terminal-directory'))
+    const agent = scaffold.ctx.agents.list()[0]!
+    const directories = agent.ctx.get('workingDirectory')
+    if (directories === undefined) throw new Error('Session working-directory provider is missing')
+    const original = directories.get(agent.session)
+    const child = join(original, 'terminal-child')
+    await mkdir(child)
+    const sandboxPolicy = agent.ctx.get('sandboxPolicy')
+    if (sandboxPolicy === undefined) throw new Error('Session sandbox policy provider is missing')
+    const policy = sandboxPolicy.resolve({ session: agent.session })
+    const sandbox = agent.ctx.get('sandbox')
+    if (sandbox === undefined) throw new Error('Session sandbox provider is missing')
+    const confine = vi.spyOn(sandbox, 'confine')
+    const selected = await directories.set(agent, child)
+
+    await openTerminal(page)
+    const firstProcess = processIdentity(0)
+    const screen = page.locator('.xterm-rows:visible')
+    const checkDirectory = async (marker: string, directory: string): Promise<void> => {
+      const literal = `'${directory.replaceAll("'", "'\\''")}'`
+      await command(page, `[ "$PWD" = ${literal} ]; printf '${marker}:%s\\n' "$?"`)
+      await expect.poll(async () => await screen.innerText()).toContain(`${marker}:0`)
+    }
+    await checkDirectory('FIRST_DIRECTORY_STATUS', selected)
+    const returned = await directories.set(agent, original)
+    await checkDirectory('RETAINED_DIRECTORY_STATUS', selected)
+
+    await openTerminal(page)
+    await checkDirectory('SECOND_DIRECTORY_STATUS', returned)
+    expect(scaffold.ctx.terminalController.list(agent.id).map(terminal => terminal.cwd)).toEqual([selected, returned])
+    expect(alive(firstProcess)).toBe(true)
+    expect(sandboxPolicy.resolve({ session: agent.session })).toEqual(policy)
+    expect(confine).not.toHaveBeenCalled()
+    expect(tripwire.pageErrors).toEqual([])
+  })
+
   it('completes commands, preserves the process through collapse and reload, resizes, and kills on tab close', async () => {
     onTestFailed(() => saveFailureShot(page, 'sidebar-terminal'))
     await openTerminal(page)
@@ -339,9 +379,10 @@ describe.skipIf(process.platform === 'win32')('Web sidebar terminal', () => {
     const entry = page.locator('[data-sidebar-right-guide-entry="terminal"]')
     await page.locator('[data-sidebar-right-guide]').screenshot({ path: `${shots}/terminal-guide.png`, animations: 'disabled' })
     const selector = entry.getByRole('button', { name: 'Choose shell', exact: true })
-    const cardBox = (await entry.boundingBox())!
+    const titleBox = (await entry.getByText('New terminal', { exact: true }).boundingBox())!
     const triggerBox = (await selector.boundingBox())!
-    expect(Math.abs(cardBox.x + cardBox.width - triggerBox.x - triggerBox.width)).toBeLessThanOrEqual(2)
+    expect(triggerBox.x).toBeGreaterThanOrEqual(titleBox.x + titleBox.width)
+    expect(triggerBox.x - titleBox.x - titleBox.width).toBeLessThan(8)
     await page.emulateMedia({ colorScheme: 'dark' })
     await selector.click()
     await page.getByRole('menuitem', { name: 'bash', exact: true }).waitFor()
@@ -473,9 +514,22 @@ describe.skipIf(process.platform === 'win32')('Web sidebar terminal', () => {
     expect(alive(original)).toBe(false)
     transport.reconnect()
     await page.context().setOffline(false)
-    await page.reload({ waitUntil: 'load' })
-    await page.locator('[data-sidebar-right-expand]').click()
+    const environmentReady = Promise.withResolvers<undefined>()
+    const environmentUrl = new URL('/api/terminal/environment', scaffold.baseUrl).href
+    await page.route(environmentUrl, async (route) => {
+      await environmentReady.promise
+      await route.continue()
+    })
     const terminal = page.locator('[data-sidebar-terminal]')
+    try {
+      await page.reload({ waitUntil: 'load' })
+      await page.locator('[data-sidebar-right-expand]').click()
+      // The title starts discovery before the lazy body mounts; keep that request pending through mounting.
+      await terminal.getByRole('status').getByText('Reading terminal environment…', { exact: true }).waitFor()
+    } finally {
+      environmentReady.resolve(undefined)
+      await page.unrouteAll({ behavior: 'wait' })
+    }
     let unavailableSnapshot = ''
     // Mounting can refresh a failed recovered view; readiness and comparison use the same DOM sample.
     await expect.poll(async () => {

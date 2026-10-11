@@ -1,6 +1,91 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write apps/desktop/README.md
-README.md: a66460a6ad45b2dcf3a49e5e038edc5b5061da44
-README.zh.md: 62603230cf071e320d12dc5482e27a87895d5303
+/deepseek-harness-desktop:
+  en: 5b8518fd5e0030ef
+  zh: 02efee59c39647dc
+/deepseek-harness-desktop/terminal-command:
+  en: bef92953c237363f
+  zh: d21d6effd21b8c00
+/deepseek-harness-desktop/closing-the-window-and-quitting:
+  en: c323e02e3f0305fe
+  zh: 3c730db632136443
+/deepseek-harness-desktop/key-technical-decisions:
+  en: 069fdfd72d2ea26a
+  zh: 76ae549d43c99bb4
+/deepseek-harness-desktop/key-technical-decisions/bundled-workspace-dependencies:
+  en: 2b049b4f104be1c2
+  zh: 1e8f3a9f7eb15e2b
+/deepseek-harness-desktop/bundled-command-runtime:
+  en: 09f0b75af9f0ed14
+  zh: 60bbc2e67d5e87a8
+/deepseek-harness-desktop/installation-ownership:
+  en: 936f56392e59a294
+  zh: b00530c897e08406
+/deepseek-harness-desktop/installation-ownership/runtime-and-plugin-activation:
+  en: a1a47b09f4a72ba4
+  zh: 7b1cf27f0b72cf31
+/deepseek-harness-desktop/installation-ownership/host-environment:
+  en: 84a9cc7ca9455aa8
+  zh: 4091b8aa8231b74a
+/deepseek-harness-desktop/develop:
+  en: fe6d23e6a3d3bc66
+  zh: d60c8d3a55747916
+/deepseek-harness-desktop/develop/startup-onboarding:
+  en: a51346b8d880ddba
+  zh: 7913214c1c66063c
+/deepseek-harness-desktop/develop/welcome-window-appearance:
+  en: ae319a496639b38d
+  zh: ef044103240ac9da
+/deepseek-harness-desktop/package:
+  en: 4cd8a8da6977928d
+  zh: 9f624855a2edac37
+/deepseek-harness-desktop/package/release-versions:
+  en: d938302f92fc3a1a
+  zh: 29df50bc8791baa7
+/deepseek-harness-desktop/package/local-macos-dmg-without-release-signing:
+  en: 57869a5e3885f843
+  zh: 7cfc01b2dcbebd78
+/deepseek-harness-desktop/package/local-official-bundles-from-a-loopback-registry:
+  en: 5f05072ec82cc62d
+  zh: a3d63b58d1ef2db7
+/deepseek-harness-desktop/package/runtime-file-selection:
+  en: e7c1eb8e78fe46e3
+  zh: b7ea497dd75be524
+/deepseek-harness-desktop/package/upload-updates:
+  en: f48baa680e841b0d
+  zh: 25ded1aeaac6dad1
+/deepseek-harness-desktop/package/unsigned-windows-test-installer:
+  en: fb6de542360dbae7
+  zh: 0e17d7765fb10c48
+/deepseek-harness-desktop/package/windows-installer-interface:
+  en: 1fc1db8f54475c8f
+  zh: dd834ed206070396
+/deepseek-harness-desktop/package/windows-ev-signing:
+  en: 64836513eb7eda6e
+  zh: 6ebb9184a7aa51de
+/deepseek-harness-desktop/package/desktop-runtime-preparation:
+  en: 9a71990bee9867a7
+  zh: 76c5c1fdff6e6908
+/deepseek-harness-desktop/updates:
+  en: 41d0f50eb7173342
+  zh: ce940ef3cbcc6fa5
+/deepseek-harness-desktop/updates/local-desktop-settings:
+  en: 2e57457c44c85b5f
+  zh: 5b8510a3dc4c6c9d
+/deepseek-harness-desktop/updates/mandatory-update-policy:
+  en: 54596bef0706d305
+  zh: 48737302dcf3c939
+/deepseek-harness-desktop/updates/local-updater-qualification:
+  en: bc50fd8a4d96c227
+  zh: fb0a6ce80c31cda6
+/deepseek-harness-desktop/low-level-development-overrides:
+  en: 0b225f914142ef0b
+  zh: 9ffd07768d37824e
+/deepseek-harness-desktop/known-limitations:
+  en: 12db6c942deb1e75
+  zh: b223cec1786cabac
+/deepseek-harness-desktop/dev-note:
+  en: 8e26b460ba31f21b
+  zh: fbcd0307b3867125

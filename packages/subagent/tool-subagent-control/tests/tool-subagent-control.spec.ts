@@ -1,3 +1,4 @@
+import { mountWorkingDirectoryFixture } from '../../subagent/tests/working-directory-fixture.ts'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -49,23 +50,22 @@ class GatedAdapter extends LlmAdapter {
 const testToolSignal = new AbortController().signal
 
 const roots: string[] = []
-const contexts = new Set<Context>()
+const contexts: Context[] = []
 afterEach(async () => {
-  vi.restoreAllMocks()
-  for (const ctx of contexts) await ctx.fiber.dispose()
-  contexts.clear()
+  for (const ctx of contexts.splice(0).reverse()) await ctx.fiber.dispose()
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
 })
 
 async function setupWith(adapter: MockAdapter | GatedAdapter, park = true) {
   const ctx = new Context()
-  contexts.add(ctx)
+  contexts.push(ctx)
   await mountAgentLoopTestDependencies(ctx)
   const root = mkdtempSync(join(tmpdir(), 'dsh-tool-subagent-control-'))
   roots.push(root)
   await ctx.plugin(JsonlSessionPersistence, { root })
   await ctx.plugin(TestSessionQuery)
   await ctx.plugin(AgentLoop, { agents: [] })
+  await mountWorkingDirectoryFixture(ctx)
   await ctx.plugin(SubagentRuntime)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   await ctx.plugin(SubagentFork, { providerName: 'fork' })
@@ -118,9 +118,7 @@ describe('dsh-tool-subagent-control', () => {
     // The continuable path has no Task, so the schema must not promise one.
     expect(schemas[0]!.description).not.toContain('job_output')
     expect(schemas[0]!.description).not.toContain('job id')
-    expect(schemas[0]!.description).toContain('nearest step')
-    expect(schemas[0]!.description).toContain('direct continuable child')
-    expect(schemas[0]!.description).toContain('If you are a resident continuable child')
+    expect(schemas[0]!.description).toContain('receives it at its next step')
     expect(props.agent_id).toMatchObject({
       description: 'The agent id of your direct continuable child, or your direct parent when you are a resident continuable child.',
     })
@@ -138,7 +136,8 @@ describe('dsh-tool-subagent-control', () => {
     }))
     await parent.whenIdle()
     parkParent(ctx, parent)
-    const started = await ctx.subagents.startContinuable({
+    const started = await ctx.subagents.startActivation({
+      delivery: 'parent',
       provider: 'fork',
       label: 'fork child',
       request: { prompt: [{ type: 'text', text: 'fork task' }], parent },
@@ -173,7 +172,8 @@ describe('dsh-tool-subagent-control', () => {
     const { ctx } = await setup([textResponse('child done')])
     const parent = await ctx.agentLoop.create(SessionId('parent"\nagent'), { provider: 'mock', model: 'mock' })
     parkParent(ctx, parent)
-    const started = await ctx.subagents.startContinuable({
+    const started = await ctx.subagents.startActivation({
+      delivery: 'parent',
       provider: 'spawn',
       label: 'encoded parent',
       request: { prompt: [{ type: 'text', text: 'encoded task' }], parent },
@@ -196,7 +196,8 @@ describe('dsh-tool-subagent-control', () => {
     const { ctx, parent, adapter } = await setupWith(new GatedAdapter([
       { chunks: textResponse('child done'), gate: release.promise },
     ]))
-    const started = await ctx.subagents.startContinuable({
+    const started = await ctx.subagents.startActivation({
+      delivery: 'parent',
       provider: 'spawn',
       label: 'child task',
       request: { prompt: [{ type: 'text', text: 'child task' }], parent },
@@ -234,7 +235,8 @@ describe('dsh-tool-subagent-control', () => {
 
   it('cold-resumes a settled child and reports delivery', async () => {
     const { ctx, parent } = await setup([textResponse('first answer'), textResponse('second answer')])
-    const started = await ctx.subagents.startContinuable({
+    const started = await ctx.subagents.startActivation({
+      delivery: 'parent',
       provider: 'spawn',
       label: 'child task',
       request: { prompt: [{ type: 'text', text: 'child task' }], parent },
@@ -267,7 +269,8 @@ describe('dsh-tool-subagent-control', () => {
 
   it('steers the nearest step of an open turn', async () => {
     const { ctx, parent, adapter } = await setup([textResponse('first'), textResponse('second')])
-    const started = await ctx.subagents.startContinuable({
+    const started = await ctx.subagents.startActivation({
+      delivery: 'parent',
       provider: 'spawn',
       label: 'long work',
       request: { prompt: [{ type: 'text', text: 'long work' }], parent },
@@ -308,7 +311,8 @@ describe('dsh-tool-subagent-control', () => {
 
   it('rejects a caller that is not the child\'s durable direct parent', async () => {
     const { ctx, parent } = await setup([textResponse('first')])
-    const started = await ctx.subagents.startContinuable({
+    const started = await ctx.subagents.startActivation({
+      delivery: 'parent',
       provider: 'spawn',
       label: 'child task',
       request: { prompt: [{ type: 'text', text: 'child task' }], parent },
@@ -334,9 +338,10 @@ describe('dsh-tool-subagent-control', () => {
 
   it('unregisters with its plugin fiber (HMR safety)', async () => {
     const ctx = new Context()
-    contexts.add(ctx)
+    contexts.push(ctx)
     await mountAgentLoopTestDependencies(ctx)
     await ctx.plugin(AgentLoop, { agents: [] })
+    await mountWorkingDirectoryFixture(ctx)
     await ctx.plugin(SubagentRuntime)
     const fiber = await ctx.plugin(tool)
     expect(ctx.tools.schemas().some(schema => schema.name === 'send_message')).toBe(true)
@@ -361,7 +366,7 @@ describe('dsh-tool-subagent-control interrupt_agent', () => {
     expect(schemas).toHaveLength(1)
     const props = (schemas[0]!.parameters as { properties?: Record<string, unknown> }).properties ?? {}
     expect(Object.keys(props)).toEqual(['agent_id'])
-    expect(schemas[0]!.description).toContain('current turn')
+    expect(schemas[0]!.description).toContain('stop its current work')
     expect(schemas[0]!.description).toContain('send_message')
   })
 
@@ -373,7 +378,8 @@ describe('dsh-tool-subagent-control interrupt_agent', () => {
       { chunks: textResponse('waking answer') },
     ])
     const { ctx, parent } = await setupWith(adapter)
-    const started = await ctx.subagents.startContinuable({
+    const started = await ctx.subagents.startActivation({
+      delivery: 'parent',
       provider: 'spawn',
       label: 'long work',
       request: { prompt: [{ type: 'text', text: 'long work' }], parent },
@@ -429,7 +435,8 @@ describe('dsh-tool-subagent-control interrupt_agent', () => {
       { chunks: textResponse('grandchild'), gate: releaseGrandchild.promise },
     ])
     const { ctx, parent } = await setupWith(adapter)
-    const started = await ctx.subagents.startContinuable({
+    const started = await ctx.subagents.startActivation({
+      delivery: 'parent',
       provider: 'spawn',
       label: 'child',
       request: { prompt: [{ type: 'text', text: 'child work' }], parent },
@@ -437,7 +444,8 @@ describe('dsh-tool-subagent-control interrupt_agent', () => {
     })
     await vi.waitFor(() => { expect(adapter.requests).toHaveLength(1) })
     const child = ctx.agents.get(started.childId)!
-    const grandchild = await ctx.subagents.startContinuable({
+    const grandchild = await ctx.subagents.startActivation({
+      delivery: 'parent',
       provider: 'spawn',
       label: 'grandchild',
       request: { prompt: [{ type: 'text', text: 'grandchild work' }], parent: child },
@@ -465,14 +473,16 @@ describe('dsh-tool-subagent-control interrupt_agent', () => {
       { chunks: textResponse('b'), gate: releaseB.promise },
     ])
     const { ctx, parent } = await setupWith(adapter)
-    const target = await ctx.subagents.startContinuable({
+    const target = await ctx.subagents.startActivation({
+      delivery: 'parent',
       provider: 'spawn',
       label: 'target',
       request: { prompt: [{ type: 'text', text: 'a' }], parent },
       signal: testToolSignal,
     })
     await vi.waitFor(() => { expect(adapter.requests).toHaveLength(1) })
-    const sibling = await ctx.subagents.startContinuable({
+    const sibling = await ctx.subagents.startActivation({
+      delivery: 'parent',
       provider: 'spawn',
       label: 'sibling',
       request: { prompt: [{ type: 'text', text: 'b' }], parent },
@@ -503,7 +513,8 @@ describe('dsh-tool-subagent-control interrupt_agent', () => {
 
   it('accepts an absent target as a no-op without cold-resuming it', async () => {
     const { ctx, parent } = await setup([textResponse('done')])
-    const started = await ctx.subagents.startContinuable({
+    const started = await ctx.subagents.startActivation({
+      delivery: 'parent',
       provider: 'spawn',
       label: 'settled child',
       request: { prompt: [{ type: 'text', text: 'child work' }], parent },

@@ -30,7 +30,10 @@ import { ForkSessionMenuItem } from '../src/client/session-actions/ForkSession.t
 import { PinSessionMenuItem, PinSessionRowButton } from '../src/client/session-actions/PinSession.tsx'
 import { RenameSessionMenuItem, SessionRenameDialog } from '../src/client/session-actions/RenameSession.tsx'
 import { RowActionToast } from '../src/client/session-actions/RowActionToast.tsx'
+import { createWorkspaceViewStore } from '../src/client/stores.ts'
 import { en, zh } from '../src/client/locales.ts'
+import { ShortcutRegistry } from '../../shortcuts/src/client/registry.ts'
+import type { ShortcutCommandId } from '@deepseek-ai/dsh-client-shortcuts/client'
 
 afterEach(cleanup)
 
@@ -85,7 +88,7 @@ type OverlayProps = PropsRuntime<'shell.overlay'> & PropsLocale<'workspace'>
 
 /** Owner share, standard seat, locale seat, and the bound open-state hook of one menu row. */
 function menuRow(menu: MenuOpenState): MenuRowProps {
-  return { ...ROW, useMenuOpenState: () => menu, t, ...standard }
+  return { ...ROW, useMenuOpenState: () => menu, useShortcuts: hook([]), t, ...standard }
 }
 
 /** Owner share, standard seat, and locale seat of one hover button. */
@@ -251,6 +254,36 @@ describe('SessionRenameDialog', () => {
     renameDialog(vi.fn(async () => {}))
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(document.body.textContent).toBe('')
+  })
+
+  it('restores composer focus and selection after cancelling and accepting a rename', async () => {
+    const renameSession = vi.fn(async () => {})
+    const { ask } = renameDialog(renameSession)
+    render(<textarea aria-label="Composer" defaultValue="Keep this draft" />)
+    const composer = screen.getByRole<HTMLTextAreaElement>('textbox', { name: 'Composer' })
+    composer.focus()
+    composer.setSelectionRange(5, 9)
+
+    ask('one', 'Session title')
+    const firstInput = screen.getByLabelText<HTMLInputElement>('会话名称')
+    expect(document.activeElement).toBe(firstInput)
+    expect([firstInput.selectionStart, firstInput.selectionEnd]).toEqual([0, 'Session title'.length])
+    fireEvent.keyDown(firstInput, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.activeElement).toBe(composer)
+    expect([composer.selectionStart, composer.selectionEnd]).toEqual([5, 9])
+    expect(renameSession).not.toHaveBeenCalled()
+
+    ask('one', 'Session title')
+    const secondInput = screen.getByLabelText<HTMLInputElement>('会话名称')
+    expect(document.activeElement).toBe(secondInput)
+    fireEvent.change(secondInput, { target: { value: 'Renamed session' } })
+    await act(async () => { fireEvent.keyDown(secondInput, { key: 'Enter' }) })
+    expect(renameSession).toHaveBeenCalledWith(sid('one'), 'Renamed session')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.activeElement).toBe(composer)
+    expect(composer.value).toBe('Keep this draft')
+    expect([composer.selectionStart, composer.selectionEnd]).toEqual([5, 9])
   })
 
   it('seeds the draft from the request, renames with the trimmed title, and settles on acceptance', async () => {
@@ -457,31 +490,72 @@ declare module '@deepseek-ai/dsh-workspace/types' {
 
 describe('RowActionToast', () => {
   /** The notice surface over a test-owned notice source; dismissal clears the notice the way apply does. */
-  function toastSurface() {
+  function toastSurface(
+    viewState: { archivedFilter?: 'default' | 'show' | 'only' } = { archivedFilter: 'default' },
+    translate = t,
+  ) {
     const toast = createSnapshotStore<RowToastState | null>(null)
+    const instance = createWorkspaceViewStore().create()
+    // A v5 snapshot hydrates without the filter key; mirror it by dropping the
+    // fresh store's default rather than writing an explicit undefined.
+    const state = { ...instance.store.getSnapshot() }
+    if (viewState.archivedFilter === undefined) delete state.archivedFilter
+    else state.archivedFilter = viewState.archivedFilter
+    const view = createSnapshotStore(state)
     const dismissToast = vi.fn(() => { toast.set(null) })
     const undoArchive = vi.fn()
     const showArchived = vi.fn()
+    const openForkSource = vi.fn()
     render(
       <RowActionToast
         {...overlay}
+        t={translate}
         useToast={bindSnapshotSelector(toast)}
+        useStore={bindSnapshotSelector(view)}
+        actions={instance.actions}
         dismissToast={dismissToast}
         undoArchive={undoArchive}
         showArchived={showArchived}
+        openForkSource={openForkSource}
       />,
     )
     let seq = 0
     const notify = (notice: RowToast): void => {
       act(() => { toast.set({ ...notice, seq: ++seq }) })
     }
-    return { dismissToast, undoArchive, showArchived, notify }
+    return { dismissToast, undoArchive, showArchived, openForkSource, notify }
   }
 
   it('renders nothing without a notice', () => {
     toastSurface()
     expect(screen.queryByRole('alert')).toBeNull()
     expect(document.body.textContent).toBe('')
+  })
+
+  it.each([
+    ['zh', t, '请先打开原会话完成迁移，再创建分支', '打开原会话'],
+    ['en', tEn, 'Open the original session to complete migration before creating a branch.', 'Open original session'],
+  ] as const)('keeps the %s fork notice after menu unmount and opens only on its action', (_locale, translate, message, action) => {
+    const { dismissToast, openForkSource, notify } = toastSurface(undefined, translate)
+    const { state, setMenuOpen } = openMenu()
+    const forkSession = vi.fn((sessionId: SessionId) => { notify({ kind: 'forkRequiresOpen', sessionId }) })
+    const menu = render(<ForkSessionMenuItem {...menuRow(state)} t={translate} forkSession={forkSession} />)
+
+    fireEvent.click(screen.getByRole('menuitem', { name: translate('menu.fork') }))
+    expect(setMenuOpen).toHaveBeenCalledWith(false)
+    expect(callOrder(setMenuOpen)).toBeLessThan(callOrder(forkSession))
+    menu.unmount()
+
+    expect(screen.queryByRole('menuitem')).toBeNull()
+    expect(screen.getByRole('alert').textContent).toContain(message)
+    expect(openForkSource).not.toHaveBeenCalled()
+    expect(forkSession).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole('button', { name: action }))
+    expect(dismissToast).toHaveBeenCalledOnce()
+    expect(openForkSource).toHaveBeenCalledExactlyOnceWith(sid('one'))
+    expect(callOrder(dismissToast)).toBeLessThan(callOrder(openForkSource))
+    expect(forkSession).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('the stopped-and-archived notice offers the same undo and filter actions under its own wording', () => {
@@ -510,6 +584,20 @@ describe('RowActionToast', () => {
     expect(callOrder(dismissToast, 1)).toBeLessThan(callOrder(showArchived))
     expect(undoArchive).toHaveBeenCalledOnce()
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('treats a view without a persisted filter as the hidden default and keeps the filter action', () => {
+    const { notify } = toastSurface({})
+    notify({ kind: 'archived', sessionId: sid('one') })
+    expect(screen.getByRole('alert').textContent).toBe('会话已归档，可撤销或筛选已归档会话')
+  })
+
+  it.each(['show', 'only'] as const)('omits the filter action while the %s filter already shows archived rows', (archivedFilter) => {
+    const { notify } = toastSurface({ archivedFilter })
+    notify({ kind: 'archived', sessionId: sid('one') })
+    expect(screen.getByRole('alert').textContent).toBe('会话已归档，可撤销')
+    expect(screen.queryByRole('button', { name: '筛选已归档会话' })).toBeNull()
+    expect(screen.getByRole('button', { name: '撤销' })).toBeTruthy()
   })
 
   it.each([
@@ -568,4 +656,34 @@ describe('RowActionToast', () => {
       vi.useRealTimers()
     }
   })
+})
+
+it('shows effective Session shortcuts while menu clicks keep the row target', () => {
+  const shortcuts = new ShortcutRegistry('desktop', 'macos')
+  for (const [action, code] of [['rename', 'KeyR'], ['fork', 'KeyF'], ['archive', 'KeyA']] as const) {
+    shortcuts.register({ id: `session.${action}` as ShortcutCommandId, label: () => action, aliases: [],
+      defaults: {
+        'desktop:macos': { code, modifiers: ['primary', action === 'archive' ? 'shift' : 'alt'] },
+        'desktop:windows': { code, modifiers: ['primary', action === 'archive' ? 'shift' : 'alt'] },
+        'desktop:linux': { code, modifiers: ['primary', action === 'archive' ? 'shift' : 'alt'] },
+      },
+      regions: ['page'], modals: [], resolve: () => ({ status: 'pass' }) })
+  }
+  const requestSessionRename = vi.fn()
+  const forkSession = vi.fn()
+  const archiveSession = vi.fn()
+  const props = { ...menuRow([true, vi.fn()]), useShortcuts: hook(shortcuts.catalog.getSnapshot()) }
+  render(<>
+    <RenameSessionMenuItem {...props} requestSessionRename={requestSessionRename} />
+    <ForkSessionMenuItem {...props} forkSession={forkSession} />
+    <ArchiveSessionMenuItem {...props} useArchived={hook(idSet())} archiveSession={archiveSession} unarchiveSession={vi.fn()} />
+  </>)
+  expect(screen.getAllByRole('menuitem').map(item => item.getAttribute('aria-keyshortcuts')))
+    .toEqual(['Alt+Meta+R', 'Alt+Meta+F', 'Shift+Meta+A'])
+  fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: '分叉会话' }))
+  fireEvent.click(screen.getByRole('menuitem', { name: '归档会话' }))
+  expect(requestSessionRename).toHaveBeenCalledWith(ROW.sessionId, ROW.displayTitle)
+  expect(forkSession).toHaveBeenCalledWith(ROW.sessionId)
+  expect(archiveSession).toHaveBeenCalledWith(ROW.sessionId)
 })

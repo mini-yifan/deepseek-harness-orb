@@ -117,13 +117,13 @@ interface Workspace {
 
 ## 注册表：`ctx.workspaceRegistry`
 
-`WorkspaceRegistry`（[签名](#ctxworkspaceregistry--workspaceregistry)）拥有注册与解析。`create(path, title?)` 要求完全限定路径并将其规范化，拒绝不存在的路径（原样传出原始 `ENOENT`）或非目录；当规范路径已被拥有时原样返回既有实体；否则创建一条标题为 `title ?? defaultWorkspaceTitle(path)` 的记录并前插到持久的注册表顺序中（不同规范路径可以共享同一显示标题，没有最终路径段时使用根路径拼写）。`get(id)` 与有序的 `list()` 是同步缓存读取；`resolveByPath(path)` 应用同一套完全限定 realpath 规范但不创建。`delete(id)` 只移除注册记录、顺序条目和会话账本——目录、用户文件、实时会话和已持久化日志一概不动，因此这些会话变为 Ungrouped（[决策](../../.agents/notes/implemented/feature/2026-07-27-workspace-registration-deletion.zh.md)）；未知 id 返回 `false`。create 与 delete 会在其两次写入（记录 + 顺序）可能分叉之前先持久写入一个待定变更标记；启动时恰好解决被标记的那次变更——通过删除被标记的表行：这会补完被中断的 delete，并回滚被中断的 create（注册可以重建，因此回滚是安全方向）——而没有标记的顺序/表不一致则作为损坏大声失败。
+`WorkspaceRegistry`（[签名](#ctxworkspaceregistry--workspaceregistry)）拥有注册与解析。`create(path, title?)` 要求完全限定路径并将其规范化，拒绝不存在的路径（原样传出原始 `ENOENT`）或非目录；当规范路径已被拥有时原样返回既有实体；否则创建一条标题为 `title ?? defaultWorkspaceTitle(path)` 的记录并前插到持久的注册表顺序中（不同规范路径可以共享同一显示标题，没有最终路径段时使用根路径拼写）。`get(id)` 与有序的 `list()` 是同步缓存读取；`resolveByPath(path)` 应用同一套完全限定 realpath 规范但不创建。`delete(id)` 只移除注册记录、顺序条目和会话账本——目录、用户文件、实时会话和已持久化日志一概不动，因此这些会话变为 Ungrouped（[参考](../../packages/workspace/workspace/README.zh.md)）；未知 id 返回 `false`。create 与 delete 会在其两次写入（记录 + 顺序）可能分叉之前先持久写入一个待定变更标记；启动时恰好解决被标记的那次变更——通过删除被标记的表行：这会补完被中断的 delete，并回滚被中断的 create（注册可以重建，因此回滚是安全方向）——而没有标记的顺序/表不一致则作为损坏大声失败。
 
 会话的 cwd 在创建时由创建者赋予，而不是由本注册表赋予——API 网关从所选工作区的 `path` 解析新会话的 cwd（回退到显式或默认 cwd），先创建会话使 cwd 落入其不可变的 [`SessionHeader`](persistence.zh.md#sessionheader--metadata-beside-the-log)，再调用 `attachSession`，后者会把已存储的 header cwd 与工作区路径重新校验一遍。首次成功启动时，注册表仅凭已持久化的 header（`id`、`cwd`、`createdAt`——绝不读事件正文）引导历史：把规范 cwd 有效的会话按目录分组为工作区，最新的排在最前；「已初始化」标记最后写入，因此被中断的引导可以安全续跑。引导只发生这一次：没有 cwd 的历史遗留会话保持 Ungrouped，此后创建的会话只能通过 `attachSession` 加入工作区。
 
 ## 默认工作区初始化
 
-控制器的[传输类型](../../packages/api/workspace-controller/src/types.ts)定义了 `WorkspaceInitializeDefaultRequest`，包含 Client 解析出的 `directoryName` 和初始 `title`。Host 解析 Documents 位置，并请求注册表执行一次初始化。语言选择由 Client 负责；注册表接收目录解析器，并将登记与持久化身份一起提交。[首次使用行为与配置](../../packages/api/workspace-controller/README.zh.md#first-use-workspace)说明复用和失败处理。
+控制器的 `initializeDefault` 不接受请求参数：它拥有固定目录名 `default-workspace`，解析 Documents 位置，并请求注册表执行一次初始化。注册表接收目录解析器，以所请求目录（而非规范路径）的最后一段作为初始标题，并将登记与持久化身份一起提交。语言不会传到 Host——浏览器消费方通过控制器的 `workspaceDisplayTitle` 为仍保留该自动标题的工作区加标签，因此只有屏幕上的名称跟随读者语言。[首次使用行为与配置](../../packages/api/workspace-controller/README.zh.md#first-use-workspace)说明复用和失败处理。
 
 ## 会话置顶
 
@@ -232,10 +232,10 @@ Typed Remote control of transient Session-owned terminal processes.
 
 ```ts cordis-catalog
 /**
- * Read the Session working directory and terminal limits without resolving a shell.
+ * Read the Session's current directory and terminal limits without filesystem validation or shell lookup.
  * @param agent - Session owner supplied by the Gateway.
  * @param signal - request cancellation.
- * @returns the Session workspace directory and terminal limits.
+ * @returns the logged current directory and terminal limits; retained terminals keep their own process directories.
  */
 @Remote environment(agent: Agent, signal: AbortSignal): TerminalEnvironment
 
@@ -339,12 +339,14 @@ Host service backing the generated `ctx.remote.workspace` namespace.
 @Remote('create') create(request: WorkspaceCreateRequest): Promise<WorkspaceCreateValue>
 
 /**
- * Initialize or reuse the default Workspace during first-use startup.
- * @param request - initial directory name and title; never rename an existing default.
+ * Initialize or reuse the default Workspace during first-use startup. The
+ * directory name is fixed, so the Host never renames or relocates an
+ * existing default; its initial title is that same name, which browser
+ * consumers label in the reader's language.
  * @param signal - caller lifetime; cancels native directory lookup.
  * @returns the durable Workspace, or undefined when first-use initialization is ineligible; creates no Session or message.
  */
-@Remote('initializeDefault') async initializeDefault(request: WorkspaceInitializeDefaultRequest, signal: AbortSignal): Promise<WorkspaceValue | undefined>
+@Remote('initializeDefault') async initializeDefault(signal: AbortSignal): Promise<WorkspaceValue | undefined>
 
 /**
  * Rename one Workspace to a unique non-blank title.
@@ -495,13 +497,15 @@ async create(path: string, title?: string): Promise<Workspace>
  * Initialize the default Workspace only while both the registry and Session
  * history are empty. Repeated requests reuse its durable identity; deleting
  * that registration permanently disables automatic creation.
- * @param resolveDirectory - resolve the absolute directory and initial title;
- * called only for eligible creation, inside the registry mutation queue.
- * Missing directories are created recursively before registration.
+ * @param resolveDirectory - resolve the absolute directory; called only for
+ * eligible creation, inside the registry mutation queue. Missing directories
+ * are created recursively before registration, and the initial title is the
+ * requested directory's own final segment — not the canonical one, so a
+ * symlink at that path does not retitle the Workspace after its target.
  * After resolution, caller cancellation does not roll back creation or registration.
  * @returns the initialized Workspace, or undefined when automatic creation is ineligible.
  */
-initializeDefault(resolveDirectory: () => Promise<{ path: string; title: string }>): Promise<Workspace | undefined>
+initializeDefault(resolveDirectory: () => Promise<string>): Promise<Workspace | undefined>
 
 /**
  * Look up a workspace by id.

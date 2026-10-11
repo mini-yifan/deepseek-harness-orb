@@ -1,6 +1,31 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for desktop.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/user/guide/desktop.md
-desktop.md: 586f3c64093e54230a3145bf4f08e21cd12b48d8
-desktop.zh.md: d23d0f5178676eacb6ea22176bafaa07768a891e
+/use-the-desktop-app:
+  en: ca122e11cabcc927
+  zh: 2126079029c65ba6
+/use-the-desktop-app/before-you-start:
+  en: cdea83497702d502
+  zh: 2daef69f988d586c
+/use-the-desktop-app/launch-from-source:
+  en: 038d31e7dce2c46b
+  zh: 70588e72bbd83651
+/use-the-desktop-app/configure-a-key-and-a-workspace:
+  en: 678aa405d4f47304
+  zh: 39ce7d2d642c06e1
+/use-the-desktop-app/use-the-main-window:
+  en: 39c91582afc3e289
+  zh: a33706f07af1c97d
+/use-the-desktop-app/use-the-macos-floating-ball:
+  en: d6e4356123f7fa79
+  zh: 9eb530a265ce6814
+/use-the-desktop-app/how-the-ball-routes-background-work:
+  en: 63372d90b98ef576
+  zh: 193d1bfa59c2d773
+/use-the-desktop-app/limits:
+  en: 1982097e4b2bdaf1
+  zh: bde09ae27f8f1d45
+/use-the-desktop-app/continue:
+  en: e06fdf6fb12b9d9b
+  zh: cbee3487da7d0b71

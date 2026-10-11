@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-23-windows-computer-use-focus-recovery.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-23-windows-computer-use-focus-recovery.md
-2026-09-23-windows-computer-use-focus-recovery.md: fd7f7c56d46c6523a16acd06ff6293d441959314
-2026-09-23-windows-computer-use-focus-recovery.zh.md: 6f63540d66d106ed352997ac44bd95548057abb3
+/agent-note-windows-computer-use-focus-recovery:
+  en: b0869f190ee099b9
+  zh: 75a2c2e5abdf04e2
+/agent-note-windows-computer-use-focus-recovery/problem:
+  en: da050d98f34e6ed8
+  zh: 3772ed9427c8b629
+/agent-note-windows-computer-use-focus-recovery/decision:
+  en: 6de929fb30b095c3
+  zh: ccf2f807e0ea527f
+/agent-note-windows-computer-use-focus-recovery/alternatives-considered:
+  en: bbe000af61fd9ffa
+  zh: c14e3b8e20598b8c
+/agent-note-windows-computer-use-focus-recovery/consequences:
+  en: 61f92d232db7796c
+  zh: ecb2a694f6ecd0bf
+/agent-note-windows-computer-use-focus-recovery/testing:
+  en: 47759e818fbe6a0e
+  zh: 3e483eae8222e785

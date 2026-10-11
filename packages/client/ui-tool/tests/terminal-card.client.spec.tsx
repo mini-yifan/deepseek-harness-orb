@@ -17,6 +17,7 @@ import {
 import { GenericToolCard, type GenericToolCardProps } from '../src/client/tool/toolviews/GenericToolCard.tsx'
 import { BashRow } from '../src/client/tool/toolviews/bash-sample.tsx'
 import { en, zh } from '@deepseek-ai/dsh-client-ui-conversation/src/client/locales.ts'
+import { PartialArguments } from '@deepseek-ai/dsh-util-values'
 
 type BashRowProps = Parameters<typeof BashRow>[0]
 
@@ -45,18 +46,25 @@ const shellArgs = (over: Record<string, unknown> = {}): string => JSON.stringify
   command: 'ls -la', description: 'List files', ...over,
 })
 
-const running = (over?: Partial<StartedToolCall>): StartedToolCall => ({
-  phase: 'start' as const, callId: 'c1', name: 'bash', argsRaw: ARGS,
-  turn: 1, step: 1, time: 1_000, subCalls: [], ...over,
-})
+const running = (over?: Partial<StartedToolCall>): StartedToolCall => {
+  const argsRaw = over?.argsRaw ?? ARGS
+  return {
+    phase: 'start' as const, args: PartialArguments.fromText(argsRaw), callId: 'c1', name: 'bash', argsRaw,
+    turn: 1, step: 1, time: 1_000, subCalls: [], ...over,
+  }
+}
 
-const settled = (over?: Partial<ToolResultNode>): ToolResultNode => ({
-  kind: 'tool-result', seq: 10, time: 2_000, callId: 'c1',
-  call: { name: 'bash', argsRaw: ARGS },
-  callTime: 1_000,
-  content: [{ type: 'text', text: 'a.ts  b.ts\nc.ts  d.ts\n' }], isError: false,
-  subCalls: [], ...over,
-})
+const settled = (over?: Partial<ToolResultNode>): ToolResultNode => {
+  const call = over?.call === undefined ? { name: 'bash', argsRaw: ARGS } : over.call
+  return {
+    kind: 'tool-result', seq: 10, time: 2_000, callId: 'c1',
+    name: call?.name ?? '', args: call === null ? PartialArguments.EMPTY : PartialArguments.fromText(call.argsRaw),
+    call,
+    callTime: 1_000,
+    content: [{ type: 'text', text: 'a.ts  b.ts\nc.ts  d.ts\n' }], isError: false,
+    subCalls: [], ...over,
+  }
+}
 
 describe('terminalCardModel', () => {
   it('derives a running standard-shell card from raw arguments', () => {
@@ -124,8 +132,8 @@ describe('terminalCardModel', () => {
       call: { name: 'bash', argsRaw: shellArgs({ workdir: 'packages/ui' }) },
     }))?.card.cwd).toBe('packages/ui')
     expect(terminalCardModel(settled())?.card.cwd).toBeUndefined()
-    // The running arm resolves identically.
-    expect(terminalCardModel(running(), '/w/app')?.card.cwd).toBe('/w/app')
+    // An omitted running workdir has no recorded operation-time directory yet.
+    expect(terminalCardModel(running(), '/w/app')?.card.cwd).toBeUndefined()
   })
 
   it('normalizes a relative workdir so the label names the directory actually used', () => {
@@ -146,6 +154,21 @@ describe('terminalCardModel', () => {
     expect(terminalCardModel(settled({ call: { name: 'bash', argsRaw: shellArgs({ workdir: '../elsewhere' }) } }))?.card.cwd).toBe('../elsewhere')
   })
 
+  it('uses the recorded command directory after the Session changes again', () => {
+    for (const name of ['bash', 'pwsh']) {
+      const block = settled({ call: { name, argsRaw: shellArgs({ workdir: 'nested' }) }, meta: { cwd: '/b/nested' } })
+      expect(terminalCardModel(block, '/a')?.card.cwd).toBe('/b/nested')
+      expect(terminalCardModel(block, '/c')?.card.cwd).toBe('/b/nested')
+      expect(terminalCardModel({ ...block, parentCallId: 'outer' }, '/a')?.card.cwd).toBe('/b/nested')
+      expect(terminalCardModel({ ...block, parentCallId: 'outer' }, '/c')?.card.cwd).toBe('/b/nested')
+      expect(terminalCardModel(settled({ ...block, meta: { cwd: 'relative' } }), '/a')?.card.cwd).toBe('/a/nested')
+      expect(terminalCardModel(settled({ ...block, meta: { cwd: 'C:\\b\\nested' } }), '/a')?.card.cwd).toBe('C:\\b\\nested')
+    }
+    expect(terminalCardModel(running({ argsRaw: shellArgs({ workdir: 'nested' }) }), '/a')?.card.cwd).toBeUndefined()
+    expect(terminalCardModel(settled({ parentCallId: 'outer' }), '/a')?.card.cwd).toBeUndefined()
+    expect(terminalCardModel(running({ argsRaw: shellArgs({ workdir: '/absolute' }) }), '/a')?.card.cwd).toBe('/absolute')
+  })
+
   it('keeps a UNC server and share as an unpoppable root', () => {
     // Windows cannot climb above a share, so `..` from the share root stays put.
     expect(terminalCardModel(settled({ call: { name: 'bash', argsRaw: shellArgs({ workdir: '..' }) } }), '\\\\server\\share')?.card.cwd).toBe('\\\\server\\share')
@@ -160,7 +183,7 @@ describe('terminalCardModel', () => {
     const run = running({ name: 'terminal_send', argsRaw })
     expect(terminalCardModel(run, '/w/app')).toMatchObject({
       copy: { kind: 'terminal-send', text: 'make', sessionId: 'pty-3' },
-      card: { cwd: '/w/app', running: true },
+      card: { cwd: undefined, running: true },
     })
     const done = settled({ call: { name: 'terminal_send', argsRaw }, content: [{ type: 'text', text: 'ok' }] })
     expect(localizeTerminalCardModel(terminalCardModel(done)!, enT)).toMatchObject({
@@ -255,13 +278,17 @@ describe('terminalCardModel', () => {
     ['timeout value', { timeoutMs: 0 }],
     ['workdir type', { workdir: 7 }],
     ['background type', { run_in_background: 'yes' }],
-    ['permission type', { sandbox_permissions: 7, justification: 'Need access' }],
-    ['permission value', { sandbox_permissions: 'read-only', justification: 'Need access' }],
-    ['missing justification', { sandbox_permissions: 'workspace-write' }],
-    ['orphan justification', { justification: 'Need access' }],
-    ['blank justification', { sandbox_permissions: 'workspace-write', justification: ' ' }],
   ])('keeps malformed standard-shell optional fields generic: %s', (_label, fields) => {
     expect(terminalCardModel(running({ argsRaw: shellArgs(fields) }))).toBeNull()
+  })
+
+  // Escalation validity depends on the Session's sandbox mode, which only the
+  // Host knows; a rejected call settles as an error result instead.
+  it.each([
+    ['permission equal to the current mode with blank justification', { sandbox_permissions: 'danger-full-access', justification: '' }],
+    ['blank justification alone', { justification: '' }],
+  ])('keeps the terminal card for escalation fields the Host accepts: %s', (_label, fields) => {
+    expect(terminalCardModel(settled({ call: { name: 'bash', argsRaw: shellArgs(fields) } }))).not.toBeNull()
   })
 
   it('accepts valid optional and unknown standard-shell fields on the open parameter root', () => {
@@ -430,6 +457,14 @@ describe('BashRow terminal card', () => {
     expect(view.getByText('List files')).toBeTruthy()
   })
 
+  it('expands a completed command that carries Host-accepted blank escalation fields', () => {
+    const view = render(<BashRow {...rowProps(settled({
+      call: { name: 'bash', argsRaw: shellArgs({ sandbox_permissions: 'danger-full-access', justification: '' }) },
+    }))} />)
+    fireEvent.click(view.getByRole('button'))
+    expect(view.getByText('a.ts  b.ts', RAW)).toBeTruthy()
+  })
+
   // The row's running state and the card's run-state dot describe the same
   // command, so a running row whose card claimed 'done' would contradict itself.
   it('agrees with the summary row about the run state', () => {
@@ -492,14 +527,53 @@ describe('BashRow terminal card', () => {
     expect(view.container.querySelectorAll('[class*="_ioText_"]')[1]?.textContent).toBe(output)
   })
 
-  it('a non-terminal bash call (background start) renders the summary row alone', () => {
+  it.each([undefined, 'dispatch-parent'])('expands a background launch and its acknowledgement without reporting a job exit (parent: %s)', (parentCallId) => {
+    const command = 'pnpm --filter @deepseek-ai/dsh-client-ui-tool run build --watch --verbose'
+    const args = { command, description: 'Wait', run_in_background: true }
+    const argsRaw = JSON.stringify(args)
+    const inspect = vi.fn()
+    const parent = parentCallId === undefined ? {} : { parentCallId }
+    const view = render(<BashRow {...rowProps(running({ argsRaw, ...parent }))} inspect={inspect} />)
+    const row = view.container.querySelector('[data-sample="bash"]')!
+    expect(view.getByText('Wait')).toBeTruthy()
+    expect(row.getAttribute('aria-expanded')).toBe('false')
+
+    fireEvent.keyDown(row, { key: 'Enter' })
+
+    expect(row.getAttribute('aria-expanded')).toBe('true')
+    expect(view.container.querySelector('[data-command-text]')?.textContent)
+      .toBe(JSON.stringify(args, null, 2))
+    expect(view.container.querySelector('[data-command-text]')?.hasAttribute('tabindex')).toBe(false)
+    expect(view.queryByText('输出')).toBeNull()
+    expect(view.container.querySelector('[data-terminal]')).toBeNull()
+
+    const acknowledgement = 'started background job job-1'
+    view.rerender(<BashRow {...rowProps(settled({
+      call: { name: 'bash', argsRaw }, ...parent,
+      content: [{ type: 'text', text: acknowledgement }],
+    }))} inspect={inspect} />)
+
+    expect(row.getAttribute('aria-expanded')).toBe('true')
+    expect(view.container.querySelector('[data-command-text]')?.textContent)
+      .toBe(JSON.stringify(args, null, 2))
+    expect(view.getByText(acknowledgement)).toBeTruthy()
+    expect(view.container.querySelector('[data-terminal], [data-state="done"]')).toBeNull()
+    fireEvent.click(view.getByRole('button', { name: t('row.inspect') }))
+    expect(inspect).toHaveBeenCalledOnce()
+
+    fireEvent.click(row)
+    expect(row.getAttribute('aria-expanded')).toBe('false')
+    expect(view.queryByText(acknowledgement)).toBeNull()
+  })
+
+  it('keeps malformed shell arguments collapsed even when background execution is requested', () => {
     const view = render(<BashRow {...rowProps(settled({
-      call: { name: 'bash', argsRaw: shellArgs({ command: 'sleep 30', description: 'Wait', run_in_background: true }) },
+      call: { name: 'bash', argsRaw: JSON.stringify({ description: 'Wait', run_in_background: true }) },
       content: [{ type: 'text', text: 'started background job job-1' }],
     }))} />)
     expect(view.getByText('Wait')).toBeTruthy()
-    expect(view.queryByText(/a\.ts/)).toBeNull()
     expect(view.container.querySelector('[data-sample="bash"]')?.getAttribute('role')).toBeNull()
+    expect(view.queryByText('started background job job-1')).toBeNull()
   })
 
   it('expands a generic execution error to its original args and full output', () => {

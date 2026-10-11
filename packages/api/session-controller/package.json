@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-api-session-controller",
   "description": "Session Remote commands, cold reads, and live control transport",
-  "version": "0.1.7-rc.1",
+  "version": "0.2.1-alpha.2",
   "publishConfig": {
     "access": "public"
   },
@@ -85,6 +85,7 @@
     "@deepseek-ai/dsh-client-connection": "workspace:*",
     "@deepseek-ai/dsh-client-file-upload": "workspace:*",
     "@deepseek-ai/dsh-commands": "workspace:*",
+    "@deepseek-ai/dsh-credentials": "workspace:*",
     "@deepseek-ai/dsh-file-reference": "workspace:*",
     "@deepseek-ai/dsh-fs": "workspace:*",
     "@deepseek-ai/dsh-llm": "workspace:*",
@@ -96,6 +97,7 @@
     "@deepseek-ai/dsh-session-projection-cache": "workspace:*",
     "@deepseek-ai/dsh-session-query": "workspace:*",
     "@deepseek-ai/dsh-session-title": "workspace:*",
+    "@deepseek-ai/dsh-settings": "workspace:*",
     "@deepseek-ai/dsh-skill": "workspace:*",
     "@deepseek-ai/dsh-subagent": "workspace:*",
     "@deepseek-ai/dsh-typert-protocol": "workspace:*",
@@ -103,13 +105,17 @@
     "@deepseek-ai/dsh-util-time": "workspace:*",
     "@deepseek-ai/dsh-util-values": "workspace:*",
     "@deepseek-ai/dsh-util-workspace-path": "workspace:*",
-    "@deepseek-ai/dsh-workspace": "workspace:*"
+    "@deepseek-ai/dsh-workspace": "workspace:*",
+    "@deepseek-ai/dsh-working-directory": "workspace:*"
   },
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-session-persistence": {
       "optional": true
     },
     "@deepseek-ai/dsh-session-projection-cache": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-settings": {
       "optional": true
     }
   },
@@ -127,6 +133,7 @@
     "@deepseek-ai/dsh-client-store": "workspace:*",
     "@deepseek-ai/dsh-client-test-runtime": "workspace:*",
     "@deepseek-ai/dsh-commands": "workspace:*",
+    "@deepseek-ai/dsh-credentials": "workspace:*",
     "@deepseek-ai/dsh-file-reference": "workspace:*",
     "@deepseek-ai/dsh-fs": "workspace:*",
     "@deepseek-ai/dsh-fs-local": "workspace:*",
@@ -137,10 +144,12 @@
     "@deepseek-ai/dsh-scope": "workspace:*",
     "@deepseek-ai/dsh-session": "workspace:*",
     "@deepseek-ai/dsh-session-persistence": "workspace:*",
+    "@deepseek-ai/dsh-session-persistence-jsonl": "workspace:*",
     "@deepseek-ai/dsh-session-projection": "workspace:*",
     "@deepseek-ai/dsh-session-projection-cache": "workspace:*",
     "@deepseek-ai/dsh-session-query": "workspace:*",
     "@deepseek-ai/dsh-session-title": "workspace:*",
+    "@deepseek-ai/dsh-settings": "workspace:*",
     "@deepseek-ai/dsh-skill": "workspace:*",
     "@deepseek-ai/dsh-storage": "workspace:*",
     "@deepseek-ai/dsh-storage-domain": "workspace:*",
@@ -153,6 +162,7 @@
     "@deepseek-ai/dsh-util-values": "workspace:*",
     "@deepseek-ai/dsh-util-workspace-path": "workspace:*",
     "@deepseek-ai/dsh-workspace": "workspace:*",
-    "@types/mime-types": "^3.0.1"
+    "@types/mime-types": "^3.0.1",
+    "@deepseek-ai/dsh-working-directory": "workspace:*"
   }
 }

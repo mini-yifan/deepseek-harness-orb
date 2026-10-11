@@ -12,7 +12,6 @@
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
-              suffix: Your working directory is {{cwd}}.
               prefix: >-
                 You are a desktop GUI agent powered by the {{model}} model.
                 You operate the screen and decide each stretch yourself.

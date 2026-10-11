@@ -30,7 +30,7 @@ Client Session objects, Agent-scoped Client Contexts, references, consumer-sourc
 
 The [Client layering design](../../implemented/architecture/2026-08-20-client-session-conversation-ownership.md) defines one-way data, adapter, renderer, and presentation dependencies. Reference-source bookkeeping does not give the Controller a dependency on UI packages.
 
-This decision partially supersedes the list-selected scope lifecycle in the [Web Client Session scope and provide-channel decision](2026-07-25-web-client-session-scope-and-provide-channel.md); that note retains the blank-Session and adoption rationale under explicit Provider ownership.
+The [blank Session decision](2026-09-17-process-local-blank-sessions.md) owns creation and reuse; this decision owns explicit Provider references and adoption.
 
 ### Addresses, bindings, and references
 
@@ -156,7 +156,7 @@ The main view privately persists its target identity and subagent address under 
 | Chat/Trajectory restoration | Restore the view for the explicitly selected main target; independently bound views keep their own state |
 | Cordis inventory panel | One list without current/other grouping; no public runner getter for main-area selection |
 
-Source metadata does not change when DOM focus moves or when a global panel hides a retained view. The [global main-panel design](../../implemented/architecture/2026-09-08-global-main-panels.md) owns panel selection and layout; Session reference ownership does not replace it.
+Source metadata does not change when DOM focus moves or when a global panel hides a retained view. The [global main-panel design](../../../../packages/client/ui-layout/README.md) owns panel selection and layout; Session reference ownership does not replace it.
 
 Conversation retains its `hero`, `settling`, and `active` composition and existing history-loading and `openError` handling. Acquisition adds no outer loading/error phase presentation, extra composer-hiding condition, Retry button, or replacement Sidebar recovery panel. Existing error handlers continue to handle their errors; call sites without error presentation gain none. Promise rejection and correct reference release do not imply an additional UI handler.
 
@@ -166,7 +166,7 @@ Workspace connection preserves its navigation guards and panel-switch invalidati
 
 Preset directories and deployment defaults may be shared. A bound Session's preset is read or changed through its Provider binding; preset controllers are cached by `SessionBinding` rather than managed by one root current-Session follower. The hero preset seat uses the `session-maybe` Provider: it shows the creation-flow choice without a Session and operates on the exact bound blank Session after one arrives. Header labels read the same Provider-bound Session projection.
 
-A preset chosen before Session creation remains in the main Conversation's `session-maybe` preset surface. After Workspace creation or reuse establishes the main Provider over a blank Session, that surface applies the choice to its Provider-bound Session. When Settings changes the default preset or picker setting, the preset service selects the blank Session whose established Provider binding carries `mainView` ownership and updates that Session. Non-blank main Sessions, independent Sidebar Providers, and other background references remain unchanged; preset subtrees do not read the main reference or use a global current follower to find their target.
+A preset chosen before Session creation remains in the main Conversation's `session-maybe` preset surface. After Workspace creation or reuse establishes the main Provider over a blank Session, that surface applies the choice to its Provider-bound Session. When Settings changes the default preset, the preset service selects the blank Session whose established Provider binding carries `mainView` ownership and updates that Session. Non-blank main Sessions, independent Sidebar Providers, and other background references remain unchanged; preset subtrees do not read the main reference or use a global current follower to find their target.
 
 ### Host-event Context ownership and Typert
 

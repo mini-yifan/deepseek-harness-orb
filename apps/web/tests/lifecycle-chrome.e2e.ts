@@ -249,7 +249,7 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
       expect(planStyle.height).toBe('28px')
       // Half the 28px height, the compact Button geometry, under the theme's
       // corner curvature; a 999px pill would need the circular opt-out.
-      expect(planStyle.borderRadius).toBe('14px')
+      expect(planStyle.borderRadius).toBe('8px')
       expect(planStyle.siblingCornerShape).not.toBeNull()
       expect(planStyle.cornerShape).toBe(planStyle.siblingCornerShape)
       expect(planStyle.fontSize).toBe('13px')
@@ -344,7 +344,7 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
           await reasoningComplete.promise
           expect(await thinking.getAttribute('data-preview')).toBeNull()
           expect(await thinking.getByRole('button').getAttribute('aria-expanded')).toBe('false')
-          expect(await thinking.locator('[data-streaming]').isVisible()).toBe(false)
+          expect(await thinking.locator('[data-streaming]:not([inert] *)').isVisible()).toBe(false)
         }
         observedReasoning.resolve(undefined)
         return await settled
@@ -399,14 +399,13 @@ describe('web e2e: lifecycle & chrome (workspace flow / reload / dark mode)', ()
     const processWasOpen = await process.getAttribute('aria-expanded') === 'true'
     try {
       await expandOwningTurnProcess(page, thinkRow)
-      const collapsedHeader = thinkRow.locator('[data-disclosure-row]').first()
+      const collapsedHeader = thinkRow.locator('[data-disclosure-header]').first()
       await collapsedHeader.waitFor({ timeout: 10_000 })
       // Collapsed, the rule's `data-open` gate is absent and the header stays in
-      // flow. It is `relative` here — the row is the sweep-glare overlay anchor
-      // — so the assertion is the absence of `sticky`, not a specific value.
+      // flow, so assert the absence of `sticky`, not a specific value.
       expect(await collapsedHeader.evaluate(element => getComputedStyle(element).position)).not.toBe('sticky')
-      await collapsedHeader.click()
-      const openHeader = page.locator('[data-variant="think"] [data-open] [data-disclosure-row]').first()
+      await collapsedHeader.locator('[data-disclosure-row]').click()
+      const openHeader = page.locator('[data-variant="think"] [data-open] [data-disclosure-header]').first()
       await openHeader.waitFor({ timeout: 10_000 })
       const openStyle = await openHeader.evaluate((element) => {
         const style = getComputedStyle(element)

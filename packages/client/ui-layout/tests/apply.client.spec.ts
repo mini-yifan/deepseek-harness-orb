@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import ShortcutsService from '../../shortcuts/src/client/index.ts'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { Context, type Fiber } from '@deepseek-ai/cordis'
 import { stubConfigForm } from '@deepseek-ai/dsh-client-test-runtime'
@@ -62,6 +63,7 @@ async function bench() {
   // Theme registers its Appearance settings row and requires the connection
   // seam for persistence; model this bench as a remote, memory-only browser.
   ctx.provide('locale', new LocaleRuntime(ctx))
+  await ctx.plugin(ShortcutsService).await()
   ctx.provide('connection', { api: { settings: {} }, isLoopback: false } as never)
   // ui-theme's Appearance row binds a durable scope through these two.
   ctx.provide('remote', { $on: () => () => {} } as never)
@@ -81,10 +83,10 @@ async function bench() {
 
 describe('ui-layout client apply', () => {
   it('declares its service dependencies', () => {
-    expect(inject).toEqual(['slots', 'theme', 'locale'])
+    expect(inject).toEqual(['slots', 'theme', 'locale', 'shortcuts'])
   })
 
-  it('provides ctx.layout and declares the five root-scoped frame slots', async () => {
+  it('provides ctx.layout and declares the root-scoped frame slots', async () => {
     const { ctx, slots } = await bench()
     const fiber = ctx.plugin({ inject: [...inject], apply })
     await fiber.await()
@@ -93,6 +95,7 @@ describe('ui-layout client apply', () => {
     expect(slots.spec('sidebar')).toEqual({ kind: 'single', scope: 'root' })
     expect(slots.spec('main')).toEqual({ kind: 'keyed', scope: 'root' })
     expect(slots.spec('rightbar')).toEqual({ kind: 'single', scope: 'root' })
+    expect(slots.spec('shell.bottom')).toEqual({ kind: 'single', scope: 'root' })
     expect(slots.spec('shell.overlay')).toEqual({ kind: 'list', scope: 'root' })
     expect(slots.spec('shell.leading')).toEqual({ kind: 'single', scope: 'root' })
   })
@@ -146,6 +149,7 @@ describe('ui-layout client apply', () => {
     const host = rendererHost()
     expect(host.storeOf(entry, undefined)).toBe(instance)
     const panelInfo = host.root.getSnapshot().hooks.panelInfo!
+    expect(panelInfo).toBe(layout.panelInfo)
     expect(panelInfo.getSnapshot()).toBe(instance.getSnapshot().panelInfo)
     const panelId = 'panel-a' as MainPanelId
     const disposePanel = slots.register({ name: 'main', key: panelId }, () => null)
@@ -197,6 +201,7 @@ describe('ui-layout client apply', () => {
     expect(slots.spec('sidebar')).toBeUndefined()
     expect(slots.spec('main')).toBeUndefined()
     expect(slots.spec('rightbar')).toBeUndefined()
+    expect(slots.spec('shell.bottom')).toBeUndefined()
     expect(slots.spec('shell.overlay')).toBeUndefined()
     expect(slots.spec('shell.leading')).toBeUndefined()
     expect(host.root.getSnapshot().hooks.panelInfo).toBeUndefined()

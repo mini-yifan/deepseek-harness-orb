@@ -25,6 +25,8 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
+New commands start in the Session's current working directory. Relative `workdir` values resolve from that directory; per-call overrides and background jobs do not change it.
+
 Load this plugin in any composition where the agent should run bash commands: it registers the `bash` tool once an executor provider and the `dsh-shell-env` registry are mounted, and stays pending until the `tools`, `shell`, `systemPrompt`, and `shellEnv` services exist.
 
 ### Minimal configuration
@@ -52,7 +54,7 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 
 ### Running a command
 
-The tool executes `bash -c <command>` and returns the combined output. Commands run in a fresh shell every call, so state never persists — pass `workdir` instead of `cd`. A non-zero exit is reported as `[exit code: N]` for the agent to interpret, not surfaced as a tool error. A `description` in active voice (5–10 words) labels the call in the UI; `timeoutMs` overrides the executor's default and cap. Output beyond the executor's stream caps is truncated to its tail, with the full output saved to a spill file whose path is reported.
+The tool executes `bash -c <command>` and returns the combined output. Commands run in a fresh shell every call, so state never persists — pass `workdir` instead of `cd`. A non-zero exit is reported as `[exit code: N]` for the agent to interpret, not surfaced as a tool error. A `description` in active voice (5–10 words) labels the call in the UI; the schema lists it before `command` and asks the model to emit it first, without enforcing JSON member order. `timeoutMs` overrides the executor's default and cap. Output beyond the executor's stream caps is truncated to its tail, with the full output saved to a spill file whose path is reported. The description tells the agent to verify the resolved absolute target path before any delete or move and to guard variables in such paths with `${VAR:?}`.
 
 <a id="running-long-commands-in-the-background"></a>
 ### Running long commands in the background
@@ -61,7 +63,7 @@ Passing `run_in_background: true` admits a job and returns its id immediately; c
 
 ### Foreground commands as jobs
 
-With a job registry composed, a foreground command is registered with `ctx.jobs` at its start and the call waits on that job: the command is listed, streams through `job.list` and `job.follow`, and can be stopped from the Web task list for as long as it runs. A command that finishes within the timeout returns the ordinary foreground result and its job record leaves the registry with it, so the model never sees an id. A command that outlives the timeout keeps running as the job it already was, and the call returns `[still running after <timeoutMs>ms; moved to background job <id>]` plus the job hand-off guidance, seeded with one consuming read of the output so far — `job_output` continues exactly after it. A kill from outside the call (the human stopping the job) settles the foreground result with `[stopped: <reason>]` ahead of the signal marker, so the model reads the reason instead of a command failure; cancelling the call itself kills the job. Registration is best-effort: `promoteOnTimeout: false`, a missing job registry, or a registry that refuses the job at its start (the owner's job limit, no controller) run the command under the executor's deadline kill instead, and the tool description advertises the hand-over only when it holds.
+With a job registry composed, a foreground command is registered with `ctx.jobs` at its start and the call waits on that job: the command is listed, streams through `job.list` and `job.follow`, and can be stopped from the Web task list for as long as it runs. A command that finishes within the timeout returns the ordinary foreground result and its job record leaves the registry with it, so the model never sees an id. A command that outlives the timeout keeps running as the job it already was, and the call returns `[still running after <timeoutMs>ms; moved to background job <id>]` plus the job hand-off guidance, seeded with one consuming read of the output so far — `job_output` continues exactly after it. A kill from outside the call (the human stopping the job) settles the foreground result with `[stopped: <reason>]` ahead of the signal marker, so the model reads the reason instead of a command failure; cancelling the call itself kills the job. Registration is best-effort: `promoteOnTimeout: false`, a missing job registry, or a registry that refuses the job at its start (the owner's job limit, no controller) run the command under the executor's deadline kill instead, and the `timeoutMs` parameter description advertises the hand-over only when it holds.
 
 ### Sandboxed execution and escalation
 
@@ -79,6 +81,8 @@ A composition with no executor provider never activates the tool. Background cal
 <details>
 <summary>Implementation internals — click to expand</summary>
 
+Structured foreground and background results expose `cwd`, the executor-resolved launch directory. Persisted presentation metadata carries the same value so settled cards retain the directory used by that call. A command’s own `cd` does not change this launch value; native result text remains stdout, stderr, and status markers.
+
 This section explains the design decisions behind the tool and points at the code that realizes them; the observable behavior is fully covered in [Use this package](#use-this-package).
 
 ### Design philosophy
@@ -95,11 +99,10 @@ This section explains the design decisions behind the tool and points at the cod
 | [`src/index.ts`](src/index.ts) | Plugin entry: tool registration, prompt section, arg validation, escalation, request assembly |
 | [`src/background.ts`](src/background.ts) | Own asynchronous shell preparation, map process settlement onto job outcomes, and render a ring read as a process read |
 | [`src/render.ts`](src/render.ts) | Model-facing result text: streams, markers, truncation notices |
-| — | No runtime invariant companion is published; the environment registry validates ownership and collected values at each mutation/read; it publishes no independent snapshot that a companion could cross-check. |
 
 ### Request resolution
 
-The tool resolves the workdir before `ctx.shell.resolve()` runs: an explicit relative `workdir` is resolved against the session cwd, and a sandbox policy's canonical workspace root wins so confinement and launch use the same identity. Sandbox policy resolves per call through `ctx.sandboxPolicy`; an escalation request goes through `ctx.approval` before anything executes, and the tool fails at load if the executor confines but no policy service is mounted.
+The tool resolves the workdir before `ctx.shell.resolve()` runs: an explicit relative `workdir` is resolved against the Session's current directory, independently of the sandbox permission root. Sandbox policy resolves per call through `ctx.sandboxPolicy`; an escalation request goes through `ctx.approval` before anything executes, and the tool fails at load if the executor confines but no policy service is mounted.
 
 ### Rendering story
 
@@ -118,7 +121,7 @@ Read these pages when the package-level contract is not enough. They move from t
 - [Bash executor subsystem](../../../docs/subsystems/shell.md) — request/spec vocabulary, results, and background processes.
 - [shell-env](../shell-env/README.md) — the managed `DSH_*` environment every call receives.
 - [tool-jobs](../../jobs/tool-jobs/README.md) — `job_output`, `job_list`, and `job_kill` controls for background runs.
-- [sandbox Agent Note](../../../.agents/notes/implemented/feature/2026-07-06-sandbox.md) — escalation and mode-switching rationale.
+- [historical sandbox Agent Note](../../../.agents/notes/archived/feature/2026-07-06-sandbox.md) — escalation and mode-switching rationale.
 - [Generated tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-tool-bash) — the exact `bash` argument schema.
 - [Generated configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-tool-bash) — every accepted config field and its source declaration.
 
@@ -151,7 +154,7 @@ Prefix-stable while the registration scope and prompt text are unchanged. Plugin
 
 #### What the model sees
 
-The model sees the generated [`bash` schema](../../../docs/tool-catalog.md#deepseek-aidsh-tool-bash). `run_in_background` appears only when this producer enables it and a job registry is composed; `sandbox_permissions` and `justification` appear only when the mounted executor advertises sandboxing. Agent-scoped tool restrictions can remove the definition for that agent.
+The model sees the generated [`bash` schema](../../../docs/tool-catalog.md#deepseek-aidsh-tool-bash). `run_in_background` appears only when this producer enables it and a job registry is composed; `sandbox_permissions` and `justification` appear only when the mounted executor advertises sandboxing; the justification asks the model to use the language of the current user request. Agent-scoped tool restrictions can remove the definition for that agent.
 
 #### Token effect
 

@@ -79,7 +79,7 @@ function TabHost({ state, callbacks, intents, tab, pane, column, floats, focusRe
     <div className={clsx(css.tabCell, floating && css.floatingCell)} hidden={!selected}
       data-dockkit-host={floating ? 'float' : 'dock'} data-dockkit-column={floating ? undefined : column}
       style={{ gridColumn: floating ? 1 : column * 2 + 1, gridRow: 1, order: floating ? depth : 0 }}>
-      <section ref={host} className={clsx(css.tabHost, floating ? css.float : css.pane)}
+      <section ref={host} tabIndex={-1} className={clsx(css.tabHost, floating ? css.float : css.pane)}
         aria-hidden={!visible || undefined}
         data-dockkit-content={tab.id}
         data-dockkit-pane={!floating && selected ? pane.id : undefined}
@@ -88,7 +88,7 @@ function TabHost({ state, callbacks, intents, tab, pane, column, floats, focusRe
         data-dockkit-float-active={floating && state.activePaneId === pane.id || undefined}
         data-dockkit-column={!floating ? column : undefined}
         style={rect === undefined ? undefined : {
-          left: rect.x, top: rect.y, width: rect.width, height: rect.height,
+          left: rect.x, top: `max(var(--dsh-dockkit-float-top, 0px), ${rect.y}px)`, width: rect.width, height: rect.height,
         }}
         onPointerDown={() => { if (floating) floats.raise(pane.id) }}
         onClick={() => { if (!floating && state.activePaneId !== pane.id) callbacks.onFocusPane(pane.id) }}>

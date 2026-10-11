@@ -238,6 +238,7 @@ describe('sessions', () => {
           values: { subagentCatalog: [
             { createdAt: 1, id: 'other' as SessionId, mode: 'one-shot' },
             { createdAt: 2, id: 'child' as SessionId, mode: 'continuable', label: 'Child' },
+            { createdAt: 3, id: 'external' as SessionId, mode: 'external' },
           ] },
         },
       }
@@ -247,6 +248,7 @@ describe('sessions', () => {
       parentSessionId: parentId, childSessionId: 'child', mode: 'continuable',
     })
     expect(runtime.sessions.subagentAddress('missing' as SessionId)).toBeUndefined()
+    expect(runtime.sessions.subagentAddress('external' as SessionId)).toBeUndefined()
     expect(runtime.sessions.binding(parentId)).toBeUndefined()
     expect(runtime.sessions.binding('child')).toBeUndefined()
     await runtime.dispose()
@@ -557,23 +559,22 @@ describe('workspaces', () => {
     expect(view.container.textContent).toContain('ws:pending')
     await runtime.dispose()
   })
-  it('skips default initialization without a fixture and forwards a configured request and lifetime', async () => {
+  it('skips default initialization without a fixture and forwards the caller lifetime', async () => {
     const runtime = await SlotTestRuntime.create()
     try {
-      const request = { directoryName: 'default-workspace', title: 'Default workspace' }
       const signal = new AbortController().signal
-      await expect(runtime.workspaces.initializeDefault(request, signal)).resolves.toBeUndefined()
+      await expect(runtime.workspaces.initializeDefault(signal)).resolves.toBeUndefined()
       const workspace = {
-        workspaceId: 'default' as WorkspaceId, title: request.title, path: '/default', sessionIds: [],
+        workspaceId: 'default' as WorkspaceId, title: 'default-workspace', path: '/default', sessionIds: [],
         createdAt: '2026-09-20T00:00:00Z', updatedAt: '2026-09-20T00:00:00Z',
       }
       const initialize = vi.fn(async () => workspace)
       runtime.workspaces.stub('initializeDefault', initialize)
-      await expect(runtime.workspaces.initializeDefault(request, signal)).resolves.toBe(workspace)
-      expect(initialize).toHaveBeenCalledWith(request, signal)
+      await expect(runtime.workspaces.initializeDefault(signal)).resolves.toBe(workspace)
+      expect(initialize).toHaveBeenCalledWith(signal)
       expect(runtime.workspaces.calls).toEqual([
-        { method: 'initializeDefault', args: [request, signal] },
-        { method: 'initializeDefault', args: [request, signal] },
+        { method: 'initializeDefault', args: [signal] },
+        { method: 'initializeDefault', args: [signal] },
       ])
     } finally {
       await runtime.dispose()

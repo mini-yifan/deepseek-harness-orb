@@ -17,9 +17,8 @@ Source: [`packages/llm/llm/src/types.ts`](../../packages/llm/llm/src/types.ts)
 ```ts type-equiv
 /**
  * Merge-extensible content blocks keyed by `type`. New core blocks must land
- * with adapter, UI, and compaction support. Developer tool-change blocks are
- * reserved for Session V4 persistence; providers and UI reject them until
- * their producers and consumers are implemented together.
+ * with adapter, UI, and compaction support. Tool-change blocks belong to
+ * developer messages; `projectToolUpdates` selects what each route receives.
  */
 interface ContentBlockMap {
   'text': TextBlock
@@ -32,7 +31,7 @@ interface ContentBlockMap {
 }
 ```
 
-The block interfaces (full fields in source): `TextBlock` (`text`), `ReasoningBlock` (thinking, distinct from visible text), `ImageBlock` (a durable [image attachment](attachment.md)), `FileBlock` (a durable verbatim [file attachment](attachment.md) that request assembly projects to handle text for every route), and `ToolCallBlock` (`id: ToolCallId`, `name`, raw-JSON `arguments`). Tool results are first-class `ToolResultMessage` values with `toolCallId`, result `content`, and optional `isError`; they are not content blocks. `ContentBlock = ContentBlockMap[ContentBlockType]`. A new modality belongs in the merge-extensible map only when its adapter, UI, compaction, and durable replay paths honor it. Developer tool-change blocks are a persistence-only exception described in the [decision](../../.agents/notes/implemented/architecture/2026-09-17-developer-session-changes.md).
+The block interfaces (full fields in source): `TextBlock` (`text`), `ReasoningBlock` (thinking, distinct from visible text), `ImageBlock` (a durable [image attachment](attachment.md)), `FileBlock` (a durable verbatim [file attachment](attachment.md) that request assembly projects to handle text for every route), and `ToolCallBlock` (`id: ToolCallId`, `name`, raw-JSON `arguments`). Tool results are first-class `ToolResultMessage` values with `toolCallId`, result `content`, and optional `isError`; they are not content blocks. `ContentBlock = ContentBlockMap[ContentBlockType]`. A new modality belongs in the merge-extensible map only when its adapter, UI, compaction, and durable replay paths honor it. Developer tool-change blocks are projected according to the resolved route capability.
 
 Image access belongs to request serialization rather than the durable attachment or deterministic request-image version. `resolveImageAttachmentAccess()` combines the attachment provider's optional host object path with a mapping supplied by the consumer for the current tool execution filesystem. The result is available only for that request and does not participate in `variantId`.
 
@@ -71,7 +70,7 @@ interface AssistantProviderMetadata {
 type Message = MessageRoleMap[keyof MessageRoleMap]
 ```
 
-`DeveloperMessage` records incremental agent session changes in conversation order with the `developer` role. `ToolAdditionBlock.toolName` activates the definition selected by the containing Session event's historical header reference; `ToolRemovalBlock.toolName` removes the active definition. Both blocks are rejected in other message roles. `deferLoading` independently requests deferred definition loading without requiring an addition record. See [Session](../../packages/core/session/README.md) for header binding and the [LLM package](../../packages/llm/llm/README.md#known-limitations-and-deferred-work) for provider support limits.
+`DeveloperMessage` records incremental agent session changes in conversation order with the `developer` role. `ToolAdditionBlock.toolName` activates the definition selected by the containing Session event's historical header reference; `ToolRemovalBlock.toolName` removes the active definition. Both blocks are rejected in other message roles. `deferLoading` independently requests deferred definition loading without requiring an addition record. See [Session](../../packages/core/session/README.md) for header binding and the [LLM package](../../packages/llm/llm/README.md#known-limitations-and-deferred-work) for provider support limits. `ToolUpdate` is `in-history` or `addition-only` on resolved and prepared model metadata. `GenerateOptions.toolHistory` carries `ToolHistory`: initial `tools` and ordered `updates`, each binding a developer `messageId` to its historically resolved `additions`. The runtime projects this state into provider declarations; it does not change the active tool list in logged headers.
 
 Where a message came from is itself a merge-extensible sum type:
 
@@ -224,7 +223,7 @@ type StreamChunk =
 
 `snapshot()` returns a detached immutable stream. `expandAssistantStream()` strictly checks record keys, member counts, indexes, timestamps, tool-call identity, and lossless JSON before recreating the exact timed chunk sequence. The Session log embeds this stream in `assistant/message` for a surface result or `assistant/attempt` for an attempt with no surface message.
 
-Process-local `agent/assistant-stream` frames carry live presentation. Durable replay and restore validation still expand the embedded settlement; telemetry, token accounting, and Host folds read the compact records directly. Record-level readers (`assistantStreamFirstTokenTime`, `assistantStreamHasVisibleContent`, `assistantStreamHasVisibleText`, `lastAssistantStreamChunk`, `assistantStreamChunks`, `joinAssistantStreamText`, `assembleAssistantStream`, and the per-run `runFirstTokenTime` and `runFirstVisibleTime`) answer consumer questions in one pass over the records with early exit, so a large history costs O(records) per settlement instead of O(members) expansion ([fold decision](../../.agents/notes/implemented/architecture/2026-09-06-embedded-stream-record-readers.md)). `expandAssistantStream()` remains the validating path for records read at a durable boundary and for consumers that need every member.
+Process-local `agent/assistant-stream` frames carry live presentation. Durable replay and restore validation still expand the embedded settlement; telemetry, token accounting, and Host folds read the compact records directly. Record-level readers (`assistantStreamFirstTokenTime`, `assistantStreamHasVisibleContent`, `assistantStreamHasVisibleText`, `lastAssistantStreamChunk`, `assistantStreamChunks`, `joinAssistantStreamText`, `assembleAssistantStream`, and the per-run `runFirstTokenTime` and `runFirstVisibleTime`) answer consumer questions in one pass over the records with early exit, so a large history costs O(records) per settlement instead of O(members) expansion ([fold reference](../../packages/llm/llm/README.md)). `expandAssistantStream()` remains the validating path for records read at a durable boundary and for consumers that need every member.
 
 ## `LlmFailure`
 
@@ -312,7 +311,7 @@ Retry configuration resolves before route registration into an immutable discrim
 
 ## `AppIdentity` — app attribution
 
-The static public application identity every adapter sends to providers ([`packages/llm/llm/src/attribution.ts`](../../packages/llm/llm/src/attribution.ts)). `attributionHeaders(identity?)` maps it to the standard `User-Agent` header only; OpenRouter-specific app attribution headers are intentionally not supported by this contract. The default `APP_IDENTITY` sources its version from the package manifest; every field is a public product fact - no secrets, paths, session ids, or per-user identifiers, and nothing per-request may influence the values. Rationale: [Mandatory `User-Agent` attribution](../../.agents/notes/implemented/architecture/2026-06-21-mandatory-app-attribution-headers.md).
+The static public application identity every adapter sends to providers ([`packages/llm/llm/src/attribution.ts`](../../packages/llm/llm/src/attribution.ts)). `attributionHeaders(identity?)` maps it to the standard `User-Agent` header only; OpenRouter-specific app attribution headers are intentionally not supported by this contract. The default `APP_IDENTITY` sources its version from the package manifest; every field is a public product fact - no secrets, paths, session ids, or per-user identifiers, and nothing per-request may influence the values.
 
 ```ts type-equiv
 /**
@@ -530,7 +529,7 @@ interface LlmModelContext {
 }
 ```
 
-Reasoning effort is another exact-route capability. The core brands identifiers but does not enumerate their values; each adapter owns the ordered set, display names, and optional deployment default.
+Reasoning effort is another exact-route capability. The core brands identifiers but does not enumerate their values; each adapter owns the choices in increasing effort order, display names, and optional deployment default. Ordering compares selectable controls, not predicted token use, cost, or latency.
 
 ```ts type-equiv
 /** Adapter-owned identifier for one model's selectable reasoning effort. */
@@ -552,7 +551,7 @@ interface LlmReasoningEffortInfo {
 ```ts type-equiv
 /** Selectable reasoning efforts for one exact provider/model route. */
 interface LlmModelReasoningInfo {
-  /** Supported efforts in adapter-preferred display order. */
+  /** Supported efforts from least to greatest selectable reasoning effort, not predicted token use or latency. */
   efforts: readonly LlmReasoningEffortInfo[]
   /**
    * Adapter-configured default materialized into requests when callers omit
@@ -573,6 +572,8 @@ interface LlmResolvedModelInfo extends LlmModelInfo {
   reasoning?: LlmModelReasoningInfo
   /** Declared mid-conversation system prompt handling; absent means only a leading system message is read. */
   systemPromptUpdate?: SystemPromptUpdate
+  /** Declared mid-conversation tool declaration handling; absent means every request declares the complete tool list. */
+  toolUpdate?: ToolUpdate
 }
 ```
 
@@ -615,6 +616,8 @@ interface GenerateOptions {
   system?: string
   /** Tool schemas (adapters map to the provider's `tools` field). */
   tools?: ToolSchema[]
+  /** Session-folded tool history used for route projection; omission sends complete declarations without tool updates. */
+  toolHistory?: ToolHistory
   temperature?: number
   maxTokens?: number
   /**
@@ -631,8 +634,8 @@ interface GenerateOptions {
   sessionId?: Branded<'SessionId'>
   /**
    * Provider-neutral classification for an auxiliary model call. Adapters may
-   * map the purpose to model-hidden transport metadata or purpose-specific
-   * generation policy. Ordinary conversation requests leave it unset.
+   * map the purpose to model-hidden transport metadata. Ordinary conversation
+   * requests leave it unset.
    */
   purpose?: 'compaction' | 'session-title'
 }
@@ -737,9 +740,19 @@ The loop builds each request from logged state. `EpochHeader` records call confi
 
 `agent/request` receives a frozen call-config seed and may return a replacement to switch provider, model, reasoning effort, or sampling. Before the waterfall, the loop removes values marked as adapter defaults so exact-model preparation materializes the selected route's current values; unmarked explicit settings remain in the proposal. After the waterfall, preparation rejects unsupported explicit effort ids without clamping and logs the effective config plus the fields supplied by adapter defaults under the turn signal. On step admission, this waterfall and preparation run after assembly and `step/start` but before the system prompt and accepted user batch are committed; cancellation during either commits neither. The prepared capability governs prompt reconciliation, and the call keeps one adapter registration through dispatch. Requests reaching `llm/stream` are deep-frozen, so mutation throws, and carry a process-local loop identity so observers do not confuse separately logged frozen auxiliary calls with conversation requests.
 
-On the wire, a loop-built request is the derived history alone: the rendered prompt travels as the leading `system`-role message (surface node 0, a `system/message` event) and, when the prepared call declares `systemPromptUpdate: 'in-history'`, a non-empty changed prompt may follow the cached history as a later `system`-role message that the model reads as the effective prompt; the request's `system` field is unset — `GenerateOptions.system` serves direct one-shot callers such as title providers. An empty rendering leaves no system messages in derived history, even when earlier requests retained several prompt versions. The logged request ends with the newest `user/message` on a turn's first step and the previous step's tool results on later steps. The dev invariant recomputes exactly this equation against every loop-built request and rejects a loop request carrying a `system` field.
+On the wire, a loop-built request is the derived history alone: the rendered prompt travels as the leading `system`-role message (surface node 0, a `system/message` event) and, when the prepared call declares `systemPromptUpdate: 'in-history'`, a non-empty changed prompt may follow the cached history as a later `system`-role message that the model reads as the effective prompt; the request's `system` field is unset — `GenerateOptions.system` serves direct one-shot callers such as title providers. An empty rendering leaves no system messages in derived history, even when earlier requests retained several prompt versions. The logged request ends with the newest `user/message` on a turn's first step and the previous step's tool results on later steps.
 
 FIXME(call-config-shape): revisit which remaining fields are genuinely epoch-level for cache purposes (`model` and the model-owned reasoning effort are explicit; the sampling scalars sit here out of caution).
+
+```ts type-equiv
+/** Concrete generation settings; omitted controls use the selected route's defaults. */
+interface LlmCallControls {
+  reasoningEffort?: ReasoningEffortId
+  temperature?: number
+  maxTokens?: number
+  stop?: string[]
+}
+```
 
 ```ts type-equiv
 /**
@@ -748,14 +761,26 @@ FIXME(call-config-shape): revisit which remaining fields are genuinely epoch-lev
  * the loop builds requests from the logged header rather than accepting these
  * per call.
  */
-interface LlmCallConfig {
+interface LlmCallConfig extends LlmCallControls {
   provider: string
   model: string
-  reasoningEffort?: ReasoningEffortId
-  temperature?: number
-  maxTokens?: number
-  stop?: string[]
 }
+```
+
+```ts type-equiv
+/**
+ * Synchronous, pure configuration of one call before defaults and validation.
+ * Compose functions in the desired order; later writes replace earlier ones.
+ * The returned controls cannot change the captured route. Errors reject
+ * preparation before dispatch; only the resolved configuration is recordable.
+ * @param controls - detached, deeply frozen proposed controls, without defaults.
+ * @param model - detached, deeply frozen metadata from the captured adapter generation.
+ * @returns concrete controls; omitted fields receive the route's defaults.
+ */
+type ConfigureCall = (
+  controls: Readonly<LlmCallControls>,
+  model: Readonly<LlmResolvedModelInfo>,
+) => LlmCallControls
 ```
 
 ```ts type-equiv
@@ -771,7 +796,7 @@ interface LlmCallConfigAdapterDefaults {
 
 ## Official DeepSeek request extensions
 
-`ctx.deepseekLlmApiExtensions` is the provider-specific registry for additive top-level fields on `deepseek-official` requests. Contributor plugins use `register(field, provider)` to claim one field; the adapter calls `prepare(request)` after serializing its base body and merges the returned fields before HTTP. The prepared `accept()` transaction runs after 2xx, so a contributor can commit delivery state without treating a transport or provider rejection as acceptance. Preparation, collision, and acceptance failures use `REQUEST_EXTENSION` and fail the model request.
+`ctx.deepseekLlmApiExtensions` is the provider-specific registry for additive top-level fields on `deepseek-official` requests. Contributor plugins use `register(field, provider)` to claim one field; the adapter calls `prepare(request)` after serializing its base body and merges the returned fields before HTTP. The prepared `accept()` transaction runs after 2xx, so a contributor can commit delivery state without treating a transport or provider rejection as acceptance. A contributor whose preparation throws is logged and omitted from that request, and an acceptance failure is logged without failing the request; a base-field collision uses `REQUEST_EXTENSION` and fails the model request. A merged body that fails to serialize is sent without extension fields; acceptance is skipped and the provider plugin logs the omitted field names.
 
 The [wire reference](../deepseek-llm-api-wire-extensions.md) defines the exact request headers, extension transaction, field versions, and receiver obligations. The shipped composition registers [`dsh_session_log`](../../packages/session/session-log-deepseek/README.md) as a lossless incremental canonical-log suffix and [`dsh_plugin_packages`](../../packages/llm/plugin-package-inventory-deepseek/README.md) as the complete active Loader-backed package set. These fields remain outside model messages and are absent from the pi-ai adapter path.
 
@@ -792,6 +817,8 @@ interface PreparedLlmCall {
   readonly inputModalities?: readonly ModelModality[]
   /** Exact model system prompt update mode captured with the adapter dispatch generation. */
   readonly systemPromptUpdate?: SystemPromptUpdate
+  /** Exact model tool update mode captured with the adapter dispatch generation. */
+  readonly toolUpdate?: ToolUpdate
   /** Config fields materialized by the captured adapter rather than proposed by the caller. */
   readonly adapterDefaults: LlmCallConfigAdapterDefaults
   /**
@@ -837,8 +864,9 @@ declare abstract class LlmAdapter {
   imageRequestPricing(_provider: string, _model: string): LlmImageRequestPricing | undefined;
   /**
    * List models this adapter can currently advertise for one owned provider.
-   * The result is advisory: an adapter may accept unlisted model ids, and
-   * consumers must not turn absence into request rejection.
+   * Core routing accepts unlisted model ids; catalog-driven entry points such
+   * as the GUI may require membership. Adapters used there must advertise
+   * their available models; the base empty catalog offers no GUI selection.
    * @param _provider - one provider route owned by this adapter.
    * @returns discoverable models in adapter-preferred order.
    */
@@ -903,8 +931,9 @@ register<K extends keyof DeepSeekLlmApiExtensionMap>( field: K, provider: DeepSe
 
 /**
  * Prepare every currently registered field from one immutable base request.
- * Preparation failures reject before HTTP dispatch. Field values are cloned and frozen;
- * providers retain no mutable alias to the outgoing request.
+ * A provider whose preparation throws, or whose value cannot be cloned, is omitted
+ * from this request; the first such failure per field is logged. Only cancellation rejects. Field values are cloned
+ * and frozen; providers retain no mutable alias to the outgoing request.
  * @param request - exact serialized request facts before extension fields.
  * @returns detached fields and their idempotent joint acceptance transaction.
  */
@@ -1014,7 +1043,8 @@ fileRequestText(ref: FileAttachmentRef): string
 
 /**
  * Discover models advertised by one registered provider. Catalog membership
- * is advisory and never changes routing or request validation.
+ * does not constrain core routing. Catalog-driven entry points may restrict
+ * selection and submission to the advertised models.
  * @param provider - registered provider route to inspect.
  * @returns detached model metadata in adapter-preferred order.
  */
@@ -1047,11 +1077,15 @@ async resolveCallConfig(config: LlmCallConfig, signal?: AbortSignal): Promise<Ll
  * Resolve one call under its current adapter registration. The returned
  * one-shot handle keeps that registration across header logging and dispatch,
  * so HMR cannot combine one adapter's capability result with another adapter.
- * @param config - provider/model route and optional request controls.
+ * An optional synchronous callback selects concrete controls using captured
+ * model metadata. Defaults and validation apply to its result. Callback
+ * failures and cancellation reject preparation before dispatch.
+ * @param config - provider/model route and optional concrete request controls.
  * @param signal - optional cancellation for adapter-owned capability lookup.
+ * @param configure - pure control selection, called once before defaults and validation.
  * @returns a prepared config and its registration-bound stream entry point.
  */
-async prepareCall(config: LlmCallConfig, signal?: AbortSignal): Promise<PreparedLlmCall>
+async prepareCall( config: LlmCallConfig, signal?: AbortSignal, configure?: ConfigureCall, ): Promise<PreparedLlmCall>
 
 /**
  * Stream one model call as raw chunks (token-level deltas). Replay state is

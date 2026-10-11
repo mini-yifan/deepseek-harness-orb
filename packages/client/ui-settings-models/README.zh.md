@@ -7,9 +7,11 @@ kind: "package-reference"
 
 [English](README.md) | 中文
 
+桌面端产品事件使用可选的[产品埋点服务](../product-analytics/README.zh.md)，不包含普通 Web 交互。
+
 ## 概述
 
-`dsh-client-ui-settings-models` 是 dsh Web 客户端的 Models 设置页面：用户可以配置 API 密钥（以只写方式存入 profile 的凭据引用之下）、编辑每个提供商的模型列表，并手工声明自定义 pi-ai 路由；页面以提供商行展示，一次只展开一张编辑卡片。该页面把提供商目录、设置文档与凭据描述合并为一个共享快照，因此行的状态在三个方面始终一致。它还会带首次运行的用户走两个有序弹窗——版本化内测声明，以及按条件显示的官方 DeepSeek 凭据步骤。
+`dsh-client-ui-settings-models` 是 dsh Web 客户端的 Models 设置页面：用户可以配置 API 密钥（以只写方式存入 profile 的凭据引用之下）、编辑每个提供商的模型列表，并手工声明自定义 pi-ai 路由；页面以提供商行展示，一次只展开一张编辑卡片。该页面把提供商目录、设置文档与凭据描述合并为一个共享快照，因此行的状态在三个方面始终一致。它还会带首次运行的用户走两个有序弹窗——版本化预览版说明，以及按条件显示的官方 DeepSeek 凭据步骤。
 
 ## 目录
 
@@ -25,13 +27,21 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-从设置导航打开 Models 页面，即可看到每个已配置的提供商都有一行。官方 DeepSeek 提供商（`deepseek-official`）始终排在第一位，其他提供商保持目录中的原有顺序。其配置键未在任何位置配置的整分节提供商会渲染为其展开的设置卡片而非一行，但仅限首次运行姿态，且仅持续到用户关闭该卡片为止。每一类卡片各自持有自己的展开状态，因此关掉其中一张绝不会丢弃另一张里的草稿。
+保存凭据或自定义提供方时保留已选模型。用户可在 composer 中选择可用模型。
+
+提供方列表中 DeepSeek 账号排第一，DeepSeek 排第二；第三方提供方保留目录中的相对顺序。
+
+从设置导航打开 Models 页面，即可看到每个已配置的提供方都有一行。其配置键未在任何位置配置的整分节提供方会渲染为其展开的设置卡片而非一行，但仅限首次运行姿态，且仅持续到用户关闭该卡片为止。每一类卡片各自持有自己的展开状态，因此关掉其中一张绝不会丢弃另一张里的草稿。
 
 存在已存储目录错误的提供商仍显示诊断以及编辑、删除入口。添加操作只面向已注册的 settings 命名空间，因此不可用的命名空间不会留下无法打开编辑器的按钮。保存被拒绝时，编辑器保持打开并展示 Host 诊断。
 
-Host 配置 `credentialOnboarding` 默认为 `true`。Electron preload 标记会自动抑制凭证步骤；其他原生壳可以在插件行中把它设为 `false`；模型设置页和欢迎须知仍然可用。Host 通过 `webserver/index-inject` 发布这个公开的布尔值，Client 在注册弹窗前校验它。它是页面初始化数据，不是持久化的完成标记。
+应用设置并关闭编辑器后，当前提供商、settings 与凭据快照就绪时才显示保存状态。打开任一行的编辑器、添加提供商和打开移除确认都会等待该刷新。新打开的 Models 区域或页面加载失败后的重试会等到 ready 快照后才挂载编辑器。后台刷新期间，只要编辑器仍挂载，已打开的草稿就会保留用户的修改；页面加载失败或提供商被移除可能关闭编辑器。
+
+Host 配置 `credentialOnboarding` 默认为 `true`。Electron preload 标记会抑制自动凭证引导和 Web 欢迎须知；模型设置页与显式 API Key 编辑仍然可用。[账号插件](../ui-settings-account/README.zh.md#desktop-onboarding)负责 Desktop 引导。其他原生壳可以通过 `credentialOnboarding: false` 仅禁用凭证步骤。Host 通过 `webserver/index-inject` 发布这个公开的布尔值，Client 在注册弹窗前校验它。它是页面初始化数据，不是持久化的完成标记。
 
 ### API 密钥
+
+API 密钥输入框初始为空，并通过 `autocomplete="new-password"` 请求浏览器不要自动填入已保存的登录密码。
 
 编辑卡片上的主字段是单独一个 **API 密钥**输入框——页面从不询问环境变量名。键入的密钥经 `credentials.set` 以**只写**方式存入 profile 的引用之下，profile 没有引用时便派生 `<ROUTE>_API_KEY`，pi-ai profile 会把这次派生记录为 `apiKeyEnv`，因此 `cordis.patch.yml` 从不携带密钥值。为新的 pi-ai 提供商留空密钥会保存一个不带引用的 profile，从而保留提供商原生认证（例如 Bedrock 凭据链或 Vertex ADC）。只有确认引用的凭据已配置时，行才会以绿色实心点标示 API 密钥状态；只有确认具名引用缺失时，才会以红色实心点标示。「应用」成功后会发出本地无障碍状态消息，且绝不回显任何机密内容。
 
@@ -55,6 +65,8 @@ Host 配置 `credentialOnboarding` 默认为 `true`。Electron preload 标记会
 
 本分区为仓库外分发的插件声明两个席位，类型定义在 [`src/client/slot-contract.ts`](src/client/slot-contract.ts) 并从 `./client` 导出。`settings.models.provider-card`（keyed）渲染在每张展示目录行的卡片内部——已保存行的卡片、其首次运行 setup 形态、以及「添加提供商」草稿卡——以 `entryKey = settingsNs` 分发，owner props 携带该行的 `ConfigurableProviderView`、其 configured 状态与已确认的 api-key 凭据状态，因此以某适配器家族的 namespace 注册一次即可收到该家族的全部卡片，含手工声明的路由；手工声明的草稿卡尚无目录行，保存之前不分发。`settings.models.footer`（list）渲染在行列表与新增控件之后。注册方通过 `ctx.slots.inject` 激活，并以 type-only import 引入本包 `/client` 入口；没有注册方时两个席位均不渲染任何内容。
 
+Models 页面包含 **DeepSeek 账号**（`deepseek-account`，英文为 **DeepSeek Account**）。其编辑器展示共享的 DeepSeek 模型目录，不提供 API Key 或 Base URL 输入框；目录保存到账号路由自己的设置段（默认为 `llm-deepseek-account`），因此账号侧的编辑不会改写 official 路由读取的 `llm-deepseek` 段。账号可用模型目录为空时隐藏账号行，包括登录前和退登后；账号模型恢复可用时重新显示。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -73,9 +85,11 @@ Host 配置 `credentialOnboarding` 默认为 `true`。Electron preload 标记会
 
 每次 settings 写入都携带卡片当前的 `revision`，因此来自另一个标签页或外部 `cordis.patch.yml` 编辑的并发写入会以 `settings/conflict` 被拒绝。settings 提交后，卡片会在存储凭据前采纳返回的脱敏用户子树与 revision，因此失败的凭据阶段只重试该阶段。删除只会在 profile 指名本页派生的 `<ROUTE>_API_KEY` 目标时移除已配置且可写的凭据，然后 unset 该 profile；两个操作都幂等。加载完成后，页面订阅转发的 `settings/document-updated`、`credentials/reference-updated` 与 `llm/adapters-updated` 属主事件，以及本地 `connection/reset`，因此外部编辑无需轮询即可收敛。
 
+并发的 `ModelsSettingsStore.load()` 调用会在当前刷新发布 ready 或 error 快照后 resolve，包括读取已被后续刷新取代的调用。旧响应不能发布快照或完成等待中的调用；快照订阅者同步发起的刷新负责等待中的调用。预期的 Remote 失败仍作为快照诊断展示，当前读取的意外拒绝则会拒绝所有等待中的调用。
+
 ### 引导协调器
 
-声明步骤在 `src/client/locales.ts` 中持有精确文案，并在 `src/onboarding-copy.ts` 中持有确认版本；回环时它通过既有 settings API 比较并写入 `ui-settings-general.welcomeNoticeVersion`，且只有显式点击「继续」才会记录当前版本。非回环浏览器无法使用这个仅限宿主的 namespace，因此确认只保留在进程内，刷新后声明会再次出现。DeepSeek 步骤面向 `llm-deepseek` 中的 `deepseek-official`，在共享引导模态框内以仅凭据模式渲染既有 `ProviderEditor`；`credentials.set` 仍是唯一的机密写入，且不改变任何提供商设置。
+预览版说明在 `src/client/locales.ts` 中持有精确文案，并在 `src/onboarding-copy.ts` 中持有确认版本；回环时它通过既有 settings API 比较并写入 `ui-settings-general.welcomeNoticeVersion`，且只有显式点击「继续」才会记录当前版本。已确认旧版的用户会再次看到当前说明。非回环浏览器无法使用这个仅限宿主的 namespace，因此确认只保留在进程内，刷新后说明会再次出现。DeepSeek 步骤面向 `llm-deepseek` 中的 `deepseek-official`，在共享引导模态框内以仅凭据模式渲染既有 `ProviderEditor`；`credentials.set` 仍是唯一的机密写入，且不改变任何提供商设置。
 
 </details>
 
@@ -128,5 +142,3 @@ Host 配置 `credentialOnboarding` 默认为 `true`。Electron preload 标记会
 无。
 
 </details>
-
-**运行时不变式：** 不发布伴生入口。这是只贡献 nav entry 的 section 插件，渲染固定空 content column，不发出 Cordis 事件，也不持有跨插件可变关系。

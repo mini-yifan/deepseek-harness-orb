@@ -160,6 +160,8 @@ describe('WorkspaceAnalyzer', { timeout: 60_000 }, () => {
       location: { file: 'packages/host/src/index.ts' },
     })
     expect(agent?.text).toContain('export class Agent<State extends object = {')
+    // A static initialization block, like a private member, has no type-level meaning.
+    expect(agent?.text).not.toMatch(/static\s*\{|secret|generation|hiddenStep/)
     expect(agent?.members.map(member => member.name)).toEqual(['id', 'state', 'label', 'label', 'run'])
     const service = host?.packages[0]?.services.find(candidate => candidate.key === 'demo')
     const members = new Map(host?.graph.declarations
@@ -1137,6 +1139,8 @@ describe('WorkspaceAnalyzer', { timeout: 60_000 }, () => {
       './client/typert': './lib/typert.client.js',
       './wildcard': './lib/*.js',
       './data': './lib/data.json',
+      './icon': './assets/icon.svg',
+      ...Object.fromEntries(['png', 'jpg', 'jpeg', 'webp', 'PNG'].map(extension => [`./image-${extension}`, `./assets/icon.${extension}`])),
       ignored: './lib/index.js',
     }
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
@@ -1147,6 +1151,7 @@ describe('WorkspaceAnalyzer', { timeout: 60_000 }, () => {
     expect(exports.some(item => item.subpath === './fallback' && item.name === 'RuntimeOnly')).toBe(true)
     expect(exports.some(item => item.subpath === './direct' && item.name === 'Direct')).toBe(true)
     expect(exports.some(item => item.subpath === './empty')).toBe(false)
+    expect(exports.some(item => item.subpath === './icon' || item.subpath.startsWith('./image-'))).toBe(false)
 
     manifest.exports = './lib/index.js'
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)

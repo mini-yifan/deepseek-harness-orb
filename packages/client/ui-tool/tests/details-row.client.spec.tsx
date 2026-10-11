@@ -10,13 +10,14 @@ import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts
 import { detailsCardModel, todosDetail } from '../src/client/tool/models/details-card-model.ts'
 import { DetailsRow, detailsToolview } from '../src/client/tool/toolviews/details-row.tsx'
 import { useDisclosure } from '@deepseek-ai/dsh-client-ui-chat/src/client/chat/use-disclosure.ts'
+import { PartialArguments } from '@deepseek-ai/dsh-util-values'
 
 const t = makeTranslate(en, commonEn)
 const goal = { id: 'goal-1', revision: 2, objective: 'Ship compact cards', phase: 'active', roundsStarted: 2, maxGoalRounds: 8 }
 const schedule = { id: 'schedule-1', prompt: 'Review the build', kind: 'every', everySeconds: 3600, scheduledAt: '2026-09-10T09:00:00.000Z', state: 'scheduled', deliveryMode: 'session-local' }
 
 function result(name: string, value: unknown, args = '{}'): ToolResultNode {
-  return { kind: 'tool-result', seq: 10, time: 2000, callTime: 1000, callId: 'c1', call: { name, argsRaw: args }, content: [{ type: 'text', text: JSON.stringify(value) }], isError: false, subCalls: [] }
+  return { kind: 'tool-result', seq: 10, time: 2000, callTime: 1000, callId: 'c1', name, args: PartialArguments.fromText(args), call: { name, argsRaw: args }, content: [{ type: 'text', text: JSON.stringify(value) }], isError: false, subCalls: [] }
 }
 
 afterEach(cleanup)
@@ -40,6 +41,35 @@ describe('detailsCardModel', () => {
     expect(detailsCardModel(result('schedule_delete', { id: 'schedule-1', deleted: true }), t, 'en')?.items[0]?.fields).toContainEqual({ label: 'Status', value: 'Deleted' })
   })
 
+  it('reads a Host-delivered reminder set beside a recorded session-local result', () => {
+    const host = { id: 'schedule-9', prompt: 'Ship the weekly report', kind: 'weekly', time: '09:00:00.000', timeZone: 'Asia/Shanghai', weekdays: [1, 3], scheduledAt: '2026-09-10T01:00:00.000Z', state: 'scheduled', deliveryMode: 'host' }
+    const model = detailsCardModel(result('schedule_list', [
+      host,
+      { ...host, id: 'schedule-10', kind: 'daily', time: '23:00:00.000', weekdays: undefined },
+      { ...host, id: 'schedule-11', kind: 'cron', expression: '*/15 9-17 * * 1-5', time: undefined, weekdays: undefined },
+      schedule,
+    ]), t, 'en')
+    expect(model?.items).toHaveLength(4)
+    expect(model?.items[0]?.fields).toContainEqual({ label: 'Repeat', value: 'Weekly on Mon, Wed at 09:00 (Asia/Shanghai)' })
+    expect(model?.items[1]?.fields).toContainEqual({ label: 'Repeat', value: 'Every day at 23:00 (Asia/Shanghai)' })
+    expect(model?.items[2]?.fields).toContainEqual({ label: 'Repeat', value: 'Cron */15 9-17 * * 1-5 (Asia/Shanghai)' })
+    // A result recorded before the Host owned delivery stays readable.
+    expect(model?.items[3]?.fields).toContainEqual({ label: 'Repeat', value: 'Every 1 h' })
+    // A Host view states its stored title; the instruction is only the recorded fallback.
+    const titled = detailsCardModel(result('schedule_list', [{ ...host, title: 'Weekly report' }]), t, 'en')
+    expect(titled?.items[0]?.title).toBe('Weekly report')
+    const untitled = detailsCardModel(result('schedule_list', [{ ...host, title: undefined }]), t, 'en')
+    expect(untitled?.items[0]?.title).toBe('Ship the weekly report')
+  })
+
+  it('presents an in-place update by the reminder it committed', () => {
+    const model = detailsCardModel(result('schedule_update', {
+      ...schedule, deliveryMode: 'host', kind: 'daily', time: '10:30:00.000', timeZone: 'Asia/Shanghai', everySeconds: undefined,
+    }), t, 'en')
+    expect(model?.items[0]?.title).toBe('Review the build')
+    expect(model?.items[0]?.fields).toContainEqual({ label: 'Repeat', value: 'Every day at 10:30 (Asia/Shanghai)' })
+  })
+
   it.each([
     ['get_goal', { goal: { ...goal, phase: 'unknown' }, activation: 'armed' }],
     ['get_goal', { goal, activation: 'unknown' }],
@@ -51,6 +81,8 @@ describe('detailsCardModel', () => {
     ['schedule_list', { code: 'corrupt_schedule_log', message: 'The session schedule log is corrupt.' }],
     ['schedule_delete', { id: 'schedule-1', deleted: false, code: 'schedule_not_found' }],
     ['schedule_delete', { code: 'persistence_uncertain', operation: 'delete', id: 'schedule-1', message: 'Persistence is uncertain.' }],
+    ['schedule_update', { ...schedule, kind: 'weekly', weekdays: [0], time: '09:00:00.000', timeZone: 'UTC' }],
+    ['schedule_update', { ...schedule, kind: 'cron', expression: '', timeZone: 'UTC' }],
     ['unknown_tool', { goal, activation: 'armed' }],
   ])('retains raw output for unsupported %s results (%j)', (name, value) => {
     expect(detailsCardModel(result(name, value), t, 'en')).toBeNull()
@@ -63,7 +95,7 @@ describe('detailsCardModel', () => {
     expect(detailsCardModel({ ...block, call: { name: 'create_goal', argsRaw: '{' } }, t, 'en')).toBeNull()
     expect(detailsCardModel({ ...block, content: [{ type: 'text', text: 'partial {' }] }, t, 'en')).toBeNull()
     expect(detailsCardModel({ ...block, content: [...block.content, { type: 'text', text: 'Extra result' }] }, t, 'en')).toBeNull()
-    expect(detailsCardModel({ phase: 'start' as const, callId: 'c1', name: 'create_goal', argsRaw: '{}', turn: 1, step: 1, time: 1000, subCalls: [] }, t, 'en')).toBeNull()
+    expect(detailsCardModel({ phase: 'start' as const, args: PartialArguments.fromText('{}'), callId: 'c1', name: 'create_goal', argsRaw: '{}', turn: 1, step: 1, time: 1000, subCalls: [] }, t, 'en')).toBeNull()
     expect(detailsCardModel({ ...block, parentCallId: 'parent' }, t, 'en')?.items[0]?.title).toBe(goal.objective)
   })
 })
@@ -105,7 +137,8 @@ describe('DetailsRow', () => {
       for (const dispose of callback()) dispose()
     })
     detailsToolview.apply({ slots: { inject, register } } as never)
-    expect(register.mock.calls).toHaveLength(36)
+    expect(register.mock.calls).toHaveLength(37)
     expect(register.mock.calls.map(([spec]) => spec)).toContainEqual({ name: 'tool.call.toolview', key: 'cordis_inspect_query', locale: 'conversation' })
+    expect(register.mock.calls.map(([spec]) => spec)).toContainEqual({ name: 'tool.call.toolview', key: 'schedule_update', locale: 'conversation' })
   })
 })

@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-20-desktop-orb-tcc-gate.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-20-desktop-orb-tcc-gate.md
-2026-09-20-desktop-orb-tcc-gate.md: 36c14d24dc05138ef8eca0e8cd8157d7834f0320
-2026-09-20-desktop-orb-tcc-gate.zh.md: e70fbe5d574320aa2745b104d9a8568f4243ee00
+/agent-note-desktop-orb-tcc-gate-and-deepseek-orb-display-name:
+  en: 2b8a2af4a7feb4bf
+  zh: 7ed3be197fc19e47
+/agent-note-desktop-orb-tcc-gate-and-deepseek-orb-display-name/problem:
+  en: fc8300247fa23fbb
+  zh: 188e14abb05c8f71
+/agent-note-desktop-orb-tcc-gate-and-deepseek-orb-display-name/decision:
+  en: 5a835060bc656aa3
+  zh: 214cfcc9a33df70d
+/agent-note-desktop-orb-tcc-gate-and-deepseek-orb-display-name/alternatives-considered:
+  en: 80610dba74844efb
+  zh: caf275d758cb81d5
+/agent-note-desktop-orb-tcc-gate-and-deepseek-orb-display-name/consequences:
+  en: 59aa66e1928303cd
+  zh: b678b8ada22186bf
+/agent-note-desktop-orb-tcc-gate-and-deepseek-orb-display-name/testing:
+  en: c61a6375c3d32dc0
+  zh: 40741941139e9546

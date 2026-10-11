@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { provideWorkingDirectoryFixture, unsupportedInbox } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { Context } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
@@ -18,7 +19,6 @@ import type {
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as ToolBashPersistent from '@deepseek-ai/dsh-tool-bash-persistent'
-import { unsupportedInbox } from '@deepseek-ai/dsh-agent-loop-testkit'
 
 const contexts: Context[] = []
 let callNumber = 0
@@ -114,6 +114,7 @@ class StubPtySession implements TerminalBackendSession {
   pendingText = ''
   historyTruncated = false
   throwOnSend = false
+  largeOutput = 'x'.repeat(100)
 
   constructor(mode: StubMode) {
     this.mode = mode
@@ -206,7 +207,7 @@ class StubPtySession implements TerminalBackendSession {
       return this.operation(Promise.resolve(this.result(output, 'stdin_read')))
     }
     const commandOutput = this.mode === 'large'
-      ? 'x'.repeat(100)
+      ? this.largeOutput
       : this.mode === 'nonzero' ? '' : 'hello from stub'
     const exitCode = this.mode === 'nonzero' ? 7 : 0
     const output = `${start ?? ''}\n${commandOutput}\n${end ?? ''}${exitCode}\n${this.motd}`
@@ -302,6 +303,7 @@ async function setup(
   initialMode: StubMode = 'normal',
 ) {
   const ctx = new Context()
+  provideWorkingDirectoryFixture(ctx)
   contexts.push(ctx)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
@@ -402,6 +404,20 @@ describe('tool-bash-persistent', () => {
     await ctx.terminals.kill(owner, externallyClosed!, 'external cleanup')
     await fiber.dispose()
     expect(stub.sessions[2]?.closed).toEqual(['external cleanup'])
+  })
+
+  it('clips a split surrogate pair instead of leaving a lone half', async () => {
+    const { ctx, owner, stub } = await setup({ backendType: 'stub', maxOutputChars: 10 })
+    await call(ctx, owner, 'warm up')
+    const session = stub.sessions[0]!
+    session.mode = 'large'
+    // The tenth code unit is the emoji's high surrogate.
+    session.largeOutput = `${'x'.repeat(9)}😀tail`
+
+    const rendered = text(await call(ctx, owner, 'emoji'))
+
+    expect(rendered.startsWith(`${'x'.repeat(9)}<response clipped>`)).toBe(true)
+    expect(rendered).not.toContain('\uD83D')
   })
 
   it('waits for status digits after a torn completion marker', async () => {
@@ -695,6 +711,7 @@ describe('tool-bash-persistent', () => {
 
   it('cancels and awaits a pending shell spawn when the plugin is disposed', async () => {
     const ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
     contexts.push(ctx)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)

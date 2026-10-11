@@ -1,3 +1,4 @@
+import { MessageId } from '@deepseek-ai/dsh-llm/brand'
 // @vitest-environment jsdom
 /** Chat inject factories exercised over independently mounted Conversation and Chat plugins. */
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
@@ -15,13 +16,14 @@ import {
   type GroupKey,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import {
-  apply as applyChat, inject as injectChat, type ChatViewInjected,
+  apply as applyChat, inject as injectChat, type ChatFlowDataInjected, type ChatViewInjected,
 } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { SessionSeq, type SessionId } from '@deepseek-ai/dsh-session/types'
 import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 import { createChatStore } from '../src/client/stores.ts'
 import { CHAT_SETTINGS_NAMESPACE, type ChatSettings } from '../src/chat-settings.ts'
 import type { LinkOpeningRowInjected } from '../src/client/settings/LinkOpeningRow.tsx'
+import type { TranscriptViewRowInjected } from '../src/client/settings/TranscriptViewRow.tsx'
 
 usePinnedBrowserLanguages('zh-CN')
 
@@ -117,6 +119,12 @@ async function bench(initialSettings?: ChatSettings, withBrowserRegistry = true,
     ) => ChatViewInjected)(id, instance.actions)
     return { instance, injected }
   }
+  const chatFlowApi = (reference: SessionReference) => {
+    const entry = runtime.slots.entries('conversation.chat.flow')[0]!
+    const instance = runtime.storeOf('conversation.chat.flow', reference) as ChatInstance
+    const injectFlow = entry.inject as (sessionId: SessionId) => ChatFlowDataInjected
+    return { instance, injected: injectFlow(reference.sessionId) }
+  }
   return {
     get linkPreference() {
       const row = runtime.slots.entries('settings.general.item').find(entry => entry.options.id === 'link-opening')!
@@ -124,15 +132,40 @@ async function bench(initialSettings?: ChatSettings, withBrowserRegistry = true,
       return preference as LinkOpeningRowInjected
     },
     runtime, chat, chatSettings, browserAvailable,
-    layout, openWorkspacePath, sidebarRight, sidebarRightTabs, session, chatViewApi, rootReference, openSession,
+    layout, openWorkspacePath, sidebarRight, sidebarRightTabs, session, chatViewApi, chatFlowApi, rootReference, openSession,
   }
 }
 
 describe('Chat inject API', () => {
+  it('projects independent Settings choices without saving timing to Host settings', async () => {
+    const b = await bench()
+    try {
+      const row = b.runtime.slots.entries('settings.general.item')
+        .find(entry => entry.options.id === 'transcript-view')!
+      const preference = row.inject!()
+      const setCollapseTiming = preference.setCollapseTiming as TranscriptViewRowInjected['setCollapseTiming']
+      const { injected } = b.chatViewApi(b.rootReference)
+      const presentation = injected.hooks.presentation
+      expect(presentation.getSnapshot()).toMatchObject({ mode: 'detailed', collapseTiming: 'completion' })
+      setCollapseTiming('next-input')
+      expect(presentation.getSnapshot()).toMatchObject({ mode: 'detailed', collapseTiming: 'next-input' })
+      expect(b.chatSettings.set).not.toHaveBeenCalled()
+      b.chatSettings.publish({ status: 'ready', value: { linkOpening: 'sidebar', transcriptView: 'standard', performanceUsage: 'detailed' }, revision: 1, writable: true })
+      expect(presentation.getSnapshot()).toMatchObject({ mode: 'standard', collapseTiming: 'next-input' })
+      setCollapseTiming('completion')
+      expect(presentation.getSnapshot()).toMatchObject({ mode: 'standard', collapseTiming: 'completion' })
+      expect(b.chatSettings.set).not.toHaveBeenCalled()
+      expect(b.session.prompt).not.toHaveBeenCalled()
+      expect(b.session.cancel).not.toHaveBeenCalled()
+    } finally {
+      await b.runtime.dispose()
+    }
+  })
+
   it('resolves keyed Group sources across registration, activation, and removal', async () => {
     const b = await bench(undefined, true, false)
     try {
-      const { injected } = b.chatViewApi(b.rootReference)
+      const { injected } = b.chatFlowApi(b.rootReference)
       const key = 'injected-group' as GroupKey
       expect(injected.keyedHooks.chatGroup(key)).toBeUndefined()
       const conversation = b.runtime.ctx.uiConversation
@@ -170,18 +203,36 @@ describe('Chat inject API', () => {
     void injected.loadThrough(SessionSeq(42))
     expect(b.session.loadThrough).toHaveBeenCalledWith(42)
 
+    const track = vi.fn()
+    b.runtime.ctx.provide('productAnalytics', { track } as never)
+    const forkCreated = vi.spyOn(b.runtime.sessions, 'fork').mockImplementation(async (input) => { input.onCreated?.(ROOT); return ROOT })
+    injected.forkAt(17)
+    expect(track).toHaveBeenCalledWith('branch_session_click', { session_id: ROOT, parent_session_id: ROOT, click_position: 'footer' })
+    await b.runtime.sessions.replaceEvents(ROOT, [
+      { type: 'event', event: { type: 'turn/start', seq: SessionSeq(10), time: 10, data: { turn: 1 } } },
+      { type: 'event', event: { type: 'step/start', seq: SessionSeq(11), time: 11, data: { turn: 1, step: 1 } } },
+      { type: 'event', event: { type: 'assistant/message', seq: SessionSeq(12), time: 12, surfaceOp: 'append', data: {
+        turn: 1, step: 1, stream: [], message: { id: MessageId('reply'), role: 'assistant', content: [{ type: 'text', text: 'answer' }], source: { kind: 'model', provider: 'fixture', model: 'fixture' } },
+      } } },
+      { type: 'event', event: { type: 'turn/end', seq: SessionSeq(17), time: 17, data: { turn: 1, reason: { kind: 'completed' } } } },
+    ])
+    injected.forkAt(17)
+    expect(track).toHaveBeenLastCalledWith('branch_session_click', { session_id: ROOT, parent_session_id: ROOT, parent_message_id: 'reply', click_position: 'footer' })
+    forkCreated.mockRestore()
     injected.forkAt(17)
     await vi.waitFor(() => {
       expect(b.openSession).toHaveBeenCalledWith(ROOT)
     })
     expect(b.runtime.sessions.calls).toContainEqual({
-      method: 'fork', args: [{ sessionId: ROOT, atSeq: 17, increaseTitle: true }],
+      method: 'fork', args: [{ sessionId: ROOT, atSeq: 17, increaseTitle: true, onCreated: expect.any(Function) as (childId: SessionId) => void }],
     })
 
     const fork = vi.spyOn(b.runtime.sessions, 'fork').mockRejectedValueOnce(new Error('fork failed'))
     injected.forkAt(18)
     await vi.waitFor(() => {
-      expect(fork).toHaveBeenCalledWith({ sessionId: ROOT, atSeq: 18, increaseTitle: true })
+      expect(fork).toHaveBeenCalledWith({
+        sessionId: ROOT, atSeq: 18, increaseTitle: true, onCreated: expect.any(Function) as (childId: SessionId) => void,
+      })
     })
     await b.runtime.dispose()
   })
@@ -381,6 +432,9 @@ describe('Chat inject API', () => {
     ) => ChatViewInjected
     expect(() => injectView('never-listed' as SessionId, {} as ChatActions))
       .toThrow(/unknown session/)
+    const flowEntry = b.runtime.slots.entries('conversation.chat.flow')[0]!
+    const injectFlow = flowEntry.inject as (sessionId: SessionId) => ChatFlowDataInjected
+    expect(() => injectFlow('never-listed' as SessionId)).toThrow(/unknown session/)
     await b.runtime.dispose()
   })
 
@@ -389,8 +443,11 @@ describe('Chat inject API', () => {
     const { injected } = b.chatViewApi(b.rootReference)
     const owner = {} as never
 
-    expect(injected.keyedHooks.chatNode('missing')).toBeDefined()
-    expect(injected.keyedHooks.chatNodeProcess('missing')).toBeDefined()
+    const flow = b.chatFlowApi(b.rootReference)
+    expect(flow.instance).toBe(b.chatViewApi(b.rootReference).instance)
+    expect(flow.injected.keyedHooks.chatNode('missing')).toBe(injected.keyedHooks.chatNode('missing'))
+    expect(flow.injected.keyedHooks.chatNodeProcess('missing')).toBe(injected.keyedHooks.chatNodeProcess('missing'))
+    expect(flow.injected.keyedHooks.chatNodeBottom('missing')).toBe(injected.keyedHooks.chatNodeBottom('missing'))
 
     expect(injected.fileMentions(owner)).toBeUndefined()
     const mentions = { resolve: vi.fn() } as never

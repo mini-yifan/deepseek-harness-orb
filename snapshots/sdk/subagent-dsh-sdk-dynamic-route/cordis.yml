@@ -2,7 +2,7 @@
 # a separate SDK child runtime. Both runtimes persist their request headers.
 
 - id: llm-deepseek
-  name: '@deepseek-ai/dsh-llm-deepseek'
+  name: '@deepseek-ai/dsh-llm-deepseek-api-key'
   disabled: true
 
 - id: tool-subagent
@@ -48,7 +48,6 @@
       config:
         provider: dsh-sdk
         toolName: subagent
-        enableRunInBackground: false
         agentOptions:
           maxTokens: 777
         maxDepth: 'provider-managed'
@@ -63,3 +62,7 @@
 - id: session-log-deepseek
   config:
     enabled: false
+
+- insert:
+    - id: await-external-subagents
+      name: '../../../packages/test-support/session-snapshot/tests/fixtures/subagent-settlement-barrier.ts'

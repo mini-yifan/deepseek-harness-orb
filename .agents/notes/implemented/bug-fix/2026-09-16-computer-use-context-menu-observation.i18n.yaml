@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-16-computer-use-context-menu-observation.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-16-computer-use-context-menu-observation.md
-2026-09-16-computer-use-context-menu-observation.md: b4d9b531da1f2f93a6670ee746b5d60274f93e69
-2026-09-16-computer-use-context-menu-observation.zh.md: c6f2a4fb5aa05a8b371798a317a717e0a16cc2b6
+/agent-note-computer-use-context-menu-observation:
+  en: ea552db5d228747b
+  zh: 81ec3a63bbde22ff
+/agent-note-computer-use-context-menu-observation/problem:
+  en: 56fe364fec0344c1
+  zh: cc5dbc90fc110469
+/agent-note-computer-use-context-menu-observation/decision:
+  en: c63afe9151c02f74
+  zh: 7de67e4cb1a2caa8
+/agent-note-computer-use-context-menu-observation/alternatives-considered:
+  en: 0597d8223390aef3
+  zh: 21e1d4da3c16c416
+/agent-note-computer-use-context-menu-observation/consequences:
+  en: b5838aca84a2a6bf
+  zh: 3f1065eac89b0980
+/agent-note-computer-use-context-menu-observation/testing:
+  en: 513302a0e516f6e1
+  zh: dfaee8955eeaa3ae

@@ -20,12 +20,21 @@ describe('session-log upload configuration', () => {
       // Import under each environment to catch environment-dependent schema defaults.
       vi.resetModules()
       const { Config } = await import('../src/index.ts')
-      expect(Config({}).enabled).toBe(enabled)
-      expect(Config({ enabled: true }).enabled).toBe(true)
-      expect(Config({ enabled: false }).enabled).toBe(false)
+      expect(Config({}).enabled.get()).toBe(enabled)
+      expect(Config({ enabled: true }).enabled.get()).toBe(true)
+      expect(Config({ enabled: false }).enabled.get()).toBe(false)
     } finally {
       vi.unstubAllEnvs()
       vi.resetModules()
     }
+  })
+})
+
+describe('session-log upload byte limit', () => {
+  it('defaults each request to 8 MiB and accepts only positive integer limits', async () => {
+    const { Config } = await import('../src/index.ts')
+    expect(Config({}).maxBytes).toBe(8 * 1024 * 1024)
+    expect(Config({ maxBytes: 1 }).maxBytes).toBe(1)
+    for (const maxBytes of [0, -1, 1.5]) expect(() => Config({ maxBytes })).toThrow()
   })
 })

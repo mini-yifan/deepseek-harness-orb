@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-Use this package to give the dsh web client a Settings panel, connection-recovery control, feature-contributed navigation, and sequential first-run onboarding. Users can open it from the sidebar, retry a failed connection immediately, and access a local configuration file when the Host makes one available on a loopback browser. Feature packages supply their own settings rows, sections, and onboarding steps; this package supplies their shared presentation and the Developer tools switch without adding onboarding copy.
+Use this package to give the dsh web client a Settings panel, connection-recovery control, feature-contributed navigation, and sequential first-run onboarding. Users can open it from the sidebar, retry a failed connection immediately, and access a local configuration file when the Host makes one available on a loopback browser. Feature packages supply their own settings rows, sections, and onboarding steps; this package supplies their shared presentation and the Coding Tools switch without adding onboarding copy.
 
 ## Table of Contents
 
@@ -22,24 +22,28 @@ Use this package to give the dsh web client a Settings panel, connection-recover
 
 -----
 
-The Settings panel uses a shared 760 × 500 layout, bounded by the viewport. Longer sections scroll inside the content column; the Account entry uses the account icon.
+The Settings panel uses a shared 800 × 800 layout, bounded by the viewport. Longer sections scroll inside the content column; the Account entry uses the account icon. The panel portals beside `#root` rather than inside it, so a macOS window drag region a chrome row declares later in document order cannot swallow its controls.
 
 <a id="use-this-package"></a>
 ## Use this package
 
 Users reach the shell through the sidebar's bottom Settings control; feature plugins contribute their pages and onboarding steps through the slot ledgers this shell projects. In both the expanded sidebar and collapsed rail, the control exposes the localized Settings label as its accessible name. A pale-yellow **Disconnected** action beside Settings indicates browser offline suspension; its permanent retry glyph marks the retry action, which the Chinese outage copy also names (连接异常，刷新重试). Every recovery attempt shows the shared ongoing loader beside **Reconnecting** with one to three dots advancing every 500ms, and an attempt stays visible for at least 800ms so brief retries do not flicker. Selecting either yellow state starts an immediate retry; press feedback stays within the warning palette. Recovery changes the region to pale-green **Connected** for two seconds from the moment the green pill becomes visible. The pill fades in on appearance, fades out over 150ms on removal, and sizes to its current label. Initial startup and uninterrupted healthy operation remain silent. The shell renders the modal panel, the navigation built from `settings.section` entries, and exactly one mounted onboarding step at a time.
 
+Settings uses the [frame’s shared overlay inset](../ui-layout/README.md#window-chrome-seat) and keeps at least 24px of viewport margin. Its mask leaves the Windows caption unpainted; the full-viewport layer still blocks background clicks.
+
 When the section navigation exceeds the panel's available height, the list scrolls independently of the settings content and keeps the Settings title fixed.
 
-In Desktop, the account-row update control shows availability, progress, verification, readiness, and persistent retry feedback. It shares the connection indicator’s 28px height, 13px corners, 14px icon slot, 4px icon gap, and 12px medium text with an 18px line height; update-state border, fill, and text colors remain independently defined. Retry text and its dot use the same brand blue as other update labels; numeric download progress has no ellipsis. The preload carries semantic phase, version, progress, and classified failures; the component resolves every visible and accessible string from the active `settings` locale, including after an in-application language change. Selecting an available update starts downloading; installation requires a separate shell-owned confirmation. A collapsed sidebar shows the same status as a brand-blue dot on its top expand button, including failures. Connection feedback takes priority except during shell-reported installation, when the expected backend disconnect must not hide update status. Failure restores connection feedback. Both controls share one carrier subscription; browser code cannot choose packages or authorize installation. [Desktop updates](../../../apps/desktop/README.md) owns the release workflow.
+In Desktop, the account-row update control shows availability, progress, verification, readiness, and persistent retry feedback. It shares the connection indicator’s 28px height, 8px corners, 14px icon slot, 4px icon gap, and 12px medium text with an 18px line height; update-state border, fill, and text colors remain independently defined. Retry text and its dot use the same brand blue as other update labels; numeric download progress has no ellipsis. The preload carries semantic phase, version, progress, and classified failures; the component resolves every visible and accessible string from the active `settings` locale, including after an in-application language change. Selecting an available update starts downloading; installation requires a separate shell-owned confirmation. A collapsed sidebar shows the same status as a brand-blue dot on its top expand button, including failures. Connection feedback takes priority except during shell-reported installation, when the expected backend disconnect must not hide update status. Failure restores connection feedback. Both controls share one carrier subscription; browser code cannot choose packages or authorize installation. [Desktop updates](../../../apps/desktop/README.md) owns the release workflow. Checking, verifying, and preparing-to-restart tooltips show only the supplied version; without a version, they retain the state label. Desktop update tooltips preserve the complete version and prerelease suffix without adding v or V; their error summaries match the shell update dialogs.
+
+Settings visibility and section selection live in the shell owner store. The shell supplies the effective Settings binding to the contributed launcher for menu keycaps and `aria-keyshortcuts`; the fallback button uses the same binding for hover and keyboard-focus hints and `aria-keyshortcuts`. The Settings command (Desktop: `Mod+,`; Windows/macOS Web: `Mod+Alt+,`) toggles the dialog when Settings is in front or no modal is open; the sidebar control opens the same dialog. The command cannot open or close Settings while the shortcut reference or another modal is in front. Held-key repeats do nothing. Initial focus lands on the selected section in the navigation, or on the title when no sections are available, without drawing a focus outline. Tab and directional navigation retain their visible focus indicators. `Mod+/` can open the shortcut reference above Settings; `Escape` closes the top dialog and restores focus to its invoking control. Return focus omits outlines after shortcut, Escape, or pointer dismissal.
 
 ### The General section
 
 The current release version appears at the bottom of General Settings in Web and Desktop, using the build’s `DSH_CLIENT_VERSION` metadata and the active language. Partial builds without version metadata omit the row.
 
-The Developer tools switch controls the shared preference described by [ui-settings](../ui-settings/README.md#use-this-package). It is available in both Web and desktop, follows accepted changes immediately, and disables duplicate input while a write settles. A failed write displays localized retry guidance.
+The Coding Tools switch controls the shared `ui-settings.enabled` preference described by [ui-settings](../ui-settings/README.md#use-this-package). It is available in both Web and desktop, follows accepted changes immediately, and disables duplicate input while a write settles. A failed write displays localized retry guidance.
 
-The General section holds the built-in Developer tools and Current version rows alongside rows registered into `settings.general.item` by feature packages. Each registrant owns its row copy and behavior. The Appearance row, for example, lives in ui-theme.
+The General section holds the built-in Coding Tools and Current version rows alongside rows registered into `settings.general.item` by feature packages. Each registrant owns its row copy and behavior. The Appearance row, for example, lives in ui-theme.
 
 ### Opening the configuration file
 
@@ -54,12 +58,12 @@ The onboarding ledger projects in ascending order and mounts exactly one step at
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
 
-The shell declares settings.launcher for an account-owned sidebar menu and retains the Settings button as its fallback. Closing the dialog returns focus to the active launcher.
+The shell declares settings.launcher for an account-owned sidebar menu and retains the Settings button as its fallback. The launcher receives settingsOpen, whose false-to-true edge marks one Settings entry, so a registrant acts once per entry instead of on every re-render inside one open. Closing the dialog returns focus to the active launcher.
 
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The shell owns the chrome and the projections; it contributes the Developer tools and Current version rows, while feature registrants own their additional content and copy.
+The shell owns the chrome and the projections; it contributes the Coding Tools and Current version rows, while feature registrants own their additional content and copy.
 
 ### Ledger projections
 
@@ -110,7 +114,7 @@ None; this package neither assembles nor sends a provider request.
 
 These limits define what the shell itself provides versus what features must supply; they are current package constraints.
 
-- **Additional General rows require their feature plugins** — the shell supplies Developer tools and Current version; feature plugins supply the remaining preferences.
+- **Additional General rows require their feature plugins** — the shell supplies Coding Tools and Current version; feature plugins supply the remaining preferences.
 - **The Windows caption badge keeps a side-opening bubble** — `DesktopUpdateBadge` occupies `sidebar.toggle.badge` in the caption and requests `side="right"`, so the Desktop-owned menu text can cover its bubble while the sidebar is collapsed on Windows; the sidebar toggle and New Session bubbles open below the caption instead (#4688).
 
 <a id="dev-note"></a>
@@ -122,5 +126,3 @@ These limits define what the shell itself provides versus what features must sup
 None.
 
 </details>
-
-**Runtime invariant:** No companion is published. The settings seam validates and publishes the durable onboarding section, while slot conflicts fail loud in the slot core. The local document action is browser state over typed RPC responses and is covered by store/component tests rather than a Cordis runtime relationship.

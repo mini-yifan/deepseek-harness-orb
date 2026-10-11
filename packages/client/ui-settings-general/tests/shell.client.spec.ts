@@ -41,7 +41,7 @@ const CHILD_NAMES = Object.keys(CHILD_SPECS) as Array<keyof typeof CHILD_SPECS>
  * ui-settings-models, ui-settings-plugins, and ui-agent-preset. A plugin
  * adding a section changes this list.
  */
-const PRODUCT_SECTIONS: readonly string[] = ['general', 'models', 'plugins', 'agent-presets']
+const PRODUCT_SECTIONS: readonly string[] = ['general', 'models', 'plugins', 'agent-presets', 'orb']
 /** Onboarding steps the web-app roster registers, in coordinator order; both come from ui-settings-models. */
 const PRODUCT_ONBOARDING: readonly { id: string; order: number }[] = [
   { id: 'welcome-notice', order: -100 },
@@ -77,7 +77,7 @@ describe('ui-settings-general shell', () => {
   }, COLD_BOOT_TIMEOUT_MS)
 
   it('declares its services', () => {
-    expect(inject).toEqual(['slots', 'locale', 'connection', 'remote', 'remote.settings', 'configForms'])
+    expect(inject).toEqual(['slots', 'locale', 'connection', 'remote', 'remote.settings', 'configForms', 'shortcuts'])
   })
 
   it('occupies sidebar.settings, declared by ui-sidebar, and declares every child slot', async ({ start }) => {

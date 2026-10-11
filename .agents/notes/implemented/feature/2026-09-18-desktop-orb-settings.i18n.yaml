@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-18-desktop-orb-settings.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-18-desktop-orb-settings.md
-2026-09-18-desktop-orb-settings.md: 74889870474c39dfc720f632fedc5c04ae1ec3a9
-2026-09-18-desktop-orb-settings.zh.md: 57f796fe2607413bad31e1d0aa9122f5a1c23cc2
+/agent-note-desktop-settings-page-for-the-floating-ball:
+  en: 5871c71f19b023c6
+  zh: 274b7a0841aa21a8
+/agent-note-desktop-settings-page-for-the-floating-ball/problem:
+  en: 960b6af361c7c2a0
+  zh: 3a331295c71af162
+/agent-note-desktop-settings-page-for-the-floating-ball/decision:
+  en: a418971970f04355
+  zh: b3839ddcfa6b04a0
+/agent-note-desktop-settings-page-for-the-floating-ball/alternatives-considered:
+  en: 940841462eb9b3be
+  zh: 705e9006582f109a
+/agent-note-desktop-settings-page-for-the-floating-ball/consequences:
+  en: 3b5d91565da43860
+  zh: 49452b6b40dd0ac5
+/agent-note-desktop-settings-page-for-the-floating-ball/testing:
+  en: b05ce073a17f1b99
+  zh: e73be0c2d18277dd

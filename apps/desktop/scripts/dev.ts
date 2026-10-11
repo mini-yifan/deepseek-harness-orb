@@ -64,7 +64,7 @@ async function launchElectron(): Promise<void> {
   const rendererPort = debugPort('DSH_DESKTOP_RENDERER_DEBUG_PORT', 9222)
   const hostPort = debugPort('DSH_DESKTOP_HOST_INSPECT_PORT', 9230)
   const home = resolve(process.env.DSH_HOME ?? join(DEVELOPMENT_ROOT, 'home'))
-  const userData = join(DEVELOPMENT_ROOT, 'electron-user-data')
+  const userData = resolve(process.env.DSH_DESKTOP_USER_DATA_DIR ?? join(DEVELOPMENT_ROOT, 'electron-user-data'))
   const environment: NodeJS.ProcessEnv = {
     ...process.env,
     DSH_HOME: home,
@@ -74,6 +74,7 @@ async function launchElectron(): Promise<void> {
     ELECTRON_ENABLE_LOGGING: process.env.ELECTRON_ENABLE_LOGGING ?? '1',
   }
   console.log(`desktop development: DSH_HOME=${home}`)
+  console.log(`desktop development: userData=${userData}`)
   console.log(`desktop development: inspectors main=${String(mainPort)}, renderer=${String(rendererPort)}, host=${String(hostPort)}`)
   if (process.platform === 'darwin') {
     const executable = prepareDevelopmentApp({ electron, appRoot: APP_ROOT, directory: DEVELOPMENT_ROOT, home, userData,

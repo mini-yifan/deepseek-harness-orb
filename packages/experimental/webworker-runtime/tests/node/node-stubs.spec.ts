@@ -15,6 +15,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { notAvailableError, notImplementedFail } from '../../src/node/notImplementedFail.ts'
 import * as childProcess from '../../src/node/builtin_modules/implemented/child_process.ts'
 import * as dnsPromises from '../../src/node/builtin_modules/mock/dns/promises.ts'
+import * as https from '../../src/node/builtin_modules/mock/https.ts'
 import * as net from '../../src/node/builtin_modules/mock/net.ts'
 import * as sqlite from '../../src/node/builtin_modules/mock/sqlite.ts'
 import * as stream from '../../src/node/builtin_modules/implemented/stream.ts'
@@ -23,6 +24,7 @@ import * as workerThreads from '../../src/node/builtin_modules/mock/worker_threa
 import * as nodePty from '../../src/node/external_packages/node-pty.ts'
 import * as libreofficeKit from '../../src/node/external_packages/libreoffice-kit.ts'
 import * as execa from '../../src/node/external_packages/execa.ts'
+import * as got from '../../src/node/external_packages/got.ts'
 import * as piAi from '../../src/node/external_packages/pi-ai.ts'
 import * as ripgrep from '../../src/node/external_packages/ripgrep.ts'
 import * as ws from '../../src/node/external_packages/ws.ts'
@@ -37,6 +39,7 @@ const quiet = (): void => { vi.spyOn(console, 'error').mockImplementation(() => 
 /** Symbols that refuse when called. */
 const CALLED: [string, Record<string, unknown>, readonly string[]][] = [
   ['node:dns/promises', dnsPromises, ['lookup']],
+  ['node:https', https, ['createServer']],
   ['node:net', net, ['createServer', 'connect']],
   ['node:sqlite', sqlite, ['backup']],
   ['node:vm', vm, ['createContext', 'runInContext', 'runInNewContext', 'runInThisContext', 'isContext']],
@@ -46,9 +49,10 @@ const CALLED: [string, Record<string, unknown>, readonly string[]][] = [
   ['node:child_process', childProcess, ['execFileSync', 'execSync', 'fork']],
   ['node-pty', nodePty, ['spawn', 'open']],
   ['execa', execa, ['execa']],
+  ['got', got.default, ['post']],
   ['@deepseek-ai/pi-ai', piAi, [
     'createProvider', 'createModels', 'openAICompletionsApi', 'openAIResponsesApi', 'anthropicMessagesApi',
-    'isContextOverflow', 'getSupportedThinkingLevels',
+    'isContextOverflow', 'getSupportedThinkingLevels', 'builtinModels',
   ]],
 ]
 
@@ -95,7 +99,7 @@ describe('not-implemented stubs', () => {
   }
 
   it('keeps the CommonJS interop marker and a default export on every replaced module', () => {
-    for (const namespace of [dnsPromises, net, sqlite, vm, workerThreads, childProcess, stream, ws, nodePty, piAi, os, perfHooks]) {
+    for (const namespace of [dnsPromises, net, sqlite, vm, workerThreads, childProcess, stream, ws, nodePty, piAi, os, perfHooks, got]) {
       const holder = namespace as { __esModule?: unknown; default?: unknown }
       expect(holder.__esModule).toBe(true)
       expect(holder.default).toBeDefined()
@@ -166,8 +170,6 @@ describe('node:os', () => {
 
   it('reports no per-core facts and no network interfaces', () => {
     expect(os.cpus()).toEqual([])
-    // The worker webserver binds the loopback literal, so a LAN address is never
-    // derived — and an empty record keeps it out of the trust snapshot.
     expect(os.networkInterfaces()).toEqual({})
     expect(os.availableParallelism()).toBeGreaterThanOrEqual(1)
   })

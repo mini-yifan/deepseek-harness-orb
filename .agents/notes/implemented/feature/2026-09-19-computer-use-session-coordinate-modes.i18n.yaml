@@ -1,6 +1,34 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-19-computer-use-session-coordinate-modes.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-19-computer-use-session-coordinate-modes.md
-2026-09-19-computer-use-session-coordinate-modes.md: a773ab9c1b24334a70a7cba2fdb0e29413517a32
-2026-09-19-computer-use-session-coordinate-modes.zh.md: 1903d73addba57301c8b6fa46864a1d09ec49432
+/agent-note-overlay-computer-use-millifraction-and-pixel-coordinate-modes:
+  en: fd12a1a43bb8c141
+  zh: 1ee39c530dff2352
+/agent-note-overlay-computer-use-millifraction-and-pixel-coordinate-modes/problem:
+  en: b9d49ffda0615672
+  zh: 4e7dd5e0ee5652bb
+/agent-note-overlay-computer-use-millifraction-and-pixel-coordinate-modes/decision:
+  en: 7f873ac0d7920fb6
+  zh: ab77f7007a394d38
+/agent-note-overlay-computer-use-millifraction-and-pixel-coordinate-modes/decision/two-encodings-of-one-screenshot-fraction:
+  en: 305b50b9dc5c9f62
+  zh: efe4b43e75bd0444
+/agent-note-overlay-computer-use-millifraction-and-pixel-coordinate-modes/decision/overlay-default-versus-session-contract:
+  en: 3a437e8e1e311b9d
+  zh: a4f8b9bb686db1ae
+/agent-note-overlay-computer-use-millifraction-and-pixel-coordinate-modes/decision/overlay-menu-and-settings-page:
+  en: b7ae9f890fdce63d
+  zh: 2c29fef4e5fa8e2f
+/agent-note-overlay-computer-use-millifraction-and-pixel-coordinate-modes/decision/shared-tools-forked-contract:
+  en: 4ce0cc615c6eb8c9
+  zh: 906c558b0ed6d679
+/agent-note-overlay-computer-use-millifraction-and-pixel-coordinate-modes/alternatives-considered:
+  en: 915a169864cd5d82
+  zh: 8243670f34d5a020
+/agent-note-overlay-computer-use-millifraction-and-pixel-coordinate-modes/consequences:
+  en: a950606975587caa
+  zh: 7ef5b6e94c460af2
+/agent-note-overlay-computer-use-millifraction-and-pixel-coordinate-modes/testing:
+  en: 5627b5321ec9d82b
+  zh: 4ef2045d6b492061

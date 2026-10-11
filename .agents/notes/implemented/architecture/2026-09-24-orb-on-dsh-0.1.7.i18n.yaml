@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-24-orb-on-dsh-0.1.7.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-24-orb-on-dsh-0.1.7.md
-2026-09-24-orb-on-dsh-0.1.7.md: 8ffcc69b1235511af7c7958d54508cf11565c78f
-2026-09-24-orb-on-dsh-0.1.7.zh.md: 501d269f8ddaa4c548f3fa67f6e2d1967a899bdc
+/agent-note-port-the-floating-orb-onto-dsh-0-1-7:
+  en: fc24de3cb875b903
+  zh: 988edd040ebbba1a
+/agent-note-port-the-floating-orb-onto-dsh-0-1-7/problem:
+  en: 0b2de7e304149c44
+  zh: a4004e74bec527c1
+/agent-note-port-the-floating-orb-onto-dsh-0-1-7/decision:
+  en: 26d44a5ee257009b
+  zh: ecb5b973b8e231c5
+/agent-note-port-the-floating-orb-onto-dsh-0-1-7/alternatives-considered:
+  en: 4011be5eb2486a13
+  zh: ec04e9cbc69ffbee
+/agent-note-port-the-floating-orb-onto-dsh-0-1-7/consequences:
+  en: fee265646ac8ff33
+  zh: 03405e02f3a392e3

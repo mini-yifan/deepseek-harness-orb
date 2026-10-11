@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-17-floating-orb-chrome-shadow.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-17-floating-orb-chrome-shadow.md
-2026-09-17-floating-orb-chrome-shadow.md: fd0f027c1ded361aaead51af326c43dd239e2773
-2026-09-17-floating-orb-chrome-shadow.zh.md: 2ff32f98fc3cebe00377a7824f39f5e9c0e49f83
+/agent-note-floating-orb-css-shadow-and-pin-stroke:
+  en: 253ad6300b9922ab
+  zh: e4a4e212c4269f81
+/agent-note-floating-orb-css-shadow-and-pin-stroke/problem:
+  en: b2d63795470203c3
+  zh: 945bac44de5531cb
+/agent-note-floating-orb-css-shadow-and-pin-stroke/decision:
+  en: 43b9db2e19632938
+  zh: a3e38608fa3a79ba
+/agent-note-floating-orb-css-shadow-and-pin-stroke/alternatives-considered:
+  en: 2701972ae73f8793
+  zh: f84ed9a16f31dcbc
+/agent-note-floating-orb-css-shadow-and-pin-stroke/consequences:
+  en: 272b9ca3af716819
+  zh: cd3332809c0a0f56
+/agent-note-floating-orb-css-shadow-and-pin-stroke/testing:
+  en: 5848759a61527fce
+  zh: 9f4a0eaea9f69f27

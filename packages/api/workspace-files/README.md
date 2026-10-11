@@ -51,7 +51,7 @@ Pass the required options object as `{}` for a complete file under `maxFileBytes
 
 ### File-read and directory checks
 
-File reads and directory listing first use `lstat` to reject a missing path, a final symlink, or the wrong file kind. File operations then resolve and read through the composed filesystem without an additional workspace-containment check. Directory listing and watching require the resolved directory to remain inside the workspace root. The configured page, window, complete-file, and listing caps still apply. Text pages additionally reject invalid UTF-8 and NUL bytes; byte reads do not decode content. An empty read or listing path is a `gateway/bad-request`.
+Every operation first uses `lstat` to reject a missing path or the wrong file kind; the file-reading operations also refuse a final symlink, even one pointing back inside the workspace. `list` instead follows a final link — a directory symlink on any platform, including a Windows junction — and requires it to resolve to a directory inside the workspace root, so a linked directory lists like its target; `changes` confines the watched directory the same way. File operations then resolve and read through the composed filesystem without an additional workspace-containment check. The configured page, window, complete-file, and listing caps still apply. Text pages additionally reject invalid UTF-8 and NUL bytes; byte reads do not decode content. An empty read or listing path is a `gateway/bad-request`.
 
 ### The change feed
 
@@ -105,7 +105,6 @@ Complete-file reads delegate size enforcement to `fs.readBytes` and return raw b
 | [`src/types.ts`](src/types.ts) | Wire types and the `RemoteErrorDetailsMap` codes, published as `./types` for Client packages |
 | [`src/client/index.ts`](src/client/index.ts), [`provider.ts`](src/client/provider.ts), [`change-feed.ts`](src/client/change-feed.ts) | Browser plugin, file metadata, and per-target change feeds |
 | [`src/client/types.ts`](src/client/types.ts), [`remote.ts`](src/client/remote.ts) | Resource values, parameters, Client error codes, and generated Remote types |
-| — | No runtime invariant companion is published; every Host answer is derived from `ctx.fs` and the sandbox policy at call time. |
 
 Typert generates the Host and Client Remote artifacts exposed by `./typert` and `./remote`.
 

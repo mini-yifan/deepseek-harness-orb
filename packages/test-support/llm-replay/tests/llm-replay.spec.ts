@@ -1416,6 +1416,7 @@ describe('installLlmReplay (through the real LlmRuntime)', () => {
               reasoningEfforts: ['off', 'max'],
               defaultReasoningEffort: 'max',
               systemPromptUpdate: 'in-history',
+              toolUpdate: 'addition-only',
             },
             { id: 'pro', name: 'Pro', description: 'Larger model', reasoningEfforts: ['high'] },
           ],
@@ -1442,8 +1443,10 @@ describe('installLlmReplay (through the real LlmRuntime)', () => {
         defaultEffort: 'max',
       },
       systemPromptUpdate: 'in-history',
+      toolUpdate: 'addition-only',
     })
     await expect(ctx.llm.resolveModelInfo('deepseek', 'pro')).resolves.not.toHaveProperty('systemPromptUpdate')
+    await expect(ctx.llm.resolveModelInfo('deepseek', 'pro')).resolves.not.toHaveProperty('toolUpdate')
     await expect(ctx.llm.resolveModelInfo('deepseek', 'pro')).resolves.not.toHaveProperty('inputModalities')
     await expect(ctx.llm.resolveModelInfo('deepseek', 'pro')).resolves.not.toHaveProperty('context')
     // Efforts without a configured default preserve the provider's own default.
@@ -1467,7 +1470,11 @@ describe('installLlmReplay (through the real LlmRuntime)', () => {
       maxDelayMs: 10_000,
       jitterRatio: 0.1,
     })
-    expect(await drain(ctx.llm.stream({ provider: 'deepseek', model: 'pro', messages: [] }))).toEqual(TEXT_CHUNKS)
+    const prepared = await ctx.llm.prepareCall({
+      provider: 'deepseek', model: 'flash',
+    }, undefined, (controls, model) => ({ ...controls, reasoningEffort: model.reasoning!.efforts[0]!.id }))
+    expect(prepared.config.reasoningEffort).toBe('off')
+    expect(await drain(prepared.stream({ ...prepared.config, messages: [] }))).toEqual(TEXT_CHUNKS)
 
     dispose()
     expect(ctx.llm.listProviders()).toEqual([])
@@ -2152,7 +2159,13 @@ describe('apply (the plugin entry)', () => {
     apply(ctx, {
       file,
       providers: [
-        { id: 'm', models: [{ id: 'm', inputModalities: ['image'] }, { id: 'text' }] },
+        {
+          id: 'm',
+          models: [
+            { id: 'm', inputModalities: ['image'], reasoningEfforts: ['low'] },
+            { id: 'text' },
+          ],
+        },
         { id: 'empty' },
       ],
       paceMs: 1,
@@ -2213,6 +2226,14 @@ describe('apply (the plugin entry)', () => {
       NonNullable<Config['providers']>
     expect(() => { apply(ctx, { file, providers }) }).toThrow(
       'llm-replay: provider "m" model "m" imageRequestTokens must be a positive safe integer',
+    )
+  })
+
+  it('rejects an unknown toolUpdate mode during load', () => {
+    const ctx = new Context()
+    const providers: NonNullable<Config['providers']> = [{ id: 'm', models: [{ id: 'm', toolUpdate: 'always' as never }] }]
+    expect(() => { apply(ctx, { file, providers }) }).toThrow(
+      'llm-replay: provider "m" model "m" toolUpdate must be "in-history" or "addition-only" when present',
     )
   })
 

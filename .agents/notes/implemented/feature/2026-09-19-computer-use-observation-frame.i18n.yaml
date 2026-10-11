@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-19-computer-use-observation-frame.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-19-computer-use-observation-frame.md
-2026-09-19-computer-use-observation-frame.md: 95437c1de23cbbc72eb5ed791b235d5060505b7c
-2026-09-19-computer-use-observation-frame.zh.md: 38c18c974d292ede47c977b588deef2e45163164
+/agent-note-computer-use-observation-frame-ribbon:
+  en: e0b24d34c31fa46e
+  zh: 90d88e4a7e9452d9
+/agent-note-computer-use-observation-frame-ribbon/problem:
+  en: b629fe1b20993182
+  zh: cd7a20f01d2ba7bf
+/agent-note-computer-use-observation-frame-ribbon/decision:
+  en: 4fb67d45bffd6314
+  zh: ae48b13f40ae3790
+/agent-note-computer-use-observation-frame-ribbon/alternatives-considered:
+  en: 6712096b8d54c5ae
+  zh: 609b7482bf3f9aba
+/agent-note-computer-use-observation-frame-ribbon/consequences:
+  en: 0716d4a21dbcb08e
+  zh: 8a2a767c4527e252
+/agent-note-computer-use-observation-frame-ribbon/testing:
+  en: 5692ae36d3e9ebaf
+  zh: ae7f96df1847396f

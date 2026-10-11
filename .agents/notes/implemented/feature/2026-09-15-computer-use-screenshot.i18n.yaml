@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-15-computer-use-screenshot.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-15-computer-use-screenshot.md
-2026-09-15-computer-use-screenshot.md: adcdd748796af6a44b782dd3ad00cf307a762a0b
-2026-09-15-computer-use-screenshot.zh.md: 6fb6de7c3f40ff72224941213fca34f3cc60fe9d
+/agent-note-computer-use-screenshot-export:
+  en: 254e4fa0403e93e8
+  zh: 4f71a261e0756933
+/agent-note-computer-use-screenshot-export/problem:
+  en: 1baa84512ee4f9a2
+  zh: db63b461d1c30f79
+/agent-note-computer-use-screenshot-export/decision:
+  en: b0c4de250a597e3c
+  zh: 0b0c6e1dd929efe3
+/agent-note-computer-use-screenshot-export/alternatives-considered:
+  en: d747cb5e8d8944bc
+  zh: 699be36564ff20a9
+/agent-note-computer-use-screenshot-export/consequences:
+  en: aa6b76ca60898b7e
+  zh: 63bacf563fe0bea0
+/agent-note-computer-use-screenshot-export/testing:
+  en: 5f01d00ce90e7077
+  zh: 33868f7a93103427

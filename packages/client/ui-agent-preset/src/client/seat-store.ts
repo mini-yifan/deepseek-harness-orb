@@ -21,14 +21,12 @@ import type { AgentPresetOption } from './settings-store.ts'
 
 /** Hero-chip snapshot. */
 export interface AgentPresetSeatState {
-  /** Whether the new-session surface exposes preset selection. */
-  showPicker: boolean
   /** Presets the deployment supplies; empty means the chip renders nothing. */
   options: readonly AgentPresetOption[]
   /** The staged choice, empty until the roster loads. */
   current: string
-  /** A rejected apply's message, cleared by the next attempt. */
-  error: string | null
+  /** An error message; explicit selection failures also carry the preset for a Toast. */
+  error: string | { readonly preset: AgentPresetOption; readonly reason: string } | null
   busy: boolean
   /**
    * One-shot cue that the chip should introduce itself (the creator-draft
@@ -39,7 +37,7 @@ export interface AgentPresetSeatState {
 }
 
 const INITIAL: AgentPresetSeatState = {
-  showPicker: false, options: [], current: '', error: null, busy: false, introduce: false,
+  options: [], current: '', error: null, busy: false, introduce: false,
 }
 
 /** Mutable one-shot preset choice shared across Provider-bound seat controllers. */
@@ -93,18 +91,16 @@ export class AgentPresetSeatController {
     const generation = ++this.loadGeneration
     const roster = await readRoster(this.ctx)
     if (generation !== this.loadGeneration) return
+    // A roster refresh can finish after a selection; leave its announcement for the chip.
+    const error = this.store.getSnapshot().error
     if (!roster.ok) {
-      this.set({ error: roster.error })
+      if (typeof error !== 'object' || error === null) this.set({ error: roster.error })
       return
     }
-    const { presets, modeSelectionEnabled } = roster.value
-    if (!modeSelectionEnabled) {
-      this.clearStage()
-    }
+    const { presets } = roster.value
     this.fallback = presets.find(preset => preset.isDefault)?.id ?? presets[0]?.id ?? ''
     const session = this.currentSession()
     this.set({
-      showPicker: modeSelectionEnabled,
       options: presetOptions(presets),
       // Staged pick first, then the composition the current session
       // already carries, then the Host-effective default. The middle term is
@@ -113,8 +109,8 @@ export class AgentPresetSeatController {
       // once the flow's session is current, so the reply can arrive after
       // apply() already composed it.
       current: this.staged.id ?? (session === undefined ? this.fallback : presetOf(session) ?? ''),
-      error: null,
-      introduce: modeSelectionEnabled && this.staged.introduce,
+      error: typeof error === 'object' ? error : null,
+      introduce: this.staged.introduce,
     })
     await this.apply()
   }
@@ -123,11 +119,8 @@ export class AgentPresetSeatController {
    * Stage one preset for the next session, applying it immediately when a
    * blank session is already current.
    *
-   * The refusal is returned as well as stored, because the two readers need
-   * different things from it: the chip's own label carries the standing state,
-   * while the caller that made this pick is the one that has to say why the
-   * label came back — and only it knows the pick was a person's, not the
-   * applier catching up with a session that just became current.
+   * The refusal is stored for the chip's announcement and returned to callers
+   * such as Settings that also report the result of their own write.
    * @param id - the preset to stage.
    * @returns the refusal text, or undefined once the pick settled.
    */
@@ -152,6 +145,15 @@ export class AgentPresetSeatController {
     this.staged.id = id
     this.staged.introduce = introduce
     this.set({ current: id, error: null, introduce })
+  }
+
+  /** Acknowledge a displayed refusal without dismissing a newer attempt.
+   * @param refusal - the selection error whose Toast finished.
+   */
+  dismissRefusal(refusal: AgentPresetSeatState['error']): void {
+    if (refusal !== null && typeof refusal === 'object' && this.store.getSnapshot().error === refusal) {
+      this.set({ error: refusal.reason })
+    }
   }
 
   /**
@@ -202,7 +204,8 @@ export class AgentPresetSeatController {
     const session = this.currentSession()
     if (staged === undefined) {
       const current = session === undefined ? this.fallback : presetOf(session) ?? ''
-      if (current !== this.store.getSnapshot().current) this.set({ current })
+      const shown = this.store.getSnapshot()
+      if (current !== shown.current) this.set({ current })
       return
     }
     if (session === undefined) return
@@ -215,26 +218,27 @@ export class AgentPresetSeatController {
     const completion = Promise.withResolvers<undefined>()
     this.pendingSelection = completion.promise
     this.clearStage()
+    const refuse = (reason: string) => {
+      this.set({
+        error: { reason, preset: this.store.getSnapshot().options.find(option => option.id === staged) ?? { id: staged } },
+        current: this.staged.id ?? presetOf(session) ?? '',
+      })
+      return reason
+    }
     try {
       this.set({ busy: true, error: null })
       const result = await this.ctx.remote.agentPresets.select(session.id, staged)
       if (!result.ok) {
         const { error } = result
+        // Prefer the bare cause; the Toast already names the rejected preset.
         const refusal = 'reason' in error.details && typeof error.details.reason === 'string'
           ? error.details.reason
           : error.message
-        this.set({
-          // A refusal carries its cause twice: `message` wraps it in the
-          // roster's own frame, which names the preset the surface reporting
-          // this already names, and a `reason` detail holds the same cause
-          // without it. Read by the detail rather than by the code, because
-          // every refusal that has a cause to give names it the same way.
-          error: refusal,
-          current: this.staged.id ?? presetOf(session) ?? '',
-        })
-        return refusal
+        return refuse(refusal)
       }
       this.set({ current: this.staged.id ?? result.value })
+    } catch (error) {
+      return refuse(error instanceof Error ? error.message : String(error))
     } finally {
       this.pendingSelection = undefined
       this.set({ busy: false })

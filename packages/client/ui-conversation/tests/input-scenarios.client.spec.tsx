@@ -12,6 +12,7 @@ import './control-row-dom.ts'
 import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
+import { $getRoot, $isElementNode, $isTextNode } from 'lexical'
 import type { SessionSnapshot } from '@deepseek-ai/dsh-api-session-controller/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { InputTriggerService } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
@@ -136,6 +137,10 @@ async function scopedBench(register?: (inputTriggers: InputTriggerService) => vo
   const serialize = vi.fn((ids: readonly DraftAttachmentId[]) => Promise.resolve(ids.map(() => PNG)))
   const release = vi.fn()
   const shell = new SessionInputShell({ actx, inputTriggers: () => controller, defaultSink: sink, commandAttachments: { serialize, release, unsupportedNotice: (token: string) => `${token.trim()} attachments-unsupported` } })
+  actx.effect(() => {
+    shell.refreshLexiconSubscription()
+    return () => { shell.dispose() }
+  }, 'test input shell')
   // The hub's listener wiring, verbatim.
   actx.on('slash/input-begin-command', req => shell.beginCommand(req.claim, req.span) ? true : undefined)
   actx.on('slash/input-insert-reference', req => shell.insertReference(req.reference, req.span) ? true : undefined)
@@ -191,6 +196,7 @@ async function scopedBench(register?: (inputTriggers: InputTriggerService) => vo
     useMenuLauncher: bindSnapshotSelector(controller.launcher),
     renderSlot: (() => null) as InputBarProps['renderSlot'],
     stop: vi.fn(),
+    useStopShortcut: bindSnapshotSelector(createSnapshotStore<readonly string[]>([])),
     t: makeTranslate(zh, commonZh),
     variant: 'composer',
   }
@@ -339,6 +345,31 @@ describe('scenario H: backspace breaks the token', () => {
     expect(b.shell.snapshot.phase).toBe('plain')
   })
 
+  it('keeps text typed at the end of the claimed token when the browser inserts it natively', async () => {
+    const b = await bench()
+    b.type('/goal')
+    await vi.waitFor(() => { expect(b.controller.menu.getSnapshot().open).toBe(true) })
+    fireEvent.keyDown(b.textarea, { key: ' ', keyCode: 32 })
+    expect(b.shell.snapshot.phase).toBe('claimed')
+    b.type('/goal 发布')
+    // A caret at the token/argument boundary sits at the end of the styled
+    // token node; native insertion writes there and Lexical syncs the DOM
+    // text with setTextContent plus a caret select.
+    act(() => {
+      b.shell.editor.update(() => {
+        const paragraph = $getRoot().getFirstChild()
+        const token = $isElementNode(paragraph) ? paragraph.getFirstChild() : null
+        if (!$isTextNode(token)) throw new Error('missing token node')
+        token.setTextContent('/goal 立即')
+        token.select(8, 8)
+      }, { discrete: true })
+    })
+    expect(b.shell.snapshot.draft).toBe('/goal 立即发布')
+    expect(b.shell.snapshot.phase).toBe('claimed')
+    act(() => { b.shell.editor.update(() => {}, { discrete: true }) })
+    expect(b.view.container.querySelector('[data-lexical-text][style*="business-primary"]')?.textContent).toBe('/goal ')
+  })
+
   it('claim releases automatically; the enter after that goes through adjudication again', async () => {
     const b = await bench()
     b.type('/goal')
@@ -353,8 +384,8 @@ describe('scenario H: backspace breaks the token', () => {
   })
 })
 
-describe('scenario: reference decoration lights up when the lexicon settles', () => {
-  it('a typed /name token gains the text-ref mark without further input once the roll goes hot', async () => {
+describe('scenario: reference decoration follows the current lexicon', () => {
+  it('decorates only the current text when its catalog arrives and clears decoration for an empty catalog', async () => {
     let roll: readonly string[] | undefined
     let notify: (() => void) | undefined
     const b = await scopedBench((inputTriggers) => {
@@ -369,17 +400,32 @@ describe('scenario: reference decoration lights up when the lexicon settles', ()
         },
       } as never)
     })
-    // Typed before the catalog settled: a plain token, no decoration.
-    b.type('/deploy now')
+    b.type('/older now')
     expect(b.view.container.querySelector('[data-composer-text-ref]')).toBeNull()
-    // The catalog settles (ui-skill's settle path fires the same notification).
+    b.type('/deploy now')
+    const draft = b.shell.draftSnapshot
+    expect(b.view.container.querySelector('[data-composer-text-ref]')).toBeNull()
     act(() => {
-      roll = ['deploy']
+      roll = ['older']
       notify?.()
     })
-    act(() => { b.shell.editor.update(() => {}, { discrete: true }) }) // flush the queued re-scan
-    const mark = b.view.container.querySelector('[data-composer-text-ref]')
-    expect(mark?.textContent).toBe('/deploy')
+    expect(b.controller.lexicon.getSnapshot().get('/')).toEqual(['older'])
+    expect(b.view.container.querySelector('[data-composer-text-ref]')).toBeNull()
+    act(() => {
+      roll = ['older', 'deploy']
+      notify?.()
+    })
+    await vi.waitFor(() => {
+      expect(b.view.container.querySelector('[data-composer-text-ref]')?.textContent).toBe('/deploy')
+    })
+    expect(b.shell.draftSnapshot).toBe(draft)
+    act(() => {
+      roll = []
+      notify?.()
+    })
+    await vi.waitFor(() => { expect(b.view.container.querySelector('[data-composer-text-ref]')).toBeNull() })
+    expect(b.shell.draftSnapshot).toBe(draft)
+    expect(b.shell.snapshot.draft).toBe('/deploy now')
   })
 })
 

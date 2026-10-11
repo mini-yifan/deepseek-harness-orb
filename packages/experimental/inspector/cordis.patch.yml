@@ -1,7 +1,4 @@
-# Built-artifact overlay for the experimental inspector:
-#   node apps/cli/lib/bin.js web --patch ./packages/experimental/inspector/cordis.patch.yml
-# The relative entry is anchored to this file, so the private package does not
-# need to be installed into the selected profile. Run `pnpm run build` first.
+# Explicit local debugging overlay; the Host prints its debugging URL.
 
 - insert:
     - id: experimental-inspector

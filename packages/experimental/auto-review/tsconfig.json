@@ -39,7 +39,13 @@
       "path": "../../core/tools"
     },
     {
+      "path": "../../interaction/user-approval"
+    },
+    {
       "path": "../../util/values"
+    },
+    {
+      "path": "../../session/working-directory"
     }
   ]
 }

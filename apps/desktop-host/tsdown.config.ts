@@ -23,6 +23,11 @@ export default defineConfig([
     ...nodeBundle,
   },
   {
+    entry: ['lib/types/cli.js'],
+    outputOptions: { codeSplitting: false },
+    ...nodeBundle,
+  },
+  {
     entry: ['lib/types/computer-use-preset-root.js'],
     ...nodeBundle,
   },

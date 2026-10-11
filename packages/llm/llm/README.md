@@ -25,6 +25,8 @@ Use `@deepseek-ai/dsh-llm` to stream model calls through configured provider ada
 <a id="use-this-package"></a>
 ## Use this package
 
+`listModels` describes models offered by catalog-driven interfaces. Core resolution and streaming can still accept unlisted ids. The GUI requires catalog membership for selection and submission; adapters intended for GUI use must implement `listModels` and advertise their available models. The base implementation returns an empty list and therefore offers no GUI models.
+
 Any composition that calls a model provider — an agent loop, a session-title generator, a compaction summarizer — streams its requests through this service. Mount it together with at least one provider adapter; the service itself has no configuration and no provider wire code.
 
 ### When to choose it
@@ -37,7 +39,7 @@ Mount the service and at least one adapter, then select the provider by name in 
 
 ```yaml
 - name: '@deepseek-ai/dsh-llm'
-- name: '@deepseek-ai/dsh-llm-deepseek'
+- name: '@deepseek-ai/dsh-llm-deepseek-api-key'
   config:
     apiKeyEnv: DEEPSEEK_API_KEY
 ```
@@ -58,6 +60,25 @@ After a successful mount, `ctx.llm.listProviders()` reports the registered route
 
 `GenerateOptions.messages` accepts durable `Message` values and request-only `RequestUserInput` values. Request-only inputs carry user-role content with no `id` or `source`; Session writes and Agent delivery still require durable messages. Callers keep auxiliary inputs unchanged until the stream settles. A caller that records its exact request, such as session-title generation, must use durable messages.
 
+`prepareCall(config, signal, configure?)` accepts concrete `LlmCallConfig` values. The optional synchronous, pure `ConfigureCall` function receives detached, deeply frozen `LlmCallControls` and model metadata from the captured adapter generation. Callers can compose ordinary functions to choose concrete controls; later writes replace earlier ones. Preparation retains the captured route, applies defaults to omitted controls, validates the result, and returns a frozen configuration for recording and dispatch. Callback failures or cancellation reject before dispatch. Preparation requires a registered adapter.
+
+Configuration functions select controls before adapter defaults are materialized. For example, combine least-effort selection with an explicit output cap, then pass `configure(maxTokens)` as the third argument:
+
+```ts
+import type { ConfigureCall } from '@deepseek-ai/dsh-llm'
+
+const leastReasoning: ConfigureCall = (controls, model) => {
+  const first = model.reasoning?.efforts[0]
+  return first === undefined ? controls : { ...controls, reasoningEffort: first.id }
+}
+
+const outputLimit = (maxTokens: number): ConfigureCall =>
+  controls => ({ ...controls, maxTokens })
+
+const configure = (maxTokens: number): ConfigureCall =>
+  (controls, model) => outputLimit(maxTokens)(leastReasoning(controls, model), model)
+```
+
 ### What you can do
 
 - **Stream one model call** — `ctx.llm.stream(options)` yields raw chunks (token-level deltas) for any registered provider and model; consumers assemble them with `BlockAssembler`.
@@ -69,7 +90,7 @@ After a successful mount, `ctx.llm.listProviders()` reports the registered route
 
 ### Failures and recovery
 
-Every stream ends in exactly one terminal `finish` chunk: `{ kind: 'error', failure }` on failure, `{ kind: 'aborted', failure }` on cancellation. Failures carry stable codes such as `NO_ADAPTER`, `MISSING_CREDENTIAL`, `AUTH`, `RATE_LIMIT`, and `CONTEXT_WINDOW_EXCEEDED`; consumers route on the code, never on message text. A request naming an unregistered provider fails with `NO_ADAPTER`, and a malformed credential fails with `INVALID_CREDENTIAL` instead of surfacing as an opaque fetch error. This service never re-runs a request: retrying is the job of `dsh-llm-retry` at the agent's failed-step extension point.
+Every stream ends in exactly one terminal `finish` chunk: `{ kind: 'error', failure }` on failure, `{ kind: 'aborted', failure }` on cancellation. Failures carry stable codes such as `NO_ADAPTER`, `MISSING_CREDENTIAL`, `AUTH`, `RATE_LIMIT`, and `CONTEXT_WINDOW_EXCEEDED`; consumers route on the code, never on message text. `QUOTA` is provider-neutral exhaustion, while `ACCOUNT_QUOTA` is reserved for a first-party account balance that the current product can replenish. A request naming an unregistered provider fails with `NO_ADAPTER`, and a malformed credential fails with `INVALID_CREDENTIAL` instead of surfacing as an opaque fetch error. This service never re-runs a request: retrying is the job of `dsh-llm-retry` at the agent's failed-step extension point.
 
 -----
 
@@ -105,7 +126,7 @@ The service is built on one separation: **the logical contract is provider-neutr
 
 A request is validated against its exact model's capability — context window, output default, reasoning efforts, input modalities, and `systemPromptUpdate` mode — and any adapter-configured defaults are materialized. The runtime preserves freezing for already-frozen input; hand-built callers own input immutability. `prepareCall()` binds those facts, detached context, and retry policy to the exact adapter generation that performs terminal dispatch, so HMR or dynamic settings cannot combine one generation's image capability with another generation's endpoint. An image-capable adapter projects durable references into route-specific request versions; `resolveImageAttachmentAccess()` separately maps an attachment provider's optional host object into the current tool execution world without changing the request image or its `variantId`. A text-only route receives deterministic per-image placeholders, including tool-role result images, without rewriting append-only session history. Durable `FileBlock` references never reach any adapter: request assembly replaces each one, including tool-role result occurrences, with deterministic handle text naming the file and its saved read-only path, resolved through the mounted attachment and filesystem providers. `ctx.llm.fileRequestText(ref)` exposes that exact synchronous projection to request measurement. An image occurrence derived with `offloaded: true` reaches every route as placeholder text through `projectOffloadedImages()`. An image-capable route whose retained occurrences exceed its `LlmImageRequestBudget` at their exact bytes fails with `IMAGE_OFFLOAD_REQUIRED` naming the additional oldest occurrences (`requiredImageOffload()`), never with an unlogged projection; `dsh-compaction-image-offload` logs the selected occurrences in one `image/offload` event and retries. Adapters that charge visual tokens declare per-route `imageRequestPricing`, which `ctx.llm.imageRequestPricing(provider, model)` resolves synchronously for the token meter. Dispatch goes through the `llm/stream` waterfall, then chunks return as token-level deltas and every adapter outcome reaches the consumer as one terminal `finish` chunk.
 
-File detection reads current content, including tool-role result content, on every request without caching message identities or freeze state. The [file-scan decision](../../../.agents/notes/implemented/simplification/2026-09-07-file-content-scan.md) records the measured traversal cost.
+File detection reads current content, including tool-role result content, on every request without caching message identities or freeze state. The [archived file-scan decision](../../../.agents/notes/archived/simplification/2026-09-07-file-content-scan.md) records the measured traversal cost.
 
 ### Invariants
 
@@ -157,7 +178,7 @@ These limits define where this service stops and other packages or future work b
 - **Variants normally require a producer** — `prefill`, per-tool `strict`, block `cache` hints, and the `agent` message-source variant have no producer ([Agent Note](../../../.agents/notes/archived/simplification/2026-07-04-prune-producerless-vocabulary-variants.md)).
 - **`BlockAssembler` handles core block kinds only** — a plugin-added block type whose stream is never closed by `block-end` makes `blocks()` throw.
 - **`GenerateOptions.sessionId` is a locally-declared brand** — importing dsh-session's `SessionId` would create a dependency cycle.
-- **Session-change types are a V4 persistence exception** — `DeveloperMessage` carries incremental session changes. Additions and removals name tools; the containing Session event binds additions to a historical request header that owns their definitions. See [Session references](../../core/session/README.md) for admission and restoration. Provider serialization, deferred loading, and UI presentation remain deferred. Both DeepSeek protocols and pi-ai reject developer history and `deferLoading` requests; Chat and Trajectory reject developer events. Ordinary requests retain their existing behavior.
+- **Tool updates require session history** — `GenerateOptions.tools` contains active definitions. `toolHistory` supplies the initial declarations and historically resolved additions from `Session.toolHistory()`. At adapter dispatch, `projectToolUpdates` constructs deferred declarations and retains removed definitions for `in-history`; `addition-only` omits removed definitions and removal messages. Unsupported routes receive active tools without developer messages or `deferLoading`. Missing history or a request prefix omitting recorded updates falls back to current declarations without developer messages. Explicitly deferred baseline tools remain deferred until their first retained addition block; declaring a deferred tool does not activate it.
 
 <a id="dev-note"></a>
 ### Dev Note

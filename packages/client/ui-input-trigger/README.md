@@ -25,7 +25,7 @@ When users type `/` or `@` at the caret in the Web GUI, this package opens a gro
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount this plugin alongside `ui-conversation`; the menu then appears in the input overlay when the user types a trigger under the caret. Grouped candidates render under title rows, or under the section headings a source attaches to its own rows; a pick routes to the source, and the consuming surface applies the result — a slash command opens its popup or executes, a reference inserts its inline token. A row shows its icon, its title (the candidate `label`, or the `name` when no label is given), the `name` as a trailing alias when the label is not the name in another letter case, and the description right-aligned; a query matches either the name or the label.
+Mount this plugin alongside `ui-conversation`; the menu then appears in the input overlay when the user types a trigger under the caret. Grouped candidates render under title rows, or under the section headings a source attaches to its own rows; a pick routes to the source, and the consuming surface applies the result — a slash command opens its popup or executes, a reference inserts its inline token. Menu icons and navigation chevrons use the `--dsw-alias-menu-icon` color. A row shows its icon, its title (the candidate `label`, or the `name` when no label is given), the `name` as a trailing alias when the label is not the name in another letter case, and the description right-aligned; a query matches either the name or the label.
 
 ### Keyboard and mouse
 
@@ -37,6 +37,8 @@ A source may implement `openReference(session, reference)` to open a draft refer
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
+
+Menus use the shared `MenuSurface` material, including the macOS backing for background blur; custom content follows the [menu rules](../../../docs/web-styling.md#component-rules).
 
 <details>
 <summary>Implementation internals — click to expand</summary>
@@ -55,7 +57,7 @@ Read these pages when the trigger pipeline is not enough. They move from the pip
 - [ui-commands](../ui-commands/README.md) — registers the `/` command source into this pipeline and owns the command popup shell.
 - [ui-reference](../ui-reference/README.md) — registers the `@` file and session reference sources.
 - [ui-conversation](../ui-conversation/README.md) — declares the input overlay slot and owns the composer and input machine.
-- [Web client architecture](../../../.agents/notes/implemented/architecture/2026-07-19-gui-web-client-architecture.md) — how browser plugin rows load and register slots.
+- [Web client architecture](../../../docs/subsystems/web-client.md) — how browser plugin rows load and register slots.
 
 -----
 
@@ -87,5 +89,3 @@ These limits define the current trigger pipeline. They are current package const
 None.
 
 </details>
-
-**Runtime invariant:** No companion is published. The trigger pipeline is a browser-side pure core (detect/reduce/match) plus a registry whose disposal is proven by the HMR-safety spec; it emits no cordis events and owns no cross-plugin mutable state.

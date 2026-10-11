@@ -4,7 +4,7 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
+import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek-api-key'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import * as Spawn from '@deepseek-ai/dsh-subagent-spawn-in-process'
 import PtcWorkflowEngine from '../src/index.ts'
@@ -19,7 +19,7 @@ afterEach(async () => {
 
 async function harness(): Promise<Context> {
   const built = new Context()
-  await mountAgentLoopTestDependencies(built)
+  await mountAgentLoopTestDependencies(built, { workingDirectory: true })
   await mountPtcRuntime(built)
   await built.plugin(AgentLoop, { agents: [] })
   await built.plugin(LlmDeepSeek)

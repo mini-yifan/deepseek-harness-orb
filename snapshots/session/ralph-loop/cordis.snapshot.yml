@@ -2,7 +2,7 @@
 # `text-turn/cordis.snapshot.yml` applies only to the `default` composition, so
 # a sibling composition restates those swaps and adds its own rows.
 - id: llm-deepseek
-  name: '@deepseek-ai/dsh-llm-deepseek'
+  name: '@deepseek-ai/dsh-llm-deepseek-api-key'
   disabled: true
 
 - id: plugin-package-inventory-deepseek
@@ -44,5 +44,9 @@
               - id: deepseek-v4-flash
               - id: deepseek-v4-pro
 
-- id: tool-ralph
-  disabled: false
+- insert:
+    - id: tool-ralph
+      name: '@deepseek-ai/dsh-tool-ralph'
+      config:
+        subagentProvider: spawn
+        maxRounds: 64

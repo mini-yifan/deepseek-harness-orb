@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-15-computer-use-code-agent-completion.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-15-computer-use-code-agent-completion.md
-2026-09-15-computer-use-code-agent-completion.md: 8fd9918b8e64018e9e927ddc49fda81c8e817bd1
-2026-09-15-computer-use-code-agent-completion.zh.md: d7b8158bf0656bf835a5c85b0be5093de8d2f6b0
+/agent-note-computer-use-parks-code-agent-completion:
+  en: 5264e503a77464f3
+  zh: 9258e6983b265c43
+/agent-note-computer-use-parks-code-agent-completion/problem:
+  en: 7afa7e259ca2edcf
+  zh: 8064d652613f3efb
+/agent-note-computer-use-parks-code-agent-completion/decision:
+  en: da8b9dfd5757b36b
+  zh: 6c4b481d54eaed2c
+/agent-note-computer-use-parks-code-agent-completion/alternatives-considered:
+  en: 3e0eb44e9269ddfb
+  zh: 8e011944a0c3b5dc
+/agent-note-computer-use-parks-code-agent-completion/consequences:
+  en: 8922f07032f59f13
+  zh: b5d96ad3bd6d1771
+/agent-note-computer-use-parks-code-agent-completion/testing:
+  en: b3fd9e1c8c280b8d
+  zh: 9db25da218b42462

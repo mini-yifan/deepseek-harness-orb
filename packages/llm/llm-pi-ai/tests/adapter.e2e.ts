@@ -4,7 +4,7 @@ import LlmRuntime, { createToolResultMessage, createUserMessage, ToolCallId, Rea
 import type { Message, ToolSchema } from '@deepseek-ai/dsh-llm'
 import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import type { PiAiProviderProfile } from '@deepseek-ai/dsh-llm-pi-ai'
-import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
+import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek-api-key'
 import { assemble, type AssembledResult } from './assemble.ts'
 
 /**
@@ -13,7 +13,7 @@ import { assemble, type AssembledResult } from './assemble.ts'
  * and exercises a replayed tool follow-up. Key-gated.
  */
 
-const FLASH = 'deepseek-v4-flash'
+const FLASH = 'deepseek-flash'
 const contexts: Context[] = []
 
 async function harness(_model: string, config: Partial<PiAiProviderProfile> = {}) {

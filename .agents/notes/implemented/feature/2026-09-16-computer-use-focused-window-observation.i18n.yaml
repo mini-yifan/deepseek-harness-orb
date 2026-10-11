@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-16-computer-use-focused-window-observation.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-16-computer-use-focused-window-observation.md
-2026-09-16-computer-use-focused-window-observation.md: 1b9f09e60ecbb9e6fc6a3374520809e844a73145
-2026-09-16-computer-use-focused-window-observation.zh.md: b2d768e7e02c8a113e1f0dd71f4823b62b01d0d0
+/agent-note-computer-use-focused-window-observation:
+  en: f149e99a7e68de23
+  zh: 70ffe7e363eba2dd
+/agent-note-computer-use-focused-window-observation/problem:
+  en: d9706bc25b240453
+  zh: d586638a471c0a8b
+/agent-note-computer-use-focused-window-observation/decision:
+  en: d79cab0763dcbfe0
+  zh: 03e78ebbbfaff773
+/agent-note-computer-use-focused-window-observation/alternatives-considered:
+  en: 2ab24a0361e2b1ad
+  zh: e991e68efd2ee544
+/agent-note-computer-use-focused-window-observation/consequences:
+  en: 6d234f50c63dc744
+  zh: 1a7be8419db37375
+/agent-note-computer-use-focused-window-observation/testing:
+  en: 544012f04308b7fd
+  zh: 69f141daf47bc79c

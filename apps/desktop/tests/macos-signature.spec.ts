@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
 import type { NotarizeOptions } from '@electron/notarize'
 import {
   resolveDesktopAppId,
@@ -44,6 +45,12 @@ describe('desktop macOS release signature', () => {
     expect(config.protocols).toEqual([{ name: 'DeepSeek Orb', schemes: ['dsh'] }])
     expect(portablePath(config.directories.output)).toContain('/.desktop-build/targets/mac-arm64/artifacts')
     expect(config.mac.extendInfo.NSMicrophoneUsageDescription).toContain('microphone')
+    expect(config.mac.entitlementsInherit).toBe(config.mac.entitlements)
+    const entitlements = readFileSync(config.mac.entitlements, 'utf8')
+    for (const key of ['com.apple.security.cs.allow-jit', 'com.apple.security.cs.allow-unsigned-executable-memory',
+      'com.apple.security.cs.disable-library-validation', 'com.apple.security.device.audio-input']) {
+      expect(entitlements).toContain(`<key>${key}</key>\n    <true/>`)
+    }
     expect(config.extraResources).toHaveLength(3)
     expect(config.extraResources[0]?.to).toBe('runtime')
     expect(config.extraResources[2]?.to).toBe('computer-use/cordis.patch.yml')
@@ -87,9 +94,9 @@ describe('desktop macOS release signature', () => {
     const ignored = (path: string): boolean => config.mac.signIgnore.some(pattern => new RegExp(pattern).test(path))
     expect(ignored('/App.app/Contents/Frameworks/Electron.framework/Versions/A/Resources/en.lproj/locale.pak')).toBe(true)
     expect(ignored('/App.app/Contents/Frameworks/Electron.framework/Versions/A/Resources/resources.pak')).toBe(true)
+    expect(ignored('/App.app/Contents/Resources/runtime/primary-runtime/dependencies/pnpm/addon.node')).toBe(true)
     for (const path of [
       '/App.app/Contents/Resources/runtime/node/node',
-      '/App.app/Contents/Resources/runtime/pnpm/addon.node',
       '/App.app/Contents/Frameworks/Electron.framework/Versions/A/library.dylib',
       '/App.app/Contents/Frameworks/Electron.framework',
       '/App.app',
@@ -123,20 +130,30 @@ describe('desktop macOS release signature', () => {
     })
   })
 
-  it('isolates unsigned macOS artifacts without a signing identity', async () => {
-    const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
+  it.each(['arm64', 'x64'])('builds local macOS %s DMGs without release credentials or update metadata', async (arch) => {
+    const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
     const config = createElectronBuilderConfig({
-      ...RELEASE_ENVIRONMENT,
+      DSH_DESKTOP_APP_ID: RELEASE_ENVIRONMENT.DSH_DESKTOP_APP_ID,
       DSH_DESKTOP_UNSIGNED: '1',
-      DSH_DESKTOP_TARGET_PLATFORM: 'darwin',
-      DSH_DESKTOP_TARGET_ARCH: 'arm64',
-    }, 'darwin', 'arm64')
-    expect(portablePath(config.directories.output)).toContain('/targets/mac-arm64/unsigned-artifacts')
-    expect(config.mac).toMatchObject({ identity: null, forceCodeSigning: false, notarize: false, target: ['dmg'] })
-    expect(config.dmg.sign).toBe(false)
+    }, 'darwin', arch)
+    expect(portablePath(config.directories.output)).toContain(`/targets/mac-${arch}/unsigned-artifacts`)
+    expect(config.artifactName).toBe('deepseek-harness-${version}-${os}-${arch}-unsigned.${ext}')
+    expect(config.mac).toMatchObject({ identity: '-', forceCodeSigning: false, notarize: false, target: ['dmg'] })
+    expect(config.dmg).toMatchObject({ sign: false, writeUpdateInfo: false })
+    expect(config.publish).toBeNull()
+    expect(config.extraMetadata).not.toHaveProperty('dshMandatoryUpdatePolicy')
+    await expect(config.afterSign({ electronPlatformName: 'darwin' } as Parameters<typeof config.afterSign>[0])).resolves.toBeUndefined()
+    expect(config.artifactBuildCompleted({ file: '/tmp/local-unsigned.dmg' })).toBeUndefined()
   })
 
-  it('rejects a malformed signing mode', async () => {
+  it('omits mandatory-update policy from local macOS builds even when release settings are supplied', async () => {
+    const { createElectronBuilderConfig } = await import('../scripts/electron-builder-config.mjs')
+    const config = createElectronBuilderConfig({ ...RELEASE_ENVIRONMENT, DSH_DESKTOP_UNSIGNED: '1' }, 'darwin', 'arm64')
+    expect(config.extraMetadata).not.toHaveProperty('dshMandatoryUpdatePolicy')
+    expect(config.publish).toBeNull()
+  })
+
+  it('rejects malformed signing modes', async () => {
     const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
     expect(() => createElectronBuilderConfig({ ...RELEASE_ENVIRONMENT, DSH_DESKTOP_UNSIGNED: 'yes' }))
       .toThrow(/must be 0 or 1/u)

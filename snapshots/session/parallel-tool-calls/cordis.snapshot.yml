@@ -2,7 +2,7 @@
 # sandboxed filesystem stack already lives in `dsh-base`; the ACP row re-pins
 # `deepseek-v4-flash` for the recorded corpus.
 - id: llm-deepseek
-  name: '@deepseek-ai/dsh-llm-deepseek'
+  name: '@deepseek-ai/dsh-llm-deepseek-api-key'
   disabled: true
 
 - id: agent-default-model
@@ -26,7 +26,7 @@
   name: '@deepseek-ai/dsh-system-prompt'
   config:
     personaPrefix: |
-      You are a coding assistant powered by the {{model}} model. Your working directory is {{cwd}}. Your bash tool runs under a file sandbox — a `[sandbox: file access denied …]` result is policy, not a command bug.
+      You are a coding assistant powered by the {{model}} model. Your bash tool runs under a file sandbox — a `[sandbox: file access denied …]` result is policy, not a command bug.
 
       Verify your work by running the code or tests. Keep answers brief and factual.
 

@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-17-overlay-access-picker.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-17-overlay-access-picker.md
-2026-09-17-overlay-access-picker.md: 0bb01edefa86cfb796ffeec3cbf0b425046677c8
-2026-09-17-overlay-access-picker.zh.md: 4920918427e0acd85a0cdf437d91bb370b68d65a
+/agent-note-overlay-access-picker-and-shared-orb-permission:
+  en: 0ee2ebbc0238550f
+  zh: b3e710ef0f4970d4
+/agent-note-overlay-access-picker-and-shared-orb-permission/problem:
+  en: 7f9a7cf90045e4b8
+  zh: 56ee4b9277228947
+/agent-note-overlay-access-picker-and-shared-orb-permission/decision:
+  en: 0d4c339afa1576eb
+  zh: f411b216365619f3
+/agent-note-overlay-access-picker-and-shared-orb-permission/alternatives-considered:
+  en: 5be780edf2761785
+  zh: d2152025f703d182
+/agent-note-overlay-access-picker-and-shared-orb-permission/consequences:
+  en: e7b566d81f74427f
+  zh: 9cee26af6a0f3924
+/agent-note-overlay-access-picker-and-shared-orb-permission/testing:
+  en: bab5fbd54bdf712d
+  zh: 3fcdb5b7b4e3c313

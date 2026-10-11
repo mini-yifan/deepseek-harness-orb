@@ -52,7 +52,7 @@ interface FakeChokidar {
   __instances: Array<{
     path: string
     options: { awaitWriteFinish: { stabilityThreshold: number; pollInterval: number } }
-    watcher: import('node:events').EventEmitter
+    watcher: import('node:events').EventEmitter & { close: () => Promise<void> }
   }>
 }
 
@@ -141,31 +141,24 @@ describe('watcher pipeline', () => {
     expect(await ctx.credentials.resolve(KEY)).toEqual({ value: 'good', source: 'file' })
   })
 
-  it('keeps the reload queue alive after an invariant violation escapes the fan-out', async () => {
+  it('contains a watcher error emitted after close removed its listeners', async () => {
     const dir = await tempDir()
     const path = join(dir, '.credentials.yaml')
-    const ctx = await boot({ path, debounceMs: 5 })
-    let arm = true
-    ctx.on('credentials/reference-updated', () => {
-      if (!arm) return
-      throw Object.assign(new Error('forged relation'), { code: 'INVARIANT' })
-    })
+    const ctx = new Context()
+    const fiber = ctx.plugin(LocalCredentialProvider, { path, debounceMs: 5 })
+    await fiber
     const [instance] = await fakeInstances()
-
-    await writeCredentials(path, 'version: 1\nrefs:\n  DSH_CRED_PIPE: first\n')
-    instance!.watcher.emit('all', 'change', path)
-    // The snapshot commits before the fan-out, so the value lands even though
-    // the listener threw out of the refresh.
-    await vi.waitFor(async () => {
-      expect(await ctx.credentials.resolve(KEY)).toEqual({ value: 'first', source: 'file' })
+    // Mirror the real close(): it drops every listener before a pending write-settle poll fires.
+    instance!.watcher.close = vi.fn(() => {
+      instance!.watcher.removeAllListeners()
+      return Promise.resolve()
     })
+    await fiber.dispose()
 
-    arm = false
-    await writeCredentials(path, 'version: 1\nrefs:\n  DSH_CRED_PIPE: second\n')
-    instance!.watcher.emit('all', 'change', path)
-    await vi.waitFor(async () => {
-      expect(await ctx.credentials.resolve(KEY)).toEqual({ value: 'second', source: 'file' })
-    })
+    expect(() => instance!.watcher.emit('error', Object.assign(
+      new Error("EPERM: operation not permitted, stat 'C:\\Temp\\dsh\\.credentials.yaml'"),
+      { code: 'EPERM', syscall: 'stat' },
+    ))).not.toThrow()
   })
 
   it('quiesces the refresh pipeline before dispose completes', async () => {

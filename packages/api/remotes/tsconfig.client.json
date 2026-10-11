@@ -11,6 +11,7 @@
     "src/types.ts"
   ],
   "references": [
+    { "path": "../../client/product-analytics/tsconfig.client.json" },
     {
       "path": "../../../vendor/cordis"
     },
@@ -37,6 +38,9 @@
     },
     {
       "path": "../../goal/goal"
+    },
+    {
+      "path": "../../schedule/schedule"
     },
     {
       "path": "../../feedback/message-feedback"
@@ -100,6 +104,9 @@
     },
     {
       "path": "../account-controller"
+    },
+    {
+      "path": "../../credentials/deepseek-account"
     }
   ]
 }

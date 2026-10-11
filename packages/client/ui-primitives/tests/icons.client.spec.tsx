@@ -17,8 +17,8 @@ const icons = Object.fromEntries(
 const iconNames = Object.keys(icons)
 
 describe('product icon set', () => {
-  it('exports regular and medium variants for all 93 public glyphs', () => {
-    expect(iconNames.length).toBe(186)
+  it('exports regular and medium variants for all 94 public glyphs', () => {
+    expect(iconNames.length).toBe(188)
     expect(iconNames.some(name => /\d+$/.test(name))).toBe(false)
     const regular = iconNames.filter(name => name.endsWith('Regular')).map(name => name.slice(0, -'Regular'.length))
     const medium = iconNames.filter(name => name.endsWith('Medium')).map(name => name.slice(0, -'Medium'.length))
@@ -82,6 +82,7 @@ describe('product icon set', () => {
       [primitives.PermissionIconReadOnlyRegular, primitives.PermissionIconReadOnlyMedium],
       [primitives.PermissionIconWorkspaceWriteRegular, primitives.PermissionIconWorkspaceWriteMedium],
       [primitives.PermissionIconFullAccessRegular, primitives.PermissionIconFullAccessMedium],
+      [primitives.PermissionIconAutoReviewRegular, primitives.PermissionIconAutoReviewMedium],
     ] as const
     for (const [Regular, Medium] of pairs) {
       const regular = render(<Regular />)

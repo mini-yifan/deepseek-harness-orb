@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-19-overlay-growing-composer.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-19-overlay-growing-composer.md
-2026-09-19-overlay-growing-composer.md: 467f5f68067a306f9aa8e70b5388c7e0b15f756e
-2026-09-19-overlay-growing-composer.zh.md: e593d69039eed0fb919309c80f55ad77cf9ee1ef
+/agent-note-overlay-composer-grows-around-the-ball:
+  en: f6eb1446a35aa3da
+  zh: ed9cc61d65af3d5f
+/agent-note-overlay-composer-grows-around-the-ball/problem:
+  en: df05dcd214a50e20
+  zh: 236cb9df91c4c54f
+/agent-note-overlay-composer-grows-around-the-ball/decision:
+  en: aa5027d57343b98f
+  zh: ba678b6460f37ac3
+/agent-note-overlay-composer-grows-around-the-ball/alternatives-considered:
+  en: 4c3fecd7c28ce31d
+  zh: 92add05f17ac3340
+/agent-note-overlay-composer-grows-around-the-ball/consequences:
+  en: 0618d7123a843c6a
+  zh: c7072b502375a03f
+/agent-note-overlay-composer-grows-around-the-ball/testing:
+  en: 65399be416d29466
+  zh: e3a75c4afe503551

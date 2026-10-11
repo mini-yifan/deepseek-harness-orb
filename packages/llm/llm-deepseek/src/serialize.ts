@@ -1,4 +1,4 @@
-/** Map system snapshots and conversation turns to Messages using the configured route capability. */
+/** Map system snapshots, tool changes, and conversation turns to Messages using the configured route capability. */
 
 import { LlmError, requestImageHandleText } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, GenerateOptions, ImageAttachmentAccessResolver, Message, RequestMessage } from '@deepseek-ai/dsh-llm'
@@ -41,6 +41,9 @@ function assistant(message: Message, model: string, onReplayDegrade?: (reason: s
 /** Serialize one complete request using already prepared image bytes.
  * User and tool-result content omits reasoning and tool-call blocks.
  * Empty user messages are skipped; empty tool results retain their call ids.
+ * Developer messages, already projected for this route by `LlmRuntime`, become
+ * system-role updates after the preceding user turn, with tool changes as
+ * `tool_addition` and `tool_removal` references to the declared tool.
  * @param options - provider-neutral request.
  * @param connection - validated defaults and thinking policy.
  * @param history - image-projected history with complete system snapshots; durable messages remain unchanged.
@@ -83,11 +86,19 @@ export function serialize(
     if (messages.at(-1)?.role !== 'user') return unsupported('system update without a preceding user or tool-result turn')
     messages.push(...systemUpdates.splice(0))
   }
-  // Deferred definitions are persisted for V4; provider loading is intentionally deferred.
-  if (options.tools?.some(tool => tool.deferLoading === true)) return unsupported('deferred tool loading')
   for (const message of history) {
-    // Developer history is persisted for V4; provider serialization is intentionally deferred.
-    if (message.role === 'developer') return unsupported('developer message')
+    if (message.role === 'developer') {
+      const content = message.content.flatMap((block): WireBlock[] => {
+        switch (block.type) {
+          case 'text': return block.text.length === 0 ? [] : [{ type: 'text', text: block.text }]
+          case 'tool-addition': return [{ type: 'tool_addition', tool: { type: 'tool_reference', name: block.toolName } }]
+          case 'tool-removal': return [{ type: 'tool_removal', tool: { type: 'tool_reference', name: block.toolName } }]
+          default: return unsupported(`developer content ${block.type}`)
+        }
+      })
+      if (content.length > 0) systemUpdates.push({ role: 'system', content })
+      continue
+    }
     if (message.content.some(block => block.type === 'tool-addition' || block.type === 'tool-removal')) {
       return unsupported('tool-change blocks outside developer messages')
     }
@@ -132,7 +143,7 @@ export function serialize(
     }
   }
   if (pending.size > 0) throw new LlmError('DeepSeek Messages history ends with unresolved tools', 'INVALID_REQUEST')
-  const effort = options.purpose === 'session-title' ? 'off' : options.reasoningEffort ?? (connection.defaults.reasoningEffort ?? (connection.defaults.thinking === 'disabled' ? 'off' : 'high'))
+  const effort = options.reasoningEffort ?? (connection.defaults.reasoningEffort ?? (connection.defaults.thinking === 'disabled' ? 'off' : 'high'))
   if (!['off', 'low', 'high', 'max'].includes(effort) || (connection.defaults.thinking === 'disabled' && effort !== 'off')) {
     throw new LlmError(`DeepSeek Messages does not support reasoning effort ${effort}`, 'UNSUPPORTED_REASONING_EFFORT')
   }
@@ -146,7 +157,12 @@ export function serialize(
     ...options.temperature === undefined ? {} : { temperature: options.temperature },
     ...options.stop === undefined ? {} : { stop_sequences: options.stop },
     ...options.tools === undefined ? {} : {
-      tools: options.tools.map(tool => ({ name: tool.name, description: tool.description, input_schema: tool.parameters })),
+      tools: options.tools.map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        input_schema: tool.parameters,
+        ...tool.deferLoading === true ? { defer_loading: true as const } : {},
+      })),
     },
   }
 }

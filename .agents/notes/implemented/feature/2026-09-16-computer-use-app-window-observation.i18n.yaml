@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-16-computer-use-app-window-observation.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-16-computer-use-app-window-observation.md
-2026-09-16-computer-use-app-window-observation.md: 8d07e7e4b2469dad8a9aa011b2c04f515706ff5e
-2026-09-16-computer-use-app-window-observation.zh.md: bd26a26d17078f16640a237bc4be01d1e66ed71e
+/agent-note-computer-use-app-window-observation:
+  en: 525144f3fcbf692a
+  zh: db0a97f0912f5c5a
+/agent-note-computer-use-app-window-observation/problem:
+  en: e7d848638ff97bcf
+  zh: 37a2786eaba1feaf
+/agent-note-computer-use-app-window-observation/decision:
+  en: fcc23ce87e2c4fa4
+  zh: 4999d9ae4b61d896
+/agent-note-computer-use-app-window-observation/alternatives-considered:
+  en: f45b62525e3d511c
+  zh: 4ba529fb7f1448c1
+/agent-note-computer-use-app-window-observation/consequences:
+  en: db0a15e73e18dc1d
+  zh: 0248c53cc6acdbe5
+/agent-note-computer-use-app-window-observation/testing:
+  en: da28ad3eb265cf0c
+  zh: cad0c4e65a0daec0

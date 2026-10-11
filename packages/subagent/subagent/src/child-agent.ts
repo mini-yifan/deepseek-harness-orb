@@ -1,9 +1,7 @@
 /**
  * Shared in-process child composition: the delegation-depth budget, the
  * durable session metadata, the resolved child `AgentOptions`, the delegated
- * policy seed, and the scoped setup a child agent needs. Both the one-shot
- * provider driver and the continuation manager compose children this way, so
- * depth accounting, lineage stamping, and delegation policy have one home.
+ * policy seed, and the scoped setup used by local activations.
  *
  * @module @deepseek-ai/dsh-subagent/child-agent
  */
@@ -220,7 +218,10 @@ export function applyChildComposition(
 
 /** Policy seeded onto a child session's log at the delegation boundary. */
 export interface DelegatedPolicyOverrides {
-  /** The shared-bundle preset identity when the parent currently runs in Auto or Full access. */
+  /**
+   * The parent's current preset identity when it runs in Auto or Full access;
+   * the child keeps it under the pinned `never` approval policy.
+   */
   readonly permissionPreset: 'auto' | 'danger-full-access' | undefined
   /** The parent session's explicit sandbox-mode override, or `undefined` without one. */
   readonly sandboxMode: SandboxMode | undefined

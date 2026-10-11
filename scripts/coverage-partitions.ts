@@ -1,8 +1,13 @@
-/** Coordinate single-worker Vitest coverage partitions and one merged report. */
+/**
+ * Coordinate single-worker Vitest coverage partitions and one merged report.
+ * Separate processes preserve worker isolation; only the complete merged
+ * inventory can enforce per-file coverage thresholds.
+ */
 import { spawn } from 'node:child_process'
 import { globSync, readFileSync, writeFileSync } from 'node:fs'
 import { lstat, mkdir, readdir, rm, unlink, writeFile } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
+import type { TestUserConfig } from 'vitest/config'
 import { coverageExemptHeavySuites } from './coverage-exempt.ts'
 import { pnpmInvocation } from './pnpm-invocation.ts'
 
@@ -12,7 +17,7 @@ export const COVERAGE_PARTITIONS_ENV = 'DSH_COVERAGE_PARTITIONS'
 /** Internal marker that suppresses reports and thresholds inside a partition process. */
 export const COVERAGE_PARTITION_MODE_ENV = 'DSH_COVERAGE_PARTITION_MODE'
 
-/** Environment variable overriding instrumented test, polling, and hook timeouts. */
+/** Environment variable carrying a lane's per-test, hook, and `expect.poll` budget in milliseconds. */
 export const COVERAGE_TEST_TIMEOUT_ENV = 'DSH_COVERAGE_TEST_TIMEOUT_MS'
 
 /**
@@ -22,6 +27,7 @@ export const COVERAGE_TEST_TIMEOUT_ENV = 'DSH_COVERAGE_TEST_TIMEOUT_MS'
  * working directory on every platform.
  */
 const CANONICAL_LOCATIONS_REPORTER = './scripts/coverage-canonical-locations.ts'
+const FILE_TIMES_REPORTER = './scripts/coverage-file-times.ts'
 
 /** One child command owned by the coverage coordinator. */
 export interface CoverageCommand {
@@ -85,22 +91,44 @@ export function parseCoveragePartitionCount(raw: string | undefined): number | u
 }
 
 /**
- * Resolve the paired Vitest timeout arguments used by coverage partitions.
- * `--hookTimeout` travels with the test budget because setup and teardown pay
- * the same host contention the raised test budget accounts for: fixtures that
- * await child exit or retry Windows handle release spend that cost in
- * `afterEach`, where Vitest's separate 10 s default would otherwise fail a
- * suite whose cases all passed.
+ * Parse the lane test budget carried by `DSH_COVERAGE_TEST_TIMEOUT_MS`.
  * @param raw - the configured millisecond budget, or undefined to keep Vitest's defaults.
- * @returns the Vitest arguments applying that budget, empty when unset.
+ * @returns the budget in milliseconds, or undefined when unset.
+ * @throws when the value is set and is not a positive integer.
  */
-export function coverageTestTimeoutArgs(raw: string | undefined): string[] {
-  if (raw === undefined || raw === '') return []
+export function parseCoverageTestTimeout(raw: string | undefined): number | undefined {
+  if (raw === undefined || raw === '') return undefined
   const parsed = Number.parseInt(raw, 10)
   if (!Number.isSafeInteger(parsed) || parsed < 1 || String(parsed) !== raw) {
     throw new Error(`${COVERAGE_TEST_TIMEOUT_ENV} must be a positive integer, got ${JSON.stringify(raw)}.`)
   }
-  return [`--testTimeout=${raw}`, `--expect.poll.timeout=${raw}`, `--hookTimeout=${raw}`]
+  return parsed
+}
+
+/** The Vitest `test` options one lane budget sets in each inline project. */
+export type CoverageTestTimeoutOptions = Pick<TestUserConfig, 'testTimeout' | 'hookTimeout' | 'expect'>
+
+/**
+ * Resolve the Vitest test options that apply one lane budget to the per-test,
+ * hook, and `expect.poll` defaults together. The hook budget travels with the
+ * test budget because setup and teardown pay the same host contention the
+ * raised test budget accounts for: fixtures that await child exit or retry
+ * Windows handle release spend that cost in `afterEach`, where Vitest's
+ * separate 10 s default would otherwise fail a suite whose cases all passed.
+ * The root `vitest.config.ts` spreads these into each inline project, so the
+ * budget governs every Vitest run of that config in an environment carrying
+ * the variable, whichever gate or script starts it. The config, not a CLI
+ * flag, is the only route into inline projects: Vitest forwards a fixed list
+ * of CLI overrides into projects, and `--hookTimeout` and
+ * `--expect.poll.timeout` are not on it (only `--testTimeout` is). Explicit
+ * `describe`, case, and fixture timeouts remain authoritative.
+ * @param raw - the configured millisecond budget, or undefined to keep Vitest's defaults.
+ * @returns the options to spread into a project's `test` block, empty when unset.
+ */
+export function coverageTestTimeoutOptions(raw: string | undefined): CoverageTestTimeoutOptions {
+  const timeout = parseCoverageTestTimeout(raw)
+  if (timeout === undefined) return {}
+  return { testTimeout: timeout, hookTimeout: timeout, expect: { poll: { timeout } } }
 }
 
 /** Remove pnpm's package-script separator before forwarding Vitest arguments. */
@@ -272,23 +300,23 @@ export function writeFileDurations(
 }
 
 /**
- * Extract per-file durations from Vitest JSON reporter outputs (one per
- * partition). Each `testResults` entry names an absolute spec path and carries
- * `startTime`/`endTime`; the difference is the file's recorded duration.
+ * Extract per-file durations from compact timing reports, one per partition.
+ * @param reportFiles - reports mapping repository-relative file paths to milliseconds.
+ * @returns finite, non-negative file costs from readable reports.
  */
-export function collectPartitionDurations(reportFiles: readonly string[], root: string): Map<string, number> {
+export function collectPartitionDurations(reportFiles: readonly string[]): Map<string, number> {
   const durations = new Map<string, number>()
   for (const file of reportFiles) {
-    let report: { testResults?: Array<{ name?: unknown; startTime?: number; endTime?: number }> }
+    let report: unknown
     try {
-      report = JSON.parse(readFileSync(file, 'utf8')) as { testResults?: Array<{ name?: unknown; startTime?: number; endTime?: number }> }
+      report = JSON.parse(readFileSync(file, 'utf8'))
     } catch {
       continue
     }
-    for (const result of report.testResults ?? []) {
-      if (typeof result.name !== 'string' || typeof result.startTime !== 'number' || typeof result.endTime !== 'number') continue
-      const relativePath = relative(root, result.name).split(sep).join('/')
-      durations.set(relativePath, Math.max(0, result.endTime - result.startTime))
+    if (report === null || typeof report !== 'object' || Array.isArray(report)) continue
+    for (const [path, duration] of Object.entries(report)) {
+      if (typeof duration !== 'number' || !Number.isFinite(duration) || duration < 0) continue
+      durations.set(path, duration)
     }
   }
   return durations
@@ -401,6 +429,7 @@ function partitionConfigSource(
   const processBound = JSON.stringify(files.filter(file => projectOf.get(file) === 'process-bound').map(file => file.split('\\').join('/')))
   return [
     "import base from '../../vitest.config.ts'",
+    "import { coverageForkPool } from '../../scripts/coverage-fork-diagnostics.ts'",
     'export default {',
     '  ...base,',
     '  test: {',
@@ -409,6 +438,7 @@ function partitionConfigSource(
     '      ...project,',
     '      test: {',
     '        ...project.test,',
+    '        pool: coverageForkPool,',
     '        include: project.test.name === \'process-bound\' ? ' + processBound + ' : ' + threadSafe + ',',
     '      },',
     '    })),',
@@ -505,10 +535,10 @@ export class CoveragePartitionCoordinator {
   private persistDurations(partitionCount: number): void {
     const reportFiles = Array.from(
       { length: partitionCount },
-      (_, index) => join(this.temporaryRoot, `partition-${index + 1}.report.json`),
+      (_, index) => join(this.temporaryRoot, `partition-${index + 1}.times.json`),
     )
     const currentFiles = this.projectOf.size > 0 ? [...this.projectOf.keys()] : undefined
-    writeFileDurations(this.root, collectPartitionDurations(reportFiles, this.root), currentFiles)
+    writeFileDurations(this.root, collectPartitionDurations(reportFiles), currentFiles)
   }
 
   /**
@@ -557,7 +587,7 @@ export class CoveragePartitionCoordinator {
   private partitionCommand(index: number, configPath: string): CoverageCommand {
     const blobPath = join(this.blobsRoot, `partition-${index}.json`)
     const reportsDirectory = join(this.temporaryRoot, `coverage-${index}`)
-    const jsonReportPath = join(this.temporaryRoot, `partition-${index}.report.json`)
+    const timingReportPath = join(this.temporaryRoot, `partition-${index}.times.json`)
     const invocation = pnpmInvocation([
       'exec',
       'vitest',
@@ -568,10 +598,10 @@ export class CoveragePartitionCoordinator {
       `--config=${this.relativePath(configPath)}`,
       '--reporter=default',
       '--reporter=blob',
-      '--reporter=json',
+      `--reporter=${FILE_TIMES_REPORTER}`,
       `--reporter=${CANONICAL_LOCATIONS_REPORTER}`,
       `--outputFile.blob=${this.relativePath(blobPath)}`,
-      `--outputFile.json=${this.relativePath(jsonReportPath)}`,
+      `--outputFile.fileTimes=${this.relativePath(timingReportPath)}`,
       `--coverage.reportsDirectory=${this.relativePath(reportsDirectory)}`,
       ...this.vitestArgs,
     ], { npm_execpath: this.pnpmEntrypoint })

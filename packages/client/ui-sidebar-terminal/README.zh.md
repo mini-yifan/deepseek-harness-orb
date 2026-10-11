@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-从右侧栏开始页选择已安装的 shell，在会话工作区运行命令。在标签页上重命名终端，并在刷新页面后恢复保留的进程。折叠侧栏让命令继续运行，关闭终端标签页则请求结束进程。Tab 补全使用 shell 的配置。命令使用执行环境中系统用户的权限，独立于 Agent 权限；详见[用户终端执行](../../api/terminal-controller/README.zh.md#use-this-package)。
+从右侧栏开始页选择已安装的 shell，在 Session 当前工作目录运行命令。在标签页上重命名终端，并在刷新页面后恢复保留的进程。折叠侧栏让命令继续运行，关闭终端标签页则请求结束进程。Tab 补全使用 shell 的配置。命令使用执行环境中系统用户的权限，独立于 Agent 权限；详见[用户终端执行](../../api/terminal-controller/README.zh.md#use-this-package)。
 
 ## 目录
 
@@ -25,7 +25,9 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用此包
 
-展开右侧栏，点击**新建终端**即可直接打开上次选择且仍可用的 shell。旁边的箭头展开已安装 shell 菜单；选择后立即记住该项并打开终端。菜单展开时才查询 shell，不分配终端进程；查询失败可在菜单内重试。通过**新标签页**回到开始页并打开更多终端。
+命令 `terminal.new` 在焦点停靠分栏创建独立终端，替换开始页并保留已有内容页。从聊天区或浮动内容页触发时，使用活动停靠分栏。开始页卡片右侧对齐显示当前有效快捷键的无背景文字，不额外弹出重复提示。Windows 和 macOS Web 使用[快捷键服务的平台默认值](../shortcuts/README.zh.md)；Linux Web 默认不绑定此命令。
+
+展开右侧栏，点击**新建终端**即可直接打开上次选择且仍可用的 shell。标题旁的独立箭头展开已安装 shell 菜单；选择后立即记住该项并打开终端。菜单展开时才查询 shell，不分配终端进程；查询失败可在菜单内重试。通过**新标签页**回到开始页并打开更多终端。
 
 双击终端标签标题可重命名。其他页面持有输入权时，点击 **接管输入** 使当前连接可写。暂时断线时保留屏幕并提供 **重新连接**，不展示传输内部错误。已退出的 shell 仍显示退出码并提供 **新建终端**，不会自动重启。已退出的终端仍计入 Session 配额；达到上限时请关闭不用的标签。
 
@@ -33,7 +35,7 @@ kind: "package-reference"
 
 刷新后，[侧栏恢复布局](../../client/ui-sidebar-right/README.zh.md#state)，各终端在原标签页中重连保存的 Host 身份。折叠和非当前标签不会产生重复的恢复标签，也不改变选中项。保存布局之外的 Host 终端不会自动打开，也没有 UI 恢复入口；它们仍由 controller 的无人持有空闲回收及 Session/Host 卸载清理管理。保存的进程已消失时，显示本地化的不可用提示和 **新建终端**。点击后在原位置用全新终端替换失效标签；恢复过程不会自动创建替代进程。
 
-终端背景、默认文字、光标和选区跟随 DSH 主题，包括系统偏好和主题令牌覆盖。切换主题会保留运行中的 shell、输出和应用通过 OSC 设置的颜色。颜色重置命令恢复到当前 DSH 默认值。xterm 将文字对比度调整到 4.5:1；光标与所在单元格背景保持至少 3:1 的对比度，包括 Vim 配色方案。
+终端背景、默认文字、光标和选区跟随 DSH 主题，包括系统偏好和主题令牌覆盖。切换主题会保留运行中的 shell、输出和应用通过 OSC 设置的颜色。颜色重置命令恢复到当前 DSH 默认值。屏幕使用设置中的终端字号，并把设置中的终端字体排在内置等宽字体栈之前；修改任一项都会保留 shell 与输出，可见且可写的屏幕会按新的单元格尺寸重新适配 Host 网格。xterm 将文字对比度调整到 4.5:1；光标与所在单元格背景保持至少 3:1 的对比度，包括 Vim 配色方案。
 
 <a id="understand-the-implementation"></a>
 ## 了解实现
@@ -41,7 +43,7 @@ kind: "package-reference"
 <details>
 <summary>实现细节</summary>
 
-插件向右侧栏注册 `terminal` 类型及正文和标题 seat。开始页入口使用紧凑的黑底终端图标，页签标题保留线条图标。无 React 依赖的终端模型属于 `api-terminal-controller`，通过框架 keyed hooks 暴露状态。`ui-primitives` 的 Menu 与 Button 提供 shell 选择和启动控件，支持键盘导航与选中标记。正文在 terminal 视图挂载时加载包内 `client.terminal.js` chunk，使 xterm.js 与 FitAddon 不进入启动 `client.js`；加载后由它们负责屏幕渲染和视口测量。正文在面板高度内为页签条下方预留 8px 间距。输入原样传到 PTY，包括 Tab 和控制字符。
+插件向右侧栏注册 `terminal` 类型及正文和标题 seat。开始页入口复用插件页面的蓝色终端图标，页签标题使用线条图标。无 React 依赖的终端模型属于 `api-terminal-controller`，通过框架 keyed hooks 暴露状态。`ui-primitives` 的 Menu 与 Button 提供 shell 选择和启动控件，支持键盘导航与选中标记。正文在 terminal 视图挂载时加载包内 `client.terminal.js` chunk，使 xterm.js 与 FitAddon 不进入启动 `client.js`；加载后由它们负责屏幕渲染和视口测量。正文在面板高度内为页签条下方预留 8px 间距。输入原样传到 PTY，包括 Tab 和控制字符。
 
 终端 controller 独立保存每个全局唯一内容身份与 Host 的关联，并负责内容恢复；侧栏负责布局持久化。恢复视图不能分配替代进程。侧栏关闭 handler 通过[终端 controller](../../api/terminal-controller/README.zh.md#understand-the-implementation)安排清理并同步返回。浏览器组件清理和 tab 的 abort signal 只停止浏览器工作。
 
@@ -81,6 +83,6 @@ kind: "package-reference"
 <details>
 <summary>维护说明</summary>
 
-不发布运行时 invariant companion。终端元数据与屏幕更新由同一对象按序写入，没有独立的进程尺寸观测可供比较。
+无。
 
 </details>

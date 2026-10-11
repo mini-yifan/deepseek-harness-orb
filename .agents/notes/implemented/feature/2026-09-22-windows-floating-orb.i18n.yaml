@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-22-windows-floating-orb.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-22-windows-floating-orb.md
-2026-09-22-windows-floating-orb.md: d5569f2ba127dc1361e20ebf9f6a8e69e74ad440
-2026-09-22-windows-floating-orb.zh.md: 3d7d745065657ed487e2d9c97823e105d7a17053
+/agent-note-windows-floating-orb:
+  en: 868f13d9ee86ff2d
+  zh: 1282d8feb3bd807b
+/agent-note-windows-floating-orb/problem:
+  en: 292534ccef5a81f2
+  zh: da8e16d83e1cc4f9
+/agent-note-windows-floating-orb/decision:
+  en: da1af25e12c59e48
+  zh: 566569eb2537cb08
+/agent-note-windows-floating-orb/alternatives-considered:
+  en: 5df440ac849bb332
+  zh: ffd656d5f340dfff
+/agent-note-windows-floating-orb/consequences:
+  en: e1fa7cddf746564b
+  zh: 80032cf205eb2a6b
+/agent-note-windows-floating-orb/testing:
+  en: 32775232bda35908
+  zh: f5e0a3c4b5985155

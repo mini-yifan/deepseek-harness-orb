@@ -9,7 +9,9 @@ Status: implemented
 
 ## 决策
 
-`session-log-deepseek.Config.enabled` 在所有进程中均默认为 `true`。显式设置 `enabled: false` 可关闭贡献。插件不读取测试运行器或快照环境变量。
+`session-log-deepseek.Config.enabled` 在所有进程中均默认为 `true`。最终生效的 `enabled: false` 会关闭贡献；配置优先级决定采用哪个值。插件不读取测试运行器或快照环境变量。
+
+每次请求通过 volatile 引用读取 `enabled`，因此保存的偏好无需重启插件即可生效。按照 [profile 所有的配置规则](2026-09-19-profile-owned-live-configuration.zh.md)，profile 写入可覆盖组合包默认值；home patch 和命令行 overlay 仍会拒绝冲突写入。关闭上传不改变接受水位，因为它记录提供方的接受结果，而不是用户是否允许上传。重新开启后会发送尚未接受的后缀，包括关闭期间记录的事件。已准备的请求保留原有载荷。
 
 本决策仅取代[请求扩展决策](2026-08-21-deepseek-llm-api-request-extensions.zh.md)中的主动启用默认策略；该记录仍负责字段序列化、目的地址、接受与重试语义。headless 和 ACP 语料的基础 patch 以及 Web scaffold 显式关闭上传。后续场景 patch 可以启用上传。SDK text-turn 录制省略该设置，验证产品默认值及持久接受事件。
 
@@ -23,6 +25,6 @@ Status: implemented
 
 ## 后果
 
-符合条件的请求会向解析后的 DeepSeek 端点或已配置网关发送完整的未接受规范日志后缀，包括消息文本、工具参数与结果、工作区路径和反馈。不增加提示词 token 或模型可见内容。请求正文可能显著增大，提供方拒绝仍会使请求失败。OTel 保持独立，关闭 OTel 不会关闭此贡献。
+符合条件的请求会向解析后的 DeepSeek 端点或已配置网关发送未接受的规范日志后缀，按[有上限上传决策](2026-09-24-bounded-session-log-upload.zh.md)每次最多 `maxBytes`，包括消息文本、工具参数与结果、工作区路径和反馈。不增加提示词 token 或模型可见内容。请求正文最多增加该上限，提供方拒绝仍会使请求失败。OTel 保持独立，关闭 OTel 不会关闭此贡献。
 
 配置测试覆盖有无测试环境标记时的默认开启与显式覆盖。两种 DeepSeek 协议的 Loader 用例观察默认请求字段和已记录的接受水位，显式关闭用例观察两者均不存在。现有 headless、ACP、Web 和 SDK 录制验证各自声明的上传策略，无需重写已提交的会话代际。

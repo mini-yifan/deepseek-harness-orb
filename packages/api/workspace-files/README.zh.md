@@ -51,7 +51,7 @@ kind: "package-reference"
 
 ### 文件读取与目录检查
 
-文件读取和目录列举先通过 `lstat` 拒绝不存在的路径、末端符号链接或错误的文件类型。文件操作随后通过组合文件系统解析和读取，不做额外的工作区包含检查。目录列举和监听要求解析后的目录仍位于工作区内。配置的分页、窗口、完整文件和目录列举上限仍然适用。文本页还拒绝无效 UTF-8 与 NUL 字节；字节读取不解码内容。读取或列举的空路径是 `gateway/bad-request`。
+每项操作都先通过 `lstat` 拒绝不存在的路径或错误的文件类型；读取文件的操作还拒绝末端符号链接，包括指回工作区内的链接。`list` 改为跟随末端链接——任何平台上的目录符号链接，包括 Windows 目录联接——要求它解析为工作区内的目录，因此被链接的目录与其目标一样可列举；`changes` 也以同样方式把被监听的目录限制在工作区内。文件操作随后通过组合文件系统解析和读取，不做额外的工作区包含检查。配置的分页、窗口、完整文件和目录列举上限仍然适用。文本页还拒绝无效 UTF-8 与 NUL 字节；字节读取不解码内容。读取或列举的空路径是 `gateway/bad-request`。
 
 ### 变更流
 
@@ -105,7 +105,6 @@ kind: "package-reference"
 | [`src/types.ts`](src/types.ts) | 线路类型与 `RemoteErrorDetailsMap` 错误码，以 `./types` 发布给 Client 包 |
 | [`src/client/index.ts`](src/client/index.ts)、[`provider.ts`](src/client/provider.ts)、[`change-feed.ts`](src/client/change-feed.ts) | 浏览器插件、文件元数据与按目标建立的变更流 |
 | [`src/client/types.ts`](src/client/types.ts)、[`remote.ts`](src/client/remote.ts) | 资源值、参数、Client 错误码与生成的 Remote 类型 |
-| — | 不发布运行时 invariant 伴生件；每个 Host 答案都在调用时由 `ctx.fs` 与沙箱策略推导。 |
 
 Typert 生成 `./typert` 与 `./remote` 暴露的 Host 与 Client Remote 产物。
 

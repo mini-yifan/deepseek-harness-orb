@@ -27,7 +27,7 @@ import css from './AppFrame.module.css'
 /** Full composed props: runtime share + child-slot render share + store share. */
 export type AppFrameProps =
   & PropsRuntime<'root'>
-  & PropsRenderSlots<'sidebar' | 'main' | 'rightbar' | 'shell.overlay' | 'shell.leading'>
+  & PropsRenderSlots<'sidebar' | 'main' | 'rightbar' | 'shell.bottom' | 'shell.overlay' | 'shell.leading'>
   & PropsStore<ReturnType<typeof createLayoutStore>>
   & PropsLocale<'common'>
 
@@ -40,24 +40,6 @@ function CenterColumn(props: { children?: ReactNode }) {
 function MainPanel({ usePanelInfo, renderSlot }: Pick<PropsRuntime<'root'>, 'usePanelInfo'> & PropsRenderSlots<'main'>) {
   const panelId = usePanelInfo(info => info.activePanelId)
   return renderSlot('main', {}, { entryKey: panelId ?? 'conversation' })
-}
-
-/**
- * Marks the frame while the Conversation is selected — the deepened drag band
- * (AppFrame.module.css) keys off the attribute. A DOM write from a child keeps
- * the frame itself out of the panel subscription: selecting a panel must not
- * re-render the columns.
- */
-function ConversationMarker({ usePanelInfo, frameRef }: Pick<PropsRuntime<'root'>, 'usePanelInfo'> & { frameRef: React.RefObject<HTMLDivElement | null> }) {
-  const conversationActive = usePanelInfo(info => info.activePanelId === null)
-  useLayoutEffect(() => {
-    const frame = frameRef.current
-    /* v8 ignore next -- the ref is attached by effect time: the marker renders inside the frame div. */
-    if (frame === null) return
-    if (conversationActive) frame.setAttribute('data-panel-conversation', '')
-    else frame.removeAttribute('data-panel-conversation')
-  }, [conversationActive, frameRef])
-  return null
 }
 
 /**
@@ -290,11 +272,6 @@ export function AppFrame({
       data-dragging={dragging || undefined}
       data-animating={animating > 0 || undefined}
     >
-      {/* First child: app-regions compose in document order, so everything
-          mounted later (chrome controls, overlays) subtracts its no-drag
-          from this band. */}
-      {darwin && <div className={css.leadingBand} data-shell-leading-band />}
-      <ConversationMarker usePanelInfo={usePanelInfo} frameRef={frameRef} />
       <DocumentTitle
         productTitle={productTitle}
         useSessions={useSessions}
@@ -309,6 +286,9 @@ export function AppFrame({
           {renderSlot('rightbar', { width: normal.rightbar, viewportWidth: viewport, canShow: normal.rightbar > 0 })}
         </RightbarColumn>
       </>
+      <div className={css.bottomRow} data-shell-bottom>
+        {renderSlot('shell.bottom', {})}
+      </div>
       <div className={css.overlayLayer} data-shell-overlay>
         {overlays}
       </div>

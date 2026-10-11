@@ -1,6 +1,25 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-19-computer-use-same-step-gui-calls.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-19-computer-use-same-step-gui-calls.md
-2026-09-19-computer-use-same-step-gui-calls.md: bd85935b3ed8ee68406c8cafcda2d827031a3af3
-2026-09-19-computer-use-same-step-gui-calls.zh.md: d05d4d59b2f48b17a4888bb22fcc8de7b0215837
+/agent-note-computer-use-same-step-gui-calls:
+  en: 1e1e3ab072f7ea77
+  zh: e084620b12f3e3a8
+/agent-note-computer-use-same-step-gui-calls/problem:
+  en: 8410e7d6af8b10b5
+  zh: a15c6a6a6c7241f3
+/agent-note-computer-use-same-step-gui-calls/decision:
+  en: 7a465836d20f1299
+  zh: e305ec33cc63e238
+/agent-note-computer-use-same-step-gui-calls/alternatives-considered:
+  en: 4ba3926043da6278
+  zh: 1014b30d22091424
+/agent-note-computer-use-same-step-gui-calls/consequences:
+  en: e4f4adc21ae50472
+  zh: f43888d4e5be15c4
+/agent-note-computer-use-same-step-gui-calls/testing:
+  en: dd1a803210ba386d
+  zh: ab7a9fac123e81a0
+/agent-note-computer-use-same-step-gui-calls/deferred:
+  en: acc104741874bf7b
+  zh: ac7b870fabf60a30

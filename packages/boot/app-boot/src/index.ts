@@ -26,7 +26,8 @@ export {
 } from './profile-compatibility.ts'
 import { prepareProfilePatches } from './compatibility-preflight.ts'
 export { prepareProfileEntries, prepareProfilePatches } from './compatibility-preflight.ts'
-export { readPluginMeta } from './package-meta.ts'
+export { readPluginMeta, resolvePluginResource } from './package-meta.ts'
+export { ON_DEMAND_BUNDLES, OFFICIAL_ON_DEMAND_CATALOG, type OfficialBundleCatalogEntry } from './official-bundles.ts'
 export { generateConfigSchema, type ConfigSchemaDump, type NativeConfigSchema } from './config-schema/index.ts'
 export { createConfigProjector, LOADER_EXPRESSION_SCHEMA, type ConfigProjection } from './config-schema/projector.ts'
 export { isNativeConfigSchema } from './config-schema/native.ts'
@@ -56,6 +57,7 @@ declare module '@deepseek-ai/cordis' {
 export {
   composeEntries,
   createRuntimeResolution,
+  ProfileRuntimeResolution,
   DEFAULT_PROFILE_BUNDLES,
   OPTIONAL_BUNDLES,
   bundlePatchFiles,
@@ -68,11 +70,13 @@ export {
   PROFILE_TEMPLATES,
   PROFILES_DIR,
   readProfileManifest,
+  reportSkippedBundles,
   resolveBundleDir,
   resolveProfileDir,
   writeProfileManifest,
   type Profile,
   type ProfileLayer,
+  type SkippedBundle,
   type ProfileManifest,
   type LinkedRoot,
   type RuntimeResolutionOptions,
@@ -744,6 +748,7 @@ const FIBER_DISPOSED = 4 as FiberState.DISPOSED
 const requiredStartupEntryIds = new Set<string>([
   'agent-loop',
   'webserver',
+  'web-runtime',
   'modules',
   'connection',
   'headless-runner',

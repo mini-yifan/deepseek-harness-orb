@@ -172,15 +172,98 @@ function systemMessage(text: string) {
 }
 
 describe('Trajectory conversation Definitions', () => {
+  it('publishes a waiting request before any stream output arrives', () => {
+    const value = assembler([at(1, 'turn/start', { turn: 1 })])
+    expect(value.append(at(2, 'step/start', { turn: 1, step: 1 }))).toBe('immediate')
+    value.flush()
+    expect(snapshot(value)).toMatchObject({
+      eventNodes: [],
+      partial: null,
+      requests: [{ status: 'running', startedAt: 1_700_000_000_002, completedAt: null }],
+    })
+  })
+
+  it('keeps a retrying request running until its response settles', () => {
+    const value = assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      at(2, 'step/start', { turn: 1, step: 1 }),
+      at(3, 'llm/retry', {
+        retryId: 'retry-1', turn: 1, step: 1, provider: 'test', mode: 'normal',
+        policyKey: 'test-normal', retry: 1, maxRetries: 2, delayMs: 25,
+        failure: { code: 'TRANSPORT', message: 'temporary failure' },
+      }),
+    ])
+    expect(snapshot(value).requests).toMatchObject([{
+      status: 'running', completedAt: null, retry: 1,
+      error: 'temporary failure', errorCode: 'TRANSPORT',
+    }])
+    value.append(at(4, 'assistant/live-chunk', {
+      turn: 1, step: 1, chunk: { type: 'text-delta', index: 0, text: 'recovered' },
+    }))
+    value.flush()
+    expect(snapshot(value).requests).toMatchObject([{ status: 'running', completedAt: null }])
+    value.append(at(5, 'assistant/message', {
+      turn: 1, step: 1, message: assistantMessage('recovered', 'recovered'),
+    }))
+    value.flush()
+    expect(snapshot(value).requests).toMatchObject([{
+      status: 'complete', completedAt: 1_700_000_000_005, resultSeq: 5,
+      retry: 1, error: 'temporary failure', errorCode: 'TRANSPORT',
+    }])
+  })
+
+  it('retains the waiting request when chunks have no assistant blocks', () => {
+    const current = snapshot(assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      at(2, 'step/start', { turn: 1, step: 1 }),
+      at(3, 'assistant/live-chunk', {
+        turn: 1, step: 1, chunk: { type: 'usage', usage: { inputTokens: 10, outputTokens: 0 } },
+      }),
+    ]))
+    expect(current.partial).toBeNull()
+    expect(current.requests).toMatchObject([{ status: 'running', usage: { inputTokens: 10, outputTokens: 0 } }])
+  })
+
+  it('settles an interrupted response before the step closes', () => {
+    const current = snapshot(assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      at(2, 'step/start', { turn: 1, step: 1 }),
+      at(3, 'assistant/message', {
+        turn: 1, step: 1, message: assistantMessage('interrupted', 'cut short'), interrupted: true,
+      }),
+    ]))
+    expect(current.requests).toMatchObject([{
+      status: 'error', completedAt: 1_700_000_000_003, resultSeq: 3,
+    }])
+  })
+
   it('addresses tool-call inspection with the persisted call identity', () => {
     expect(trajectoryViewDefinition.toolCallFocus?.('call-1')).toBe('call-1')
   })
 
-  it('rejects developer history until presentation is implemented', () => {
-    expect(() => assembler([at(0, 'developer/message', { turn: 1, step: 1, message: {
+  it('preserves developer tool-change content', () => {
+    const value = assembler([
+      at(0, 'request/header', { reason: 'initial', header: {
+        config: { provider: 'test', model: 'test' },
+        tools: ['search', 'read_file'].map(name => ({ name, description: '', parameters: {} })),
+      } }),
+      at(1, 'developer/message', { turn: 1, step: 1, message: {
+        id: 'developer', role: 'developer', source: { kind: 'tool-registry' },
+        content: [{ type: 'tool-addition', toolName: 'search' }, { type: 'tool-removal', toolName: 'old_search' }],
+      } }, { surfaceOp: 'append' }),
+      at(2, 'request/header', { reason: 'change', header: { config: { provider: 'test', model: 'test' }, tools: [] } }),
+    ])
+    expect(snapshot(value).eventNodes.find(node => node.kind === 'context')).toMatchObject({
+      kind: 'context', content: [{ type: 'tool-addition', toolName: 'search' }, { type: 'tool-removal', toolName: 'old_search' }],
+    })
+  })
+
+  it('preserves tool removals without a loaded header', () => {
+    const value = assembler([at(1, 'developer/message', { turn: 1, step: 1, message: {
       id: 'developer', role: 'developer', source: { kind: 'tool-registry' },
-      content: [{ type: 'tool-addition', toolName: 'search' }],
-    } }, { surfaceOp: 'append' })])).toThrow('developer messages are not supported yet')
+      content: [{ type: 'tool-removal', toolName: 'old_search' }],
+    } }, { surfaceOp: 'append' })], true)
+    expect(snapshot(value).eventNodes.find(node => node.kind === 'context')).toMatchObject({ content: [{ type: 'tool-removal', toolName: 'old_search' }] })
   })
 
   it('assembles streaming usage, preserves retry facts, and materializes interruption', () => {
@@ -200,6 +283,10 @@ describe('Trajectory conversation Definitions', () => {
     ])
 
     expect(snapshot(value).partial?.blocks).toEqual([{ kind: 'text', text: 'first attempt' }])
+    expect(snapshot(value).partial?.timing).toEqual({
+      stepStartTime: 1_700_000_000_002,
+      firstTokenTime: 1_700_000_000_003,
+    })
     expect(snapshot(value).requests).toMatchObject([{
       purpose: 'assistant',
       status: 'running',
@@ -448,6 +535,7 @@ describe('Trajectory conversation Definitions', () => {
         name: 'read',
         arguments: { path: 'README.md' },
         content: [{ type: 'text', text: 'contents' }],
+        meta: { cwd: '/selected', path: '/selected/README.md' },
       }),
       at(7, 'tool/ptc-dispatch-start', {
         rootCallId: 'root-a', parentCallId: 'root-b:code:1', subCallId: 'root-b:ptc:2',
@@ -487,6 +575,7 @@ describe('Trajectory conversation Definitions', () => {
       meta: { presentation: 'raw' },
       subCalls: [{
         kind: 'tool-result', callId: 'root-b:code:1', parentCallId: 'root-a', call: { name: 'read' },
+        meta: { cwd: '/selected', path: '/selected/README.md' },
         subCalls: [{
           kind: 'tool-result', callId: 'root-b:ptc:2', parentCallId: 'root-b:code:1',
           callTime: 1_700_000_000_007, content: [{ type: 'text', text: 'not executed' }],

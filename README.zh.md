@@ -4,7 +4,7 @@
 
 [English](README.md) | 中文
 
-常驻电脑待命的桌面 AI Agent 助手，支持 macOS 和 Windows，基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh 0.1.7）构建。
+常驻电脑待命的桌面 AI Agent 助手，支持 macOS 和 Windows，基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（dsh 0.2.1-alpha.2）构建。
 
 DeepSeek Orb 是非官方的个人开源项目，与 DeepSeek AI 没有隶属关系。
 
@@ -18,11 +18,11 @@ DeepSeek Orb 是非官方的个人开源项目，与 DeepSeek AI 没有隶属关
 
 ```mermaid
 flowchart TD
-    user["你在悬浮球里说话"] --> orb["Computer Use Agent"]
-    orb -->|"看得见的 GUI 操作"| gui["13 个 GUI 工具<br>直接在当前窗口执行"]
-    orb -->|"短查询：天气、新闻"| web["web_search / web_fetch<br>直接在球上回答"]
-    orb -->|"翻文件、产出文档或网站"| bg["code_agent 后台会话<br>排队执行，立即返回"]
-    bg -->|"完成通知"| orb
+    user["You speak to the floating ball"] --> orb["Computer Use Agent"]
+    orb -->|"Visible GUI actions"| gui["13 GUI tools<br>executed in the current window"]
+    orb -->|"Quick lookups: weather, news"| web["web_search / web_fetch<br>answered on the ball"]
+    orb -->|"Dig through files, produce documents or websites"| bg["code_agent background session<br>queued, returns immediately"]
+    bg -->|"Completion notice"| orb
 ```
 
 - **前台轨 · Computer Use**：打开 App、点按钮、填表单、改设置这类看得见的操作，用 GUI 工具直接在你眼前执行，每一步都基于当前最前窗口的实时截图。天气、新闻标题这类短查询也留在球上，用 `web_search` / `web_fetch` 直接回答。
@@ -51,7 +51,7 @@ flowchart TD
 
 - **macOS**：首次展开面板时需要授予「屏幕录制」与「辅助功能」权限，引导层会打开系统设置对应页面，两项都授予后自动消失；访达自动化在首次使用时弹出授权。
 - **Windows**：无需系统权限引导；以管理员身份运行的窗口会拒绝被点击和输入。
-- 运行前请阅读 [SAFETY.md](SAFETY.md) 的安全须知。
+- 运行前请阅读 [SAFETY.md](SAFETY.zh.md) 的安全须知。
 
 ## 平台支持
 
@@ -65,9 +65,11 @@ flowchart TD
 
 ### 准备
 
-- Node.js `^22.19.0 || >=24.0.0`，pnpm `11.7.0`。
+- Node.js `^22.19.0 || >=24.0.0`，pnpm `11.28.5`。
 - [DeepSeek API 密钥](https://platform.deepseek.com/)：启动后在主窗口**设置 → 模型**里保存，或启动前 `export DEEPSEEK_API_KEY=…`。密钥存放在 `~/.dsh/.credentials.yaml`，与 dsh CLI 共享。
 - 主窗口选中工作区后输入框才可用；悬浮球自动使用自己的 `dsh_orb` 工作区，无需配置。
+
+<a id="run-from-source"></a>
 
 ### 从源码运行
 
@@ -91,12 +93,12 @@ pnpm run dev:desktop
 
 ## 与 DeepSeek Harness 的关系
 
-本仓库是 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 的非官方衍生项目，基于 dsh 0.1.7 构建，与 DeepSeek AI 没有隶属关系；`main` 分支承载 DeepSeek Orb 产品，并持续合并上游更新。dsh 是 DeepSeek AI 开源的「万物皆插件」agent harness，本产品的会话、插件、工具与 Web UI 都由它驱动。继续深入：
+本仓库是 [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) 的非官方衍生项目，基于 dsh 0.2.1-alpha.2 构建，与 DeepSeek AI 没有隶属关系；`main` 分支承载 DeepSeek Orb 产品，并持续合并上游更新。dsh 是 DeepSeek AI 开源的「万物皆插件」agent harness，本产品的会话、插件、工具与 Web UI 都由它驱动。继续深入：
 
 - [使用桌面端](docs/user/guide/desktop.zh.md) — 悬浮球与后台派发的完整用户指南
 - [Computer Use 包](packages/experimental/tool-computer-use/README.zh.md) — GUI 工具、坐标编码与权限细节
 - [apps/desktop/README.zh.md](apps/desktop/README.zh.md) — 开发变量、打包与更新
-- [docs/architecture.md](docs/architecture.md)、[packages/README.md](packages/README.md) — 底层 harness 的架构与包地图
+- [docs/architecture.md](docs/architecture.zh.md)、[packages/README.md](packages/README.zh.md) — 底层 harness 的架构与包地图
 
 ## 已知限制
 

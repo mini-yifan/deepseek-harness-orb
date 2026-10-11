@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-20-desktop-sck-in-process-identity.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-20-desktop-sck-in-process-identity.md
-2026-09-20-desktop-sck-in-process-identity.md: 92ac517cc7843cf2c1d189ef929eb21c38c421ff
-2026-09-20-desktop-sck-in-process-identity.zh.md: 69b9d637d4177abdc6432a880574abe710271c0f
+/agent-note-desktop-screencapturekit-in-the-orb-process:
+  en: b8a368089c82c54c
+  zh: 820ca72e6bc4191e
+/agent-note-desktop-screencapturekit-in-the-orb-process/problem:
+  en: b88ab54f02df5745
+  zh: 63545cc8828bf770
+/agent-note-desktop-screencapturekit-in-the-orb-process/decision:
+  en: 7ae35899466a42cd
+  zh: f1eab858cd46d2e3
+/agent-note-desktop-screencapturekit-in-the-orb-process/alternatives-considered:
+  en: 09af39b1d3ce7a92
+  zh: ee2d808dab9dfbfd
+/agent-note-desktop-screencapturekit-in-the-orb-process/consequences:
+  en: 5289b901669575ea
+  zh: 1184fcc699af0ccb
+/agent-note-desktop-screencapturekit-in-the-orb-process/testing:
+  en: a543d0b768c49bab
+  zh: 6e81e550ff78083a

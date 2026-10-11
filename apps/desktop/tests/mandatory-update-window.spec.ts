@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, expect, it, vi } from 'vitest'
-import type { BrowserWindow } from 'electron'
+import type { BrowserWindow, WebContents, WebFrameMain } from 'electron'
 import { DesktopMandatoryUpdateWindow, type MandatoryUpdateView } from '../src/mandatory-update-window.ts'
 import { MANDATORY_IPC } from '../src/mandatory-update-ipc.ts'
 import { resolveDesktopLocale } from '../src/locale.ts'
@@ -13,7 +13,11 @@ vi.mock('electron', () => ({ ipcMain: {
   handle: (channel: string, handler: (...args: unknown[]) => unknown) => native.handlers.set(channel, handler),
   removeHandler: (channel: string) => native.handlers.delete(channel),
 }, app: { quit: native.quit }, shell: { openExternal: native.open }, clipboard: { writeText: native.write, readText: native.read } }))
-vi.mock('../src/update-overlay.ts', () => ({ createUpdateOverlay: vi.fn(() => window) }))
+
+type WindowFixture = EventEmitter & Pick<BrowserWindow, 'setMenu' | 'setTitle' | 'loadURL' | 'destroy' | 'isDestroyed'
+  | 'isFocused' | 'isMinimized' | 'focus' | 'show' | 'restore'> & {
+    webContents: EventEmitter & Pick<WebContents, 'send' | 'setWindowOpenHandler'> & { mainFrame: Pick<WebFrameMain, 'url'> }
+  }
 
 let window: ReturnType<typeof fakeWindow>
 let ui: DesktopMandatoryUpdateWindow | undefined
@@ -32,8 +36,10 @@ function setup(platform: NodeJS.Platform = 'darwin') {
   let policy: DesktopPolicyState = { blocking: true, checking: false, page: 'https://downloads.example.com/desktop' }
   let update: DesktopUpdateState = { phase: 'ready', version: '1.0.1-nightly.1' }
   const install = vi.fn(async () => update)
-  ui = new DesktopMandatoryUpdateWindow({ preload: 'owned', locale: resolveDesktopLocale('zh'),
-    allowedPageOrigins: ['https://downloads.example.com'], parent: () => window as unknown as BrowserWindow,
+  const createOverlay = (): WindowFixture => window
+  const parent = createOverlay as () => BrowserWindow
+  ui = new DesktopMandatoryUpdateWindow({ overlays: { create: parent }, preload: 'owned', locale: resolveDesktopLocale('zh'),
+    allowedPageOrigins: ['https://downloads.example.com'], parent,
     policy: () => policy, update: () => update, refresh: async () => {}, download: async () => update, install })
   ui.sync()
   const event = { sender: window.webContents, senderFrame: window.webContents.mainFrame }
@@ -198,4 +204,11 @@ it('rebinds policy updates and reloads to a replacement Windows main window', ()
   expect(() => native.handlers.get(MANDATORY_IPC.status)!({
     sender: window.webContents, senderFrame: window.webContents.mainFrame,
   })).not.toThrow()
+})
+
+it.each(['darwin', 'win32'] as const)('includes the installation wait notice only on Windows: %s', (platform) => {
+  const f = setup(platform)
+  expect(f.view().locale.messages.mandatoryReadyDetail).toBe(platform === 'win32'
+    ? '更新期间应用将暂时关闭，完成后会自动打开。\n\n更新可能需要一些时间，请耐心等待，期间请勿重复启动应用。'
+    : '更新期间应用将暂时关闭，完成后会自动打开。')
 })

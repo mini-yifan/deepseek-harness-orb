@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-15-omit-request-preview-handle-dimensions.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-15-omit-request-preview-handle-dimensions.md
-2026-09-15-omit-request-preview-handle-dimensions.md: 1ca9e9ccb2f43632a03d0613898fc6c4495d3c62
-2026-09-15-omit-request-preview-handle-dimensions.zh.md: 87481c57381681e12a34bd63f89182ee08e87a07
+/agent-note-image-handle-omits-request-preview-pixel-sizes:
+  en: aca80fef40c4e07a
+  zh: 6280dae5daf74bee
+/agent-note-image-handle-omits-request-preview-pixel-sizes/problem:
+  en: 1cb72dbc209c720e
+  zh: 0789497540f268c5
+/agent-note-image-handle-omits-request-preview-pixel-sizes/decision:
+  en: bab81e953500cb89
+  zh: 1dee61e4572eb10c
+/agent-note-image-handle-omits-request-preview-pixel-sizes/alternatives-considered:
+  en: 37524331cae2d7ef
+  zh: 40d19625b4e8b74c
+/agent-note-image-handle-omits-request-preview-pixel-sizes/consequences:
+  en: 0dca5e32807fc920
+  zh: 287e25047838baee
+/agent-note-image-handle-omits-request-preview-pixel-sizes/testing:
+  en: c1fbf2471fbbc28a
+  zh: d86e7fd581240e1f

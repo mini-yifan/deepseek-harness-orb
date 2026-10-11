@@ -8,6 +8,8 @@ Slots 是 Web Client 的类型化 React 组合系统。[`dsh-client-ui-slots`](.
 
 `plugins.bundle.config` 以 npm 包名为 key，提供 Bundle 详情配置。`plugins.bundle.activation` 在用户显式启用后渲染可选引导，由拥有者提供关闭引导和打开该 Bundle 详情的回调。`conversation.input.activity` 提供模型选择器与发送按钮之间的单个活动控件，可展开工具栏并在卸载时释放展开状态。
 
+插件目录声明 `plugins.add.actions`，它是 root 作用域的 list，在添加插件菜单的安装项之后提供 `MenuItemButton` 行。owner 提供 `onDismiss()`，用于开始动作前关闭菜单。该 slot 遵循所属插件页面声明的生命周期。
+
 ## 声明与生命周期
 
 `SlotMap` 是编译期注册表。包通过声明合并写入 key、cardinality（基数）、scope、owner props、keyed props 与可选的 slot 级 inject face。运行时声明则是拥有该渲染位置的组件在 `children` 中给出的对应条目。
@@ -133,6 +135,7 @@ root
 │        ├─ settings.models.footer
 │        └─ settings.plugins.tab
 ├─ main
+│  ├─ plugins.add.actions
 │  ├─ plugins.item
 │  ├─ plugins.bundle.config
 │  ├─ plugins.row.config
@@ -142,14 +145,16 @@ root
 │  └─ main.conversation
 │     ├─ conversation.session
 │     │  └─ conversation.view
-│     │     ├─ conversation.chat.node
-│     │     │  ├─ conversation.chat.assistant-actions
-│     │     │  ├─ conversation.chat.commandview
-│     │     │  ├─ conversation.chat.turnTail
-│     │     │  └─ tool.call.toolview
-│     │     │     ├─ tool.call.images
-│     │     │     └─ tool.view.cordis
-│     │     ├─ conversation.message.images
+│     │     ├─ conversation.chat.flow
+│     │     │  ├─ conversation.chat.node
+│     │     │  │  ├─ conversation.chat.assistant-actions
+│     │     │  │  ├─ conversation.chat.reasoning.body
+│     │     │  │  ├─ conversation.chat.commandview
+│     │     │  │  ├─ conversation.chat.turnTail
+│     │     │  │  └─ tool.call.toolview
+│     │     │  │     ├─ tool.call.images
+│     │     │  │     └─ tool.view.cordis
+│     │     │  └─ conversation.message.images
 │     │     └─ conversation.trajectory.images
 │     ├─ conversation.header
 │     │  ├─ conversation.header.leading
@@ -182,8 +187,10 @@ root
 │     │  └─ sidebar.right.tab.guide.entry
 │     ├─ sidebar.right.pane.tab.title
 │     └─ sidebar.right.tab.menu.item
+├─ shell.bottom
 ├─ shell.leading
 └─ shell.overlay
+   └─ shell.quota-notice
 ```
 
 生成的 Client inspect catalog 是每个 key 的完整参考，包含 cardinality、scope、owner props、标准 props、当前 occupant、声明 owner 与替换风险。运行中的动态包可以用 `cordis_inspect what:"client"` 查询实时树与某个精确 key；源码 catalog 由 `pnpm run gen-client-catalog` 根据 `SlotMap` 声明和 `slots.register()` 调用点生成。

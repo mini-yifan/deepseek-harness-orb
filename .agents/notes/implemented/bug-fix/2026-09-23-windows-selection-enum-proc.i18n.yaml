@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-23-windows-selection-enum-proc.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-23-windows-selection-enum-proc.md
-2026-09-23-windows-selection-enum-proc.md: 3a8a463449bf47a35b0ee13e91672818f6a29929
-2026-09-23-windows-selection-enum-proc.zh.md: 03a77b3b06fcd260c54c41062bb7b112bcecb12d
+/agent-note-windows-selection-enum-callback-is-registered-once:
+  en: 14d8fbe15c03f1e9
+  zh: c8be7190cfad9d11
+/agent-note-windows-selection-enum-callback-is-registered-once/problem:
+  en: f5f91bd72da645a4
+  zh: 18515eefec69394c
+/agent-note-windows-selection-enum-callback-is-registered-once/decision:
+  en: 21af3b155efaa09c
+  zh: bc5ad57754725ce8
+/agent-note-windows-selection-enum-callback-is-registered-once/alternatives-considered:
+  en: 59f9968c4f475452
+  zh: 1c04b93ac8462d87
+/agent-note-windows-selection-enum-callback-is-registered-once/consequences:
+  en: 57f7e54e0a6ce6e0
+  zh: 465f4edf3b86eec7
+/agent-note-windows-selection-enum-callback-is-registered-once/testing:
+  en: e2991290cc3b3f50
+  zh: bf2ce87b306c8b8c

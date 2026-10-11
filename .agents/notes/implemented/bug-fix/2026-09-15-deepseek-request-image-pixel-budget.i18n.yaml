@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-15-deepseek-request-image-pixel-budget.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-15-deepseek-request-image-pixel-budget.md
-2026-09-15-deepseek-request-image-pixel-budget.md: c1fbaa21fc591b0f4589b2781134466220e1d744
-2026-09-15-deepseek-request-image-pixel-budget.zh.md: 8f0014a39c008cbd25b5b74fb6945b52bde202db
+/agent-note-deepseek-request-image-pixel-budget-at-the-provider-1300-1300-cap:
+  en: 5e31cb7748182afc
+  zh: fdfe4ebc8d13afae
+/agent-note-deepseek-request-image-pixel-budget-at-the-provider-1300-1300-cap/problem:
+  en: d64c12f6e5ac925a
+  zh: 5a4ef8091b49e7b2
+/agent-note-deepseek-request-image-pixel-budget-at-the-provider-1300-1300-cap/decision:
+  en: 3be95d2502247714
+  zh: 5fdac39a825ad1a1
+/agent-note-deepseek-request-image-pixel-budget-at-the-provider-1300-1300-cap/alternatives-considered:
+  en: e298bceefaae4fe9
+  zh: 2c6911dba7407be7
+/agent-note-deepseek-request-image-pixel-budget-at-the-provider-1300-1300-cap/consequences:
+  en: e0c0d04ea20ebc89
+  zh: fea0e3eb68805433
+/agent-note-deepseek-request-image-pixel-budget-at-the-provider-1300-1300-cap/testing:
+  en: 2b93bbf5f2e2a22e
+  zh: de1913a4f3bf8822

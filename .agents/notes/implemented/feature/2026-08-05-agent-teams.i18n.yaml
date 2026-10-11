@@ -1,6 +1,40 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-08-05-agent-teams.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-05-agent-teams.md
-2026-08-05-agent-teams.md: 6333e511ba1e71823cfa55c27ba46b2665d1ef15
-2026-08-05-agent-teams.zh.md: 3fed1302146406f71d63c7ff2df8f031a91c9804
+/agent-note-durable-agent-teams-over-continuable-children:
+  en: c914d8148bfc4bf9
+  zh: a8115f87c0ac6cae
+/agent-note-durable-agent-teams-over-continuable-children/problem:
+  en: bab62798c2dc07b4
+  zh: fe42c5abf9127d37
+/agent-note-durable-agent-teams-over-continuable-children/decision:
+  en: 95e7d723d6b00930
+  zh: d18fdf9b2bf69bdb
+/agent-note-durable-agent-teams-over-continuable-children/profile-delegation:
+  en: 3a66308576f74247
+  zh: 3453f0bcce88033d
+/agent-note-durable-agent-teams-over-continuable-children/team-identity:
+  en: 83e446c928a20c47
+  zh: b0a2bd24419dd815
+/agent-note-durable-agent-teams-over-continuable-children/provisioning-and-recovery:
+  en: 4345ac9a6ac7ad04
+  zh: 1d19ecbb128a75a3
+/agent-note-durable-agent-teams-over-continuable-children/mailbox-and-task-transactions:
+  en: bfc3063536837c0e
+  zh: 6b8e69ba85cc2bb1
+/agent-note-durable-agent-teams-over-continuable-children/shared-checkout-boundary:
+  en: 34920da68b5763e0
+  zh: 7604392594e4b8a8
+/agent-note-durable-agent-teams-over-continuable-children/web-projection:
+  en: e6348054f024725b
+  zh: 8740636e99940308
+/agent-note-durable-agent-teams-over-continuable-children/alternatives-considered:
+  en: 8cb2fd8839f5f8b7
+  zh: e302ca03e569de65
+/agent-note-durable-agent-teams-over-continuable-children/testing:
+  en: 092ac3c2b6f552aa
+  zh: c688c1bec5ad8a07
+/agent-note-durable-agent-teams-over-continuable-children/consequences:
+  en: da9cd22b1185a793
+  zh: e20d7ef9226f237f

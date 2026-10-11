@@ -4,7 +4,9 @@
     "rootDir": "src",
     "outDir": "lib/types"
   },
-  "include": ["src"],
+  "include": [
+    "src"
+  ],
   "references": [
     {
       "path": "../../../vendor/cosmokit"
@@ -41,6 +43,12 @@
     },
     {
       "path": "../../attachment/attachment"
+    },
+    {
+      "path": "../../util/code-language"
+    },
+    {
+      "path": "../../session/working-directory"
     }
   ]
 }

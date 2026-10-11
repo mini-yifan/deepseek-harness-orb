@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-client-ui-chat",
   "description": "Chat Conversation target, node definitions, renderers, and details surface",
-  "version": "0.1.7-rc.1",
+  "version": "0.2.1-alpha.2",
   "publishConfig": {
     "access": "public"
   },
@@ -90,12 +90,13 @@
     "@deepseek-ai/dsh-tools": "workspace:*",
     "@deepseek-ai/dsh-util-workspace-path": "workspace:*",
     "@deepseek-ai/dsh-util-values": "workspace:*",
-    "@tanstack/react-virtual": "^3.14.9",
+    "@tanstack/react-virtual": "^3.14.10",
     "@types/react": "~18.3.1",
     "@types/react-dom": "~18.3.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "@deepseek-ai/dsh-settings": "workspace:*"
+    "@deepseek-ai/dsh-settings": "workspace:*",
+    "@deepseek-ai/dsh-client-product-analytics": "workspace:*"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "workspace:~"

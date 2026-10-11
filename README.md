@@ -4,7 +4,7 @@
 
 English | [中文](README.zh.md)
 
-A desktop AI agent assistant that stays on call, for macOS and Windows, built on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh 0.1.7).
+A desktop AI agent assistant that stays on call, for macOS and Windows, built on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (dsh 0.2.1-alpha.2).
 
 DeepSeek Orb is an unofficial community project and is not affiliated with DeepSeek AI.
 
@@ -65,9 +65,11 @@ Tool list: `click` (single/double/right click, hold modifiers), `input_text`, `s
 
 ### Prerequisites
 
-- Node.js `^22.19.0 || >=24.0.0`, pnpm `11.7.0`.
+- Node.js `^22.19.0 || >=24.0.0`, pnpm `11.28.5`.
 - A [DeepSeek API key](https://platform.deepseek.com/): save it in the main window under **Settings → Models** after startup, or `export DEEPSEEK_API_KEY=…` before starting. Keys live in `~/.dsh/.credentials.yaml`, shared with the dsh CLI.
 - The main window's input is available only after a workspace is selected; the floating ball always uses its own `dsh_orb` workspace, no configuration needed.
+
+<a id="run-from-source"></a>
 
 ### Run from source
 
@@ -91,7 +93,7 @@ Packaging details and platform requirements: [apps/desktop/README.md](apps/deskt
 
 ## Relationship to DeepSeek Harness
 
-This repository is an unofficial derivative of [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness), built on dsh 0.1.7 and not affiliated with DeepSeek AI. The `main` branch carries the DeepSeek Orb product and merges upstream updates continuously. dsh is DeepSeek AI's open-source everything-is-a-plugin agent harness; this product's sessions, plugins, tools, and Web UI are all driven by it. To go deeper:
+This repository is an unofficial derivative of [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness), built on dsh 0.2.1-alpha.2 and not affiliated with DeepSeek AI. The `main` branch carries the DeepSeek Orb product and merges upstream updates continuously. dsh is DeepSeek AI's open-source everything-is-a-plugin agent harness; this product's sessions, plugins, tools, and Web UI are all driven by it. To go deeper:
 
 - [Using the desktop app](docs/user/guide/desktop.md) — the full user guide for the floating ball and background dispatch
 - [Computer Use package](packages/experimental/tool-computer-use/README.md) — GUI tools, coordinate encoding, and permission details

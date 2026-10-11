@@ -25,6 +25,8 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
+相对路径使用 Session 的当前工作目录。切换目录会影响后续读取和修改，但不会改变沙箱权限根目录。成功结果返回 `fs.processPath` 提供的规范化绝对路径，根调用结果元数据保留该操作发生时的路径，用于回放和导航。
+
 在 `ctx.fs` 后端之后挂载工具，并在需要先读后写/编辑行为时挂载策略插件。模型随后获得带行号的读取、原子的写入与编辑，以及——挂载附件存储时——图像读取；每个结果都有上限，失败携带稳定错误码与恢复指令。
 
 ### 最小组合
@@ -48,7 +50,7 @@ kind: "package-reference"
 | `write` | `file_path`、`content` | 创建或完整替换文件；有策略插件时，覆盖要求先在未变版本上执行 `read`，创建不需要 |
 | `edit` | `file_path`、`old_string`、`new_string`、`replace_all?` | 字面量替换，除非 `replace_all` 为 true 否则要求唯一匹配；有策略插件时，要求先执行 `read` 且文件未变 |
 
-字段名使用 snake_case，与 Claude Code 和现有 harness 工具 schema 一致。成功返回紧凑信封——读取窗口、图像引用或 `Created file`/`Updated file` 确认——`write`/`edit` 还会派生可回放的 diff 卡片元数据供 UI 展示。
+字段名使用 snake_case，与 Claude Code 和现有 harness 工具 schema 一致。`write` 和 `edit` 的路径描述要求模型先输出 `file_path`，再输出内容或替换字符串；这用于引导流式展示，不强制 JSON 成员顺序。成功返回紧凑信封——读取窗口、图像引用或 `Created file`/`Updated file` 确认——`write`/`edit` 还会派生可回放的 diff 卡片元数据供 UI 展示。
 
 ### 配置
 
@@ -67,7 +69,7 @@ kind: "package-reference"
 
 `read` 与 `read_image` 的路径授权完全由 `ctx.fs` 负责；媒体类型声明和文件签名只决定 `read_image` 是否接受该后端返回的字节。
 
-挂载策略插件后，`write` 与 `edit` 从 `fs/*` 意图槽位取得防护，因此未读目标或陈旧观察会以 `FS_NOT_OBSERVED` 或 `FS_STALE_VERSION` 及恢复指令失败。使用施加沙箱限制的后端（`fs-sandbox`）时，`write`/`edit` 还会公开 `sandbox_permissions` 与 `justification`；被拒绝的变更返回 `[sandbox: file access denied under <mode> mode]` 标记与同轮次升级提示，获批的重试可以在该次调用中加盖严格更宽的模式。
+挂载策略插件后，`write` 与 `edit` 从 `fs/*` 意图槽位取得防护，因此未读目标或陈旧观察会以 `FS_NOT_OBSERVED` 或 `FS_STALE_VERSION` 及恢复指令失败。使用施加沙箱限制的后端（`fs-sandbox`）时，`write`/`edit` 还会公开 `sandbox_permissions` 与 `justification`；被拒绝的变更返回 `[sandbox: file access denied under <mode> mode]` 标记与同轮次升级提示，获批的重试可以在该次调用中加盖严格更宽的模式。理由字段提示模型使用用户当前提问的语言。
 
 ### 失败与恢复
 
@@ -99,6 +101,7 @@ kind: "package-reference"
 | [`src/read-render.ts`](src/read-render.ts) | 不依赖 Cordis 的窗口构建与信封格式化 |
 | [`src/sandbox.ts`](src/sandbox.ts) | `write`/`edit` 共享的升权 API：策略解析与拒绝标记映射 |
 | [`src/error.ts`](src/error.ts) | 防护变更失败的稳定模型侧诊断 |
+| [`src/mutation-result.ts`](src/mutation-result.ts) | 成功变更的观察记录与规范化结果路径 |
 
 ### 各工具流程
 
@@ -138,19 +141,19 @@ kind: "package-reference"
 ##### Read 指导
 
 ```markdown
-Use the read tool — not shell commands like cat — to inspect text files. Results include line numbers. Use offset and limit to continue reading large files.
+Use the read tool — not shell commands like cat — to inspect text files. Use offset and limit to continue reading large files.
 ```
 
 ##### Write 指导
 
 ```markdown
-Use the write tool to create files or completely replace file contents. Existing files are overwritten, so read an existing file first (the default fs-observation-policy requires it) and prefer edit for targeted changes.
+Read an existing file before overwriting it with write (the default fs-observation-policy requires it) and prefer edit for targeted changes.
 ```
 
 ##### Edit 指导
 
 ```markdown
-Use the edit tool for targeted changes to existing UTF-8 text files. It replaces literal old_string with new_string; by default old_string must appear exactly once. If old_string appears multiple times, provide a more specific old_string or set replace_all to true. Read the file first (the default fs-observation-policy requires it), unless you just created or edited it in this session.
+Read a file before editing it (the default fs-observation-policy requires it), unless you just created or edited it in this session.
 ```
 
 #### Token 影响
@@ -179,7 +182,7 @@ Use the edit tool for targeted changes to existing UTF-8 text files. It replaces
 
 #### 模型看到的内容
 
-成功读取结果精确为 `<path><displayPath></path>`、换行、`<type>file</type>`、换行、`<content>`、形如 `<lineNumber>: <text>` 的编号行、一个空行、一条 footer 和 `</content>`。footer 精确为 `(Output capped. Showing lines <start>-<end>. Use offset=<next> to continue.)`、`(Showing lines <start>-<end> of <total>. Use offset=<next> to continue.)` 或 `(End of file - total <total> lines)`。长行结尾精确为 `... (line truncated to <max> chars)`。读取缺失目标仍返回 `FS_NOT_FOUND`，但会为调用会话记录确认缺失；外部删除的文件被重新读取后，重试的 `write` 可以通过提供方的不替换防护安全地重新创建该文件。
+成功读取结果精确为 `<path><resolvedPath></path>`、换行、`<type>file</type>`、换行、`<content>`、形如 `<lineNumber>: <text>` 的编号行、一个空行、一条 footer 和 `</content>`。footer 精确为 `(Output capped. Showing lines <start>-<end>. Use offset=<next> to continue.)`、`(Showing lines <start>-<end> of <total>. Use offset=<next> to continue.)` 或 `(End of file - total <total> lines)`。长行结尾精确为 `... (line truncated to <max> chars)`。读取缺失目标仍返回 `FS_NOT_FOUND`，但会为调用会话记录确认缺失；外部删除的文件被重新读取后，重试的 `write` 可以通过提供方的不替换防护安全地重新创建该文件。
 
 #### Token 影响
 
@@ -193,7 +196,7 @@ Use the edit tool for targeted changes to existing UTF-8 text files. It replaces
 
 #### 模型看到的内容
 
-成功的 `read_image` 返回 `<path><displayPath></path>`、`<type>image</type>` 和写明媒体类型、规范化尺寸与字节数的 `<content>` 信封，随后是作为原生图像块的图像本身。结果会随持久引用写入会话日志，然后才进入下一次模型请求。
+成功的 `read_image` 返回 `<path><resolvedPath></path>`、`<type>image</type>` 和写明媒体类型、规范化尺寸与字节数的 `<content>` 信封，随后是作为原生图像块的图像本身。结果会随持久引用写入会话日志，然后才进入下一次模型请求。
 
 #### Token 影响
 
@@ -207,7 +210,7 @@ Use the edit tool for targeted changes to existing UTF-8 text files. It replaces
 
 #### 模型看到的内容
 
-写入精确返回五行包络：`<path><displayPath></path>`、`<type>file</type>`、`<content>`、`Created file` 或 `Updated file`，以及 `</content>`。编辑精确返回 `The file <displayPath> has been updated successfully.`；对于 `replace_all`，精确返回 `The file <displayPath> has been updated. All occurrences were successfully replaced.`。完整写入或替换文本仍保留在 assistant 工具调用参数中。
+写入精确返回五行包络：`<path><resolvedPath></path>`、`<type>file</type>`、`<content>`、`Created file` 或 `Updated file`，以及 `</content>`。编辑精确返回 `The file <resolvedPath> has been updated successfully.`；对于 `replace_all`，精确返回 `The file <resolvedPath> has been updated. All occurrences were successfully replaced.`。完整写入或替换文本仍保留在 assistant 工具调用参数中。
 
 #### Token 影响
 
@@ -255,5 +258,3 @@ Use the edit tool for targeted changes to existing UTF-8 text files. It replaces
 无。
 
 </details>
-
-**运行时不变式：** 不发布伴生入口。这个模型侧 adapter 没有独立 lifecycle stream；执行关系由它调用的 capability seam 负责。

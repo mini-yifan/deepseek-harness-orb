@@ -91,7 +91,7 @@ export function installDraftFilePicker(
   fileInputRef: RefObject<HTMLInputElement>,
 ): () => void {
   return keyboard.bindFilePicker({
-    available: () => gate.current.canAcceptDrop && fileInputRef.current !== null,
+    available: () => gate.current.canAcceptDrop && fileInputRef.current !== null && !fileInputRef.current.disabled,
     open: () => { fileInputRef.current?.click() },
   })
 }
@@ -134,7 +134,7 @@ export function installDraftKeymap(
         g.running,
         accelerated ? 'accelerated' : 'enter',
         g.steeringAvailable,
-      ))
+      ), 'enter')
     },
     intakeFiles: (files, directories) => { gate.current.intakeFiles(files, directories) },
     pasteText: (text) => {

@@ -3,21 +3,21 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import LlmRuntime, { createUserMessage, ToolCallId, HarnessError  } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, ToolCallId, HarnessError } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime, { RUN_CODE_NAME, defineTool } from '@deepseek-ai/dsh-tools'
+import { RUN_CODE_NAME, defineTool } from '@deepseek-ai/dsh-tools'
 import type { ToolExecutionResult } from '@deepseek-ai/dsh-tools'
-import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
+import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { LocalBashExecutor } from '@deepseek-ai/dsh-bash-local'
 import * as BashEnvPlugin from '@deepseek-ai/dsh-shell-env'
 import LocalSubprocessRuntime from '@deepseek-ai/dsh-subprocess-local'
 import * as ToolBash from '@deepseek-ai/dsh-tool-bash'
-import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
+import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek-api-key'
 import NodeRuntime from '@deepseek-ai/dsh-ptc-runtime-node'
 import Sandbox from '@deepseek-ai/dsh-sandbox-local'
 import SandboxPolicy from '@deepseek-ai/dsh-sandbox-policy'
@@ -55,12 +55,11 @@ afterEach(async () => {
 
 async function ptcModeHarness(cwd: string): Promise<Context> {
   const harness = new Context()
-  await harness.plugin(LlmRuntime)
-  await harness.plugin(SessionStore)
-  await harness.plugin(SessionProjectionRegistry)
-  await harness.plugin(SystemPrompt, { personaPrefix: PERSONA })
-  await harness.plugin(ToolRuntime, { mode: 'ptc' })
-  await harness.plugin(AgentRegistry)
+  await mountAgentLoopTestDependencies(harness, {
+    workingDirectory: true,
+    systemPrompt: { personaPrefix: PERSONA },
+    tools: { mode: 'ptc' },
+  })
   await harness.plugin(AgentLoop, { agents: [] })
   await harness.plugin(LlmDeepSeek)
   if (harness.get('subprocess') === undefined) await harness.plugin(LocalSubprocessRuntime)
@@ -73,13 +72,12 @@ async function ptcModeHarness(cwd: string): Promise<Context> {
 
 async function workspacePtcModeHarness(): Promise<Context> {
   const harness = new Context()
-  await harness.plugin(LlmRuntime)
-  await harness.plugin(SessionStore)
-  await harness.plugin(SessionProjectionRegistry)
-  await harness.plugin(SystemPrompt, { personaPrefix: PERSONA })
-  await harness.plugin(ToolRuntime, { mode: 'ptc' })
-  await harness.plugin(AgentRegistry)
   await harness.plugin(LocalFileSystem, { cwd: '/' })
+  await mountAgentLoopTestDependencies(harness, {
+    workingDirectory: true,
+    systemPrompt: { personaPrefix: PERSONA },
+    tools: { mode: 'ptc' },
+  })
   await harness.plugin(ToolFs)
   await harness.plugin(AgentInstructions, { maxBytes: 65536 })
   await harness.plugin(AgentLoop, { agents: [] })
@@ -131,8 +129,7 @@ async function mountRuntime(harness: Context): Promise<void> {
 /** Keyless real-process harness for direct typed-binding acceptance tests. */
 async function typedPtcModeHarness(): Promise<Context> {
   const harness = new Context()
-  await harness.plugin(SystemPrompt)
-  await harness.plugin(ToolRuntime, { mode: 'ptc' })
+  await mountAgentLoopTestDependencies(harness, { workingDirectory: true, tools: { mode: 'ptc' } })
   await mountRuntime(harness)
   return harness
 }
@@ -226,7 +223,7 @@ describe('PTC mode typed values: keyless real-process contracts', () => {
     expect(taskOutput.job).toMatchObject({ id: jobId, kind: 'bash', status: 'completed' })
   }, 15_000)
 
-  it('pre-abort spawns nothing; post-publication abort leaves job_kill as the cancellation owner', async () => {
+  it('pre-abort spawns nothing; post-publication abort leaves job_kill as the cancellation owner', { timeout: 15_000, retry: 0 }, async () => {
     workdir = await mkdtemp(join(tmpdir(), 'dsh-ptc-task-cancel-'))
     ctx = await backgroundPtcModeHarness(workdir)
 
@@ -238,15 +235,27 @@ describe('PTC mode typed values: keyless real-process contracts', () => {
     expect(preResult.isError).toBe(true)
     expect(ctx.jobs.list()).toEqual([])
 
+    const jobs = ctx.jobs
+    // Registration is announced after the job's ownership has committed.
+    const registered = new Promise<void>((resolve) => {
+      onTestFinished(jobs.events.subscribe({ owners: 'all' }, (event) => {
+        if (event.type === 'registered') resolve()
+      }))
+    })
     const afterPublication = new AbortController()
     const running = runCode(ctx, `
       const started = await tools.bash({ command: 'sleep 10', description: 'Wait for explicit task kill', run_in_background: true });
       console.log(started.jobId);
       await new Promise(() => {});
     `, afterPublication.signal)
-    for (let attempt = 0; attempt < 100 && ctx.jobs.list().length === 0; attempt++) {
-      await new Promise(resolve => setTimeout(resolve, 10))
-    }
+    await Promise.race([
+      registered,
+      running.then((result) => {
+        // Promise.race handles a late rejection after registration, too.
+        completion(result)
+        throw new Error('run_code completed before background job registration')
+      }),
+    ])
     const job = ctx.jobs.list()[0]
     expect(job).toMatchObject({ id: 'bash-1', status: 'running' })
     afterPublication.abort('outer-call-cancelled')
@@ -261,7 +270,7 @@ describe('PTC mode typed values: keyless real-process contracts', () => {
       return await tools.job_output({ job_id: ${JSON.stringify(job!.id)}, wait: true, timeout_ms: 5000 });
     `))
     expect(settled).toMatchObject({ job: { id: job!.id, status: 'killed' } })
-  }, 15_000)
+  })
 
   it('keeps foreground bash coupled to the outer signal', async () => {
     workdir = await mkdtemp(join(tmpdir(), 'dsh-ptc-foreground-cancel-'))
@@ -286,7 +295,8 @@ describe('PTC mode typed values: keyless real-process contracts', () => {
     const agent = {
       id: SessionId('ptc-cordis'),
       session: ctx.sessions.create(SessionId('ptc-cordis'), { meta: { cwd: process.cwd() } }),
-    } as unknown as Agent
+      ctx,
+    } as Agent
 
     const value = completion(await runCode(ctx, `
       const listed = await tools.cordis_inspect_list({});
@@ -316,7 +326,7 @@ describe.skipIf(!process.env.DEEPSEEK_API_KEY)('PTC mode: real model writes a pr
   it('collapses the wire tool list to [run_code], bridges sub-calls, and returns curated output', async () => {
     workdir = await mkdtemp(join(tmpdir(), 'dsh-ptc-e2e-'))
     ctx = await ptcModeHarness(workdir)
-    const agent = await ctx.agentLoop.create(SessionId('e2e-ptc'), { provider: 'deepseek-official', model: 'deepseek-v4-flash' })
+    const agent = await ctx.agentLoop.create(SessionId('e2e-ptc'), { provider: 'deepseek-official', model: 'deepseek-v4-flash' }, { cwd: workdir })
 
     agent.followup(createUserMessage({
       content: [{

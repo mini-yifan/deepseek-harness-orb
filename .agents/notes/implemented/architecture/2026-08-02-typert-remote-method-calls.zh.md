@@ -147,7 +147,7 @@ InvocationDescriptor {
 
 参数顺序来自方法签名，HTTP 字段来自参数名或 lookup 声明。取消 descriptor 只保留最后一个 `signal` 位置，并使其不进入具名 `args`；实际 signal 由 Connection 或直接调用 Gateway 的调用方提供。Gateway 不根据请求内容推断可选字段、Context 类型、lookup 类型或缺失参数，也不会合成业务默认值。
 
-LIB codec 带有只缓存成功结果的 Zod schema factory 和「package + 公共 subpath + export name」的规范 `typeSymbol`。Host Gateway 首次解码严格输入时调用参数与身份 factory。Client contribution 保留同一 codec 元数据，以在挂载时检查严格输入，但不实例化调用 schema；[仅在 Host 校验 Remote 输入](../simplification/2026-09-15-host-only-remote-input-validation.zh.md)规定了这个位置。SRC codec 只标记 `src-json`。
+LIB codec 带有只缓存成功结果的 Zod schema factory 和「package + 公共 subpath + export name」的规范 `typeSymbol`。Host Gateway 首次解码严格输入时调用参数与身份 factory。Client contribution 保留同一 codec 元数据，以在挂载时检查严格输入，但不实例化调用 schema；[仅在 Host 校验 Remote 输入](../../../../packages/api/gateway/README.zh.md)规定了这个位置。SRC codec 只标记 `src-json`。
 
 descriptor 只存在于两端本地 registry。wire 上只有 `/api` channel、endpoint 和 `{ args }` payload。Client 用自己的 descriptor 把位置参数和 Context identity 映射为具名字段；Host 用自己的 descriptor 校验这些字段、解析 receiver 并调用方法。
 
@@ -520,7 +520,7 @@ SRC 弱 descriptor 不验证普通 JSON 内部结构。Host Remote 签名变化�
 
 Connection 的通用 channel API 必须同时适合当前 HTTP carrier 和后续 WebSocket carrier。若 Client Remote 或 Gateway 暴露 `fetch`、HTTP request 或 route handle，WebSocket 迁移会再次穿透 Remote 层，因此这些物理对象必须留在 Connection 内部。
 
-Remote endpoint 使用 Connection 的 `trusted-host` authority。系统默认接受 loopback；LAN 调用方必须通过显式 trusted-host 配置接入，但本层不增加逐方法调用方授权，因此每个 trusted host 都能调用已挂载的 Remote endpoint。
+Remote endpoint 使用 Connection 的 `trusted-host` authority。系统默认接受 loopback 与监听器自身的绑定地址；其他 LAN authority 必须通过显式 trusted-host 配置接入。本层不增加逐方法调用方授权，因此每个被接受的 authority 都能调用已挂载的 Remote endpoint。
 
 `hasSeen()` 优先保障 strict definition 的安全性，而非 SRC 可用性。strict descriptor 撤回时（例如 HMR 期间），Gateway 会继续认领 endpoint 并报告不可用，而不会回退到弱 SRC descriptor。重新注册即可恢复；只有重启 Typert 注册表才会忘记历史 strict definition。
 

@@ -16,7 +16,7 @@ harness 把每张 DeepSeek 视觉请求图片投影到总计 640,000 像素。Fl
 
 不要把默认值提高到 1,690,000 以上：提供方的 v41 求解器随后会把光栅缩小到 1024 token 上限附近，多编码的像素不会变成多看到的细节。
 
-[v41 图片 token 计算器](2026-09-10-deepseek-image-token-calculator-v41.zh.md) 仍拥有对实际发送光栅的计价。
+[v41 图片 token 计算器](../../archived/bug-fix/2026-09-10-deepseek-image-token-calculator-v41.md) 仍拥有对实际发送光栅的计价。
 
 ## 考虑过的替代方案
 

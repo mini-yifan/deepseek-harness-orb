@@ -1,7 +1,7 @@
 # Keyless replay counterpart of agent-instructions.cordis.yml: apply the
 # scenario values and model swap to the ACP profile.
 - id: llm-deepseek
-  name: '@deepseek-ai/dsh-llm-deepseek'
+  name: '@deepseek-ai/dsh-llm-deepseek-api-key'
   disabled: true
 
 - id: agent-default-model
@@ -20,7 +20,6 @@
   name: '@deepseek-ai/dsh-agent-instructions'
   config:
     maxBytes: 65536
-    dshHome: !!js process.cwd() + '/.dsh'
     projectRootMarkers:
       - .dsh-project
 
@@ -28,7 +27,7 @@
   name: '@deepseek-ai/dsh-system-prompt'
   config:
     personaPrefix: |
-      You are a coding assistant powered by the {{model}} model. Your working directory is {{cwd}}.
+      You are a coding assistant powered by the {{model}} model.
 
       Verify your work by running the code or tests. Keep answers brief and factual.
 

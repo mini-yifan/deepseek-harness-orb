@@ -616,7 +616,7 @@ describe('ToolRuntime', () => {
     })
   })
 
-  it('suppresses presentation metadata only for nested composite dispatches', async () => {
+  it('projects presentation metadata for native and nested composite dispatches', async () => {
     const ctx = await setup()
     ctx.tools.register({
       ...echoTool,
@@ -632,7 +632,8 @@ describe('ToolRuntime', () => {
       parent: Symbol('outer') as ToolExecutionToken,
     })
     expect(direct.meta).toEqual({ card: true })
-    expect(nested.meta).toBeUndefined()
+    expect(nested.meta).toEqual({ card: true })
+    expect(Object.isFrozen(nested.meta)).toBe(true)
     expect(nested.isError ? undefined : nested.value).toBe('')
   })
 
@@ -827,7 +828,7 @@ describe('ToolRuntime', () => {
         return Promise.resolve<ApprovalOutcome>('allowed-once')
       })
       ctx.on('tools/pre-execute', async (_exec, _next): Promise<PreToolDecision> =>
-        ({ kind: 'ask', reason: 'hook wants a human' }))
+        ({ kind: 'ask', reason: 'hook wants a human', displayReason: { en: 'Allow it?', zh: '允许吗？' } }))
 
       const result = await ctx.tools.execute({
         callId: ToolCallId('c1'), name: 'echo', arguments: { text: 'hi' }, agent, signal: controller.signal,
@@ -835,7 +836,9 @@ describe('ToolRuntime', () => {
 
       expect(result).toMatchObject({ isError: false, content: [{ type: 'text', text: 'hi' }] })
       expect(seen).toHaveLength(1)
-      expect(seen[0]).toMatchObject({ agent, toolName: 'echo', callId: 'c1', reason: 'hook wants a human' })
+      expect(seen[0]).toMatchObject({
+        agent, toolName: 'echo', callId: 'c1', reason: 'hook wants a human', displayReason: { en: 'Allow it?', zh: '允许吗？' },
+      })
       expect(seen[0]?.signal).toBe(controller.signal)
     })
 

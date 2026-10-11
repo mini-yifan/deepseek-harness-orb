@@ -1,6 +1,40 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/client/ui-overlay-chat/README.md
-README.md: b0ada150fb1d6ba3b2f37aa9abeac8433a39dbfb
-README.zh.md: 0515c0d9471ebfe786aeafe5b9ecb9b1a80f1ae1
+/:
+  en: 9c55447d2539d6b8
+  zh: 48ea1fc0621c60de
+/deepseek-ai-dsh-client-ui-overlay-chat:
+  en: 3d65f64f85715224
+  zh: 79d1ed229552a266
+/deepseek-ai-dsh-client-ui-overlay-chat/summary:
+  en: 17c5103b10eaef0c
+  zh: 5ad337b468ff82ff
+/deepseek-ai-dsh-client-ui-overlay-chat/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 09388d293f9be9cb
+/deepseek-ai-dsh-client-ui-overlay-chat/use-this-package:
+  en: 0fd0f12a11a27da9
+  zh: 7b70839bc6c37a00
+/deepseek-ai-dsh-client-ui-overlay-chat/use-this-package/isolation:
+  en: 23e43f8dc1da358c
+  zh: 89d2743540c5dfbf
+/deepseek-ai-dsh-client-ui-overlay-chat/understand-the-implementation:
+  en: d8b1b2df7aa5ad4c
+  zh: c5dd90a61b122d6c
+/deepseek-ai-dsh-client-ui-overlay-chat/further-exploration:
+  en: 5fe9337d55d7107d
+  zh: 001baa848c08a3b5
+/deepseek-ai-dsh-client-ui-overlay-chat/model-experience:
+  en: 91bbf52520d70b20
+  zh: 40df1f863a3d9ebd
+/deepseek-ai-dsh-client-ui-overlay-chat/model-experience/kv-cache-effect:
+  en: 47f982e326fe77fd
+  zh: 301c5a746cd1293e
+/deepseek-ai-dsh-client-ui-overlay-chat/known-limitations-and-deferred-work:
+  en: 2725f35f97f1d139
+  zh: 2bdebb45c29f959a
+/deepseek-ai-dsh-client-ui-overlay-chat/known-limitations-and-deferred-work/dev-note:
+  en: 7c034e1eba423fc4
+  zh: 3ee6ce31eb8a9bc5

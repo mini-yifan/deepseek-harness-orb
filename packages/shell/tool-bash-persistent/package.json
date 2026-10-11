@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-tool-bash-persistent",
   "description": "Model-facing owner-scoped persistent Bash tool backed by the Harness PTY service",
-  "version": "0.1.7-rc.1",
+  "version": "0.2.1-alpha.2",
   "publishConfig": {
     "access": "public"
   },
@@ -27,10 +27,12 @@
   "license": "MIT",
   "peerDependencies": {
     "@deepseek-ai/dsh-agent": "workspace:*",
+    "@deepseek-ai/dsh-output-retention": "workspace:*",
     "@deepseek-ai/dsh-terminal": "workspace:*",
     "@deepseek-ai/dsh-timeout": "workspace:*",
     "@deepseek-ai/dsh-tools": "workspace:*",
-    "@deepseek-ai/cordis": "workspace:~"
+    "@deepseek-ai/cordis": "workspace:~",
+    "@deepseek-ai/dsh-working-directory": "workspace:*"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "workspace:~"
@@ -41,6 +43,7 @@
     "@deepseek-ai/dsh-agent": "workspace:*",
     "@deepseek-ai/dsh-agent-loop-testkit": "workspace:*",
     "@deepseek-ai/dsh-llm": "workspace:*",
+    "@deepseek-ai/dsh-output-retention": "workspace:*",
     "@deepseek-ai/dsh-terminal": "workspace:*",
     "@deepseek-ai/dsh-terminal-bash": "workspace:*",
     "@deepseek-ai/dsh-sandbox": "workspace:*",
@@ -51,6 +54,7 @@
     "@deepseek-ai/dsh-timeout": "workspace:*",
     "@deepseek-ai/dsh-tools": "workspace:*",
     "@deepseek-ai/cordis": "workspace:~",
-    "@deepseek-ai/dsh-session-projection": "workspace:*"
+    "@deepseek-ai/dsh-session-projection": "workspace:*",
+    "@deepseek-ai/dsh-working-directory": "workspace:*"
   }
 }

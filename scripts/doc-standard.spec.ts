@@ -45,6 +45,7 @@ const KIND_TEMPLATES: Readonly<Record<string, string>> = {
   'persistence-change': '.agents/skills/dsh-doc/templates/persistence-change.md',
   'persistence-release': '.agents/skills/dsh-doc/templates/persistence-release.md',
   'persistence-format': '.agents/skills/dsh-doc/templates/persistence-format.md',
+  'upgrade-guide': '.agents/skills/dsh-doc/templates/upgrade-guide.md',
 }
 
 /**
@@ -64,11 +65,12 @@ const PACKAGE_LIBRARIES: Readonly<Record<string, string>> = {
   'packages/core/scope': 'Scoped-context primitives; exports functions and types without a plugin entry.',
   'packages/experimental/webworker-packer': 'Build-time VFS image packer and command library.',
   'packages/experimental/webworker-runtime': 'Browser worker runtime library with explicit host entry points.',
-  'packages/hooks/hook-protocol': 'Shared wire-protocol library between the hook bridges.',
+  'packages/experimental/hook-protocol': 'Shared wire-protocol library between the hook bridges.',
   'packages/identity/anonymous-user-id': 'Harness-home identity helper with no plugin registration.',
   'packages/sandbox/sandbox-windows-acl': 'Windows ACL sandbox library consumed by sandbox-local.',
   'packages/sdk/client': 'Client-process library; the spawned runtime owns plugin behavior.',
   'packages/sdk/protocol': 'Wire-protocol library with type declarations only.',
+  'packages/ssh/ssh-helper-runtime': 'Private executable entry consumed by the packaging pipeline; no Cordis plugin export.',
   'packages/session/session-format': 'Pure Session format planning, codec dispatch, and lossless JSON library.',
   'packages/session/session-format-catalog': 'Generated build-static Session format inventory with no plugin registration.',
   'packages/session/session-format-v0-to-v1': 'Pure released-v0 codec and adjacent migration library.',
@@ -76,7 +78,6 @@ const PACKAGE_LIBRARIES: Readonly<Record<string, string>> = {
   'packages/session/session-format-v3-to-v4': 'Released V3 codec reuse and adjacent migration library.',
   'packages/session/session-telemetry': 'Telemetry Service Definition and capture library; providers mount the backend.',
   'packages/session/session-title-llm': 'Shared LLM title-provider registration and request policy.',
-  'packages/subagent/subagent-in-process-driver': 'Shared one-shot child-agent driver used by provider plugins.',
   'packages/subprocess/win32-process': 'Low-level Win32 process and Job Object primitives.',
   'packages/test-support/session-snapshot': 'Test infrastructure; mounts nothing into a product composition.',
   'packages/test-support/agent-loop-testkit': 'Test helper library; mounts nothing into a product composition.',
@@ -91,6 +92,7 @@ const PACKAGE_LIBRARIES: Readonly<Record<string, string>> = {
   'packages/util/crypto': 'Zero-dependency identifier minting utility.',
   'packages/util/deque': 'Zero-dependency circular deque utility.',
   'packages/util/chunked-list': 'Persistent collection operations and checkpoint validation without a plugin surface.',
+  'packages/util/code-language': 'Zero-dependency file-extension to syntax-highlighting language table.',
   'packages/util/home-paths': 'Zero-dependency harness-home path resolver.',
   'packages/util/launch-environment': 'Zero-dependency environment resolver.',
   'packages/util/lazy-require': 'Caller-relative CommonJS-compatible dependency loader.',
@@ -447,7 +449,6 @@ describe('reference-example README pair', () => {
 
   it('keeps the sidecar consistency record present', () => {
     const sidecar = readFileSync(resolve(root, dir, 'README.i18n.yaml'), 'utf8')
-    expect(sidecar).toMatch(/^README\.md: [0-9a-f]{40}$/m)
-    expect(sidecar).toMatch(/^README\.zh\.md: [0-9a-f]{40}$/m)
+    expect(sidecar).toMatch(/^\/[^\s:]*:\n {2}en: [0-9a-f]{16}\n {2}zh: [0-9a-f]{16}$/m)
   })
 })

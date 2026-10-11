@@ -1,10 +1,11 @@
 /** Pure terminal-card derivation from raw Tool call and result fields. @module */
 import type { TerminalBlockLabels, TerminalBlockProps } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
-import { resolveWorkspacePath } from '@deepseek-ai/dsh-util-workspace-path'
+import { isAbsoluteWorkspacePath, resolveWorkspacePath } from '@deepseek-ai/dsh-util-workspace-path'
 import { hasSpillNotice } from '@deepseek-ai/dsh-spill-policy/notice'
 import type { ToolCallBlock } from './tool-call-model.ts'
-import { parsedToolCall, singleResultText, validEscalationFields } from './raw-tool-call.ts'
+import { parsedToolCall, singleResultText } from './raw-tool-call.ts'
+import { recordedAbsolutePath } from './recorded-path.ts'
 
 /**
  * Build the TerminalBlock display copy from the conversation locale seat —
@@ -16,6 +17,7 @@ import { parsedToolCall, singleResultText, validEscalationFields } from './raw-t
  */
 export function terminalBlockLabels(t: TranslateNS<'conversation'>): TerminalBlockLabels {
   return {
+    commandLine: line => t('terminal.commandLine', { n: line }),
     signal: signal => t('terminal.signal', { signal }),
     exitCode: code => t('terminal.exitCode', { code }),
     noExitCode: t('terminal.noExitCode'),
@@ -189,7 +191,9 @@ function shellCall(name: string, args: Record<string, unknown>): ShellCall | nul
   if (timeoutMs !== undefined && (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0)) return null
   if (workdir !== undefined && typeof workdir !== 'string') return null
   if (background !== undefined && typeof background !== 'boolean') return null
-  if (!validEscalationFields(args)) return null
+  // Escalation fields stay unchecked: their validity depends on the Session's
+  // sandbox mode, which only the Host knows, and a rejected call settles as an
+  // error result on the generic body.
   if (description === undefined) {
     // Standard dsh-tool-bash and dsh-tool-pwsh schemas require `description`;
     // persistent shell providers omit it. Their parameter roots stay open, so
@@ -205,6 +209,16 @@ function shellCall(name: string, args: Record<string, unknown>): ShellCall | nul
     persistent: false,
     background: background === true,
   }
+}
+
+/**
+ * Identify a background shell launch whose result acknowledges a job, not its exit.
+ * @param block - Tool block at any call stage.
+ * @returns whether the call requests a background shell job.
+ */
+export function isBackgroundShellCall(block: ToolCallBlock): boolean {
+  const parsed = parsedToolCall(block)
+  return parsed !== null && shellCall(parsed.name, parsed.args)?.background === true
 }
 
 /**
@@ -278,7 +292,7 @@ function parseExitStatus(text: string): { output: string; exitCode?: number; sig
  * and malformed input use the generic path. {@link isSettledPersistentShellCall} lets that generic
  * persistent result remain expandable without inventing one process status.
  * @param block - running or settled Tool block.
- * @param sessionCwd - session workspace root used to resolve workdir.
+ * @param sessionCwd - original workspace root used only for old results without recorded cwd.
  * @returns locale-neutral terminal-card data, or null for the generic path.
  */
 export function terminalCardModel(
@@ -293,7 +307,12 @@ export function terminalCardModel(
   const copy: TerminalCardModel['copy'] = call.kind === 'shell'
     ? { kind: 'shell', command: call.command, description: call.description }
     : { kind: 'terminal-send', text: call.text, sessionId: call.sessionId }
-  const cwd = resolveTerminalCwd(call.kind === 'shell' ? call.workdir : undefined, sessionCwd)
+  const workdir = call.kind === 'shell' ? call.workdir : undefined
+  const absoluteRequestCwd = workdir !== undefined && isAbsoluteWorkspacePath(workdir) ? normalizeSegments(workdir) : undefined
+  const cwd = 'kind' in block
+    ? recordedAbsolutePath(block.meta, 'cwd') ?? (call.kind === 'shell' && block.parentCallId === undefined
+      ? resolveTerminalCwd(workdir, sessionCwd) : absoluteRequestCwd)
+    : absoluteRequestCwd
   if (!('kind' in block)) {
     return {
       copy,

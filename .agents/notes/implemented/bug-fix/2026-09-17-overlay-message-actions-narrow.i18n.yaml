@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-17-overlay-message-actions-narrow.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-17-overlay-message-actions-narrow.md
-2026-09-17-overlay-message-actions-narrow.md: f60229e1fee2dfffccab2d26c01aecc351a9078a
-2026-09-17-overlay-message-actions-narrow.zh.md: 543ad734f1708c78f4ebedf498b1eec2064b15ea
+/agent-note-overlay-message-actions-stay-clickable-on-a-long-clock:
+  en: 4f8e01f16a94e745
+  zh: 3f43c07a7efdbd41
+/agent-note-overlay-message-actions-stay-clickable-on-a-long-clock/problem:
+  en: 5833bf0498579318
+  zh: 9bc94f7ef97fd180
+/agent-note-overlay-message-actions-stay-clickable-on-a-long-clock/decision:
+  en: 534eca09fc2ef974
+  zh: 6d3450a39ed3b757
+/agent-note-overlay-message-actions-stay-clickable-on-a-long-clock/alternatives-considered:
+  en: d75a8a49c51e5a69
+  zh: b00183e444971aad
+/agent-note-overlay-message-actions-stay-clickable-on-a-long-clock/consequences:
+  en: 1c9e4c080d231798
+  zh: 9fbdcf9ca5b456e6
+/agent-note-overlay-message-actions-stay-clickable-on-a-long-clock/testing:
+  en: b2297d497d0410d5
+  zh: 5ebaaf6c45e6b942

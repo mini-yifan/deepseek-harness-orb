@@ -1,3 +1,4 @@
+import { provideWorkingDirectoryFixture } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
@@ -20,6 +21,7 @@ import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import PtcWorkflowEngine from '@deepseek-ai/dsh-workflow-ptc'
 import { mountWorkflowRuntime } from '../../workflow-ptc/tests/setup.ts'
 import * as toolWorkflow from '../src/index.ts'
+import type {} from '../src/types.ts'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 
@@ -599,17 +601,15 @@ describe('dsh-tool-workflow', () => {
       const { ctx, parent } = await setupBackground({ enableRunInBackground: false })
       const tool = ctx.tools.get('workflow')!
       expect(JSON.stringify(tool.parameters)).not.toContain('run_in_background')
-      expect(tool.description).toContain('The run executes in the foreground:')
       expect(tool.description).not.toContain('run_in_background')
       const result = await execute(ctx, { script: SCRIPT, meta: META, run_in_background: true }, { agent: parent })
       expect(result.isError).toBe(true)
       expect((result.content[0] as { text: string }).text).toContain('run_in_background is disabled')
     })
 
-    it('advertises the background semantics in the description and the parameter', async () => {
+    it('advertises the background semantics in the parameter', async () => {
       const { ctx } = await setupBackground()
       const tool = ctx.tools.get('workflow')!
-      expect(tool.description).toContain('Set `run_in_background: true` for a long run')
       expect(JSON.stringify(tool.parameters)).toContain('return a job id immediately instead of waiting')
     })
   })
@@ -621,6 +621,7 @@ describe('dsh-tool-workflow', () => {
       await ctx.plugin(SystemPrompt)
       await ctx.plugin(ToolRuntime)
       await ctx.plugin(SessionProjectionRegistry)
+      provideWorkingDirectoryFixture(ctx)
       await ctx.plugin(SubagentRuntime)
       ctx.subagents.registerProvider({
         name: 'spawn',
@@ -656,6 +657,7 @@ describe('dsh-tool-workflow', () => {
       await ctx.plugin(LocalJobRegistry)
       await ctx.plugin(ToolTasks)
       await ctx.plugin(SessionProjectionRegistry)
+      provideWorkingDirectoryFixture(ctx)
       await ctx.plugin(SubagentRuntime)
       ctx.subagents.registerProvider({
         name: 'spawn',

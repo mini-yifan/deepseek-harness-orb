@@ -11,6 +11,7 @@ import {
 import { openSettings, ZH_BROWSER_LOCALE, saveFailureShot } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./expected/onboarding-native', import.meta.url))
+const SIGNED_OUT_MENU_EXPECTED = join(SNAPSHOT_DIR, 'signed-out-menu.expected.md')
 const MODE = webSnapshotMode()
 
 describe.skipIf(MODE === 'record').each([false, true])('web e2e: native credential onboarding (desktop marker: %s)', (desktop) => {
@@ -27,6 +28,8 @@ describe.skipIf(MODE === 'record').each([false, true])('web e2e: native credenti
     })
     browser = await chromium.launch()
     page = await browser.newPage({ viewport: { width: 1440, height: 960 }, locale: ZH_BROWSER_LOCALE })
+    // The shared menu golden uses the Linux shortcut profile on every test host.
+    await page.addInitScript(() => { Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64' }) })
     if (desktop) await page.addInitScript(() => { Object.defineProperty(globalThis, 'dshDesktop', { value: { protocolVersion: 1 } }) })
     tripwire = watchConsole(page)
   })
@@ -42,9 +45,11 @@ describe.skipIf(MODE === 'record').each([false, true])('web e2e: native credenti
     const credentials = await readFile(credentialPath, 'utf8')
     await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     const welcome = page.getByRole('dialog', { name: WELCOME_NOTICE_COPY.zh.title })
-    await welcome.waitFor()
-    await welcome.getByRole('button', { name: WELCOME_NOTICE_COPY.zh.continueLabel }).click()
-    await welcome.waitFor({ state: 'detached' })
+    if (!desktop) {
+      await welcome.waitFor()
+      await welcome.getByRole('button', { name: WELCOME_NOTICE_COPY.zh.continueLabel }).click()
+      await welcome.waitFor({ state: 'detached' })
+    }
 
     for (const reload of [false, true]) {
       if (reload) {
@@ -53,8 +58,36 @@ describe.skipIf(MODE === 'record').each([false, true])('web e2e: native credenti
         acknowledgeReloadConnectionLoss(tripwire, warningsBefore)
       }
       const accountMenu = page.getByRole('button', { name: '账号菜单', exact: true })
-      if (desktop) await accountMenu.waitFor()
-      else {
+      if (desktop) {
+        await accountMenu.waitFor()
+        expect(await accountMenu.textContent()).toBe('更多')
+        const triggerBox = (await accountMenu.boundingBox())!
+        expect(Math.abs(triggerBox.height - 32)).toBeLessThan(1)
+        await accountMenu.click()
+        const menu = page.getByRole('menu')
+        await menu.waitFor()
+        expect(await menu.getByRole('menuitem').count()).toBe(3)
+        // Shortcut hints vary by host platform; accessible names identify the three actions.
+        for (const name of ['设置', '意见反馈', '登录']) {
+          expect(await menu.getByRole('menuitem', { name, exact: true }).count()).toBe(1)
+        }
+        const menuBox = (await menu.boundingBox())!
+        expect(Math.abs(menuBox.width - 124)).toBeLessThan(1)
+        expect(Math.abs(menuBox.height - 128)).toBeLessThan(1)
+        expect(Math.abs(triggerBox.y - (menuBox.y + menuBox.height) - 4)).toBeLessThan(1)
+        for (const row of await menu.getByRole('menuitem').all()) {
+          const rowBox = (await row.boundingBox())!
+          expect(Math.abs(rowBox.height - 40)).toBeLessThan(1)
+          expect(Math.abs(menuBox.width - rowBox.width - 8)).toBeLessThan(1)
+          const glyph = (await row.locator('svg').first().boundingBox())!
+          expect(Math.abs(glyph.width - 16)).toBeLessThan(1)
+          expect(Math.abs(glyph.height - 16)).toBeLessThan(1)
+        }
+        const menuAria = await captureStableAria(page, '[role="menu"]', scaffold.workspaceCwd)
+        await compareOrRefreshGolden(SIGNED_OUT_MENU_EXPECTED, menuAria, MODE)
+        await page.keyboard.press('Escape')
+        await menu.waitFor({ state: 'detached' })
+      } else {
         await page.getByRole('button', { name: '设置', exact: true }).waitFor()
         expect(await accountMenu.count()).toBe(0)
         expect(await page.getByRole('dialog', { name: '开始你的创作' }).count()).toBe(0)
@@ -72,6 +105,6 @@ describe.skipIf(MODE === 'record').each([false, true])('web e2e: native credenti
     }
     expect(tripwire.warnings).toEqual([])
     expect(tripwire.pageErrors).toEqual([])
-    await assertFixtureInventory(SNAPSHOT_DIR, ['models.expected.md'])
+    await assertFixtureInventory(SNAPSHOT_DIR, ['models.expected.md', 'signed-out-menu.expected.md'])
   })
 })

@@ -80,7 +80,6 @@ kind: "package-reference"
 | [`src/index.ts`](src/index.ts) | 插件入口：工具注册、配置、系统提示词章节、结果渲染 |
 | [`src/authority.ts`](src/authority.ts) | 执行时权限检查与 Goal Round 接受 |
 | [`src/wrapup.ts`](src/wrapup.ts) | 终局自主更新的结束消息指令 |
-| — | 不发布运行时不变式伴生入口；此面向模型的适配器不拥有独立状态或事件协议；已接受的变更由 goal 领域检查，权限行为则由本包测试验证。 |
 
 ### 工具输出
 
@@ -109,12 +108,12 @@ kind: "package-reference"
 
 #### 模型看到的内容
 
-固定 goal 策略说明何种用户语义意图值得创建 goal，要求更新前先精确读取 ref，解释会话 resume／fork 后如何重新启用续行，并限制完成／阻塞声明。持久 paused 的 resume 会在执行时以 `GOAL_TOOL_RESUME_PAUSED` 拒绝；面向用户的 goal 控件拥有该转换。配置的阈值会插入该指引。
+固定 goal 策略允许以任意语言推断 goal 意图，解释会话 resume／fork 后如何重新启用续行，并限制完成／阻塞声明；创建范围和更新前读取 ref 由工具定义说明。持久 paused 的 resume 会在执行时以 `GOAL_TOOL_RESUME_PAUSED` 拒绝；面向用户的 goal 控件拥有该转换。配置的阈值会插入该指引。
 
 ##### Goal 策略
 
 ```markdown
-Use goal tools for one long-running completion objective in the current session. create_goal may infer goal intent from a direct human request in any language; do not create a goal for routine single-turn work. Call get_goal before update_goal and copy its exact goal_id and revision. After session resume or fork, an active goal is disarmed: when a human asks to continue or resume in any wording or language, use update_goal action resume to rearm it. Mark complete only when the objective is actually achieved. Mark blocked only after the same blocking condition persists for at least 3 consecutive goal rounds, and report that concrete condition in blocked_reason; difficulty, uncertainty, or useful remaining work is not blocked.
+create_goal may infer goal intent from a direct human request in any language. After session resume or fork, an active goal is disarmed: when a human asks to continue or resume in any wording or language, use update_goal action resume to rearm it. Mark complete only when the objective is actually achieved. Mark blocked only after the same blocking condition persists for at least 3 consecutive goal rounds, and report that concrete condition in blocked_reason; difficulty, uncertainty, or useful remaining work is not blocked.
 ```
 
 #### Token 影响

@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-19-computer-use-screenshot-degenerate-raster.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-19-computer-use-screenshot-degenerate-raster.md
-2026-09-19-computer-use-screenshot-degenerate-raster.md: 86a9b84bfb27d11c728cea53b888da3415971a3d
-2026-09-19-computer-use-screenshot-degenerate-raster.zh.md: a7aede61c4aa6bb3dc5969908496d462dc058916
+/agent-note-computer-use-skips-degenerate-screenshot-rasters:
+  en: 08423d86c2e8564e
+  zh: a04f7469dae1d013
+/agent-note-computer-use-skips-degenerate-screenshot-rasters/problem:
+  en: 92dc1c389e51d9b2
+  zh: 6a33726d17dea0af
+/agent-note-computer-use-skips-degenerate-screenshot-rasters/decision:
+  en: 3e5d04a77f7e7fb6
+  zh: 6f26d5abcff955a5
+/agent-note-computer-use-skips-degenerate-screenshot-rasters/alternatives-considered:
+  en: 7ded77ad84beda9f
+  zh: b1e9ce3d8f976bdf
+/agent-note-computer-use-skips-degenerate-screenshot-rasters/consequences:
+  en: 8cf75f84d74ea62c
+  zh: 8b31b7785c8f69a4
+/agent-note-computer-use-skips-degenerate-screenshot-rasters/testing:
+  en: d35abaaaa997c5e3
+  zh: 8521c238705cbb5f

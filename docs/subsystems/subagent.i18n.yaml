@@ -1,6 +1,28 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for subagent.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/subsystems/subagent.md
-subagent.md: 67f9bc31b46617ea2f7b1ec81bf8c52fd62720cb
-subagent.zh.md: a69e032ed96a24a980badaf9e14d924311e1d175
+/subagents:
+  en: 9d48a27a49585a3d
+  zh: 89da32c8a16c290a
+/subagents/capabilities-and-activation-requests:
+  en: 8c92b131f67997f6
+  zh: c2dc606a0859420c
+/subagents/local-children-and-activations:
+  en: d926d4777ec0f11e
+  zh: 0ae6076e24b66401
+/subagents/messages-and-interruption:
+  en: 623b06b3c12540bc
+  zh: f56c6341e1c62768
+/subagents/durable-enumeration:
+  en: 30c3607a969696ce
+  zh: e6359cdf22b1e235
+/subagents/results-and-backend-handles:
+  en: 69ea5bed7d9fb64a
+  zh: b187a822b813e80a
+/subagents/the-provider-contract-subagentprovider:
+  en: 226ba8094a8cf96c
+  zh: 719678662905d1eb
+/subagents/durable-enumeration-listchildren-listdescendants-and-their-entries:
+  en: d8ce7969b65ad86e
+  zh: d39dac6592681bf2

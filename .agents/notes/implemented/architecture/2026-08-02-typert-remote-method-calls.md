@@ -147,7 +147,7 @@ The strict generator writes `scope` only when a direct method has exactly one lo
 
 Parameter order comes from the method signature. HTTP fields come from parameter names or lookup declarations. A cancellation descriptor reserves only the final `signal` position and keeps it outside named `args`; Connection or a direct Gateway caller supplies the actual signal. The Gateway does not infer optional fields, Context types, lookup types, or missing arguments from request contents, and it does not synthesize business defaults.
 
-A LIB codec contains a success-cached Zod schema factory and a canonical `typeSymbol` consisting of "package + public subpath + export name." The Host Gateway invokes parameter and identity factories when it first decodes strict input. The Client contribution retains the same codec metadata for strict input checks at mount but does not materialize invocation schemas; [Host-only Remote input validation](../simplification/2026-09-15-host-only-remote-input-validation.md) owns this placement. An SRC codec is marked only as `src-json`.
+A LIB codec contains a success-cached Zod schema factory and a canonical `typeSymbol` consisting of "package + public subpath + export name." The Host Gateway invokes parameter and identity factories when it first decodes strict input. The Client contribution retains the same codec metadata for strict input checks at mount but does not materialize invocation schemas; [Host-only Remote input validation](../../../../packages/api/gateway/README.md) owns this placement. An SRC codec is marked only as `src-json`.
 
 Descriptors exist only in the local registry on each side. The wire carries only the `/api` channel, endpoint, and `{ args }` payload. The Client uses its descriptor to map positional arguments and Context identity into named fields. The Host uses its descriptor to validate those fields, resolve the receiver, and invoke the method.
 
@@ -520,7 +520,7 @@ A consumer may import a Remote contract that is not currently mounted on the Hos
 
 Connection's general channel API must suit both the current HTTP carrier and a future WebSocket carrier. If the Client Remote or Gateway exposes `fetch`, an HTTP request, or a route handle, WebSocket migration will pierce the Remote layer again. Those physical objects must therefore remain internal to Connection.
 
-Remote endpoints use Connection's `trusted-host` authority. Loopback is accepted by default and LAN callers require an explicit trusted-host configuration, but this layer adds no per-method caller authorization; every trusted host can invoke a mounted Remote endpoint.
+Remote endpoints use Connection's `trusted-host` authority. Loopback and the listener's own bind address are accepted by default; any other LAN authority requires an explicit trusted-host configuration. This layer adds no per-method caller authorization; every accepted authority can invoke a mounted Remote endpoint.
 
 `hasSeen()` favors strict-definition safety over SRC availability. While a strict descriptor is withdrawn, such as during HMR, the Gateway continues to claim the endpoint and reports it unavailable instead of falling back to a weak SRC descriptor. Re-registration restores it; only a Typert registry restart forgets the historical strict definition.
 

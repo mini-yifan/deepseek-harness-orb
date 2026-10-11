@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-18-overlay-appearance-follows-host.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-18-overlay-appearance-follows-host.md
-2026-09-18-overlay-appearance-follows-host.md: 3257228f10c219c07a87ccfebdf16e6222095fc8
-2026-09-18-overlay-appearance-follows-host.zh.md: 33291e9905526db992f6f5efaf88f4ef362090f2
+/agent-note-overlay-appearance-follows-host:
+  en: cf320b53f5c618e0
+  zh: 4da3d10a3be65ab3
+/agent-note-overlay-appearance-follows-host/problem:
+  en: 113c1ee5d46b79fd
+  zh: 32d90321891422f3
+/agent-note-overlay-appearance-follows-host/decision:
+  en: 2ca77917118b1c81
+  zh: ac9ceb74db10b196
+/agent-note-overlay-appearance-follows-host/alternatives-considered:
+  en: a8b089e019eb5ee9
+  zh: eef0c395cab133c4
+/agent-note-overlay-appearance-follows-host/consequences:
+  en: 91bc04b670143e26
+  zh: b79f0f06f61ad153
+/agent-note-overlay-appearance-follows-host/testing:
+  en: 5f9e14af86e72740
+  zh: 8a109137ae7c32be

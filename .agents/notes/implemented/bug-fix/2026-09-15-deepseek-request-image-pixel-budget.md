@@ -16,7 +16,7 @@ The budget is per catalog model, not per agent preset. Computer Use uses `deepse
 
 Do not raise the default above 1,690,000: the provider's v41 solver then shrinks the raster toward the 1024-token cap, so extra encoded pixels are not extra visible detail.
 
-The [v41 image-token calculator](2026-09-10-deepseek-image-token-calculator-v41.md) still owns pricing of whatever raster is sent.
+The [v41 image-token calculator](../../archived/bug-fix/2026-09-10-deepseek-image-token-calculator-v41.md) still owns pricing of whatever raster is sent.
 
 ## Alternatives considered
 

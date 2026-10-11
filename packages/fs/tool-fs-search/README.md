@@ -25,6 +25,8 @@ Use `dsh-tool-fs-search` to give models `glob` file discovery and `grep` content
 <a id="use-this-package"></a>
 ## Use this package
 
+Searches use the Session's current working directory, including changes made with `working_directory`.
+
 Mount the tools after a `ctx.subprocess` backend; no host `rg` install is needed, and no filesystem provider is required. The model then gets modification-time-ordered file discovery and line-oriented content search, each bounded and timeout-guarded.
 
 ### Minimal composition
@@ -134,18 +136,12 @@ Read these pages when the package-level contract is not enough. They move from t
 
 #### What the model sees
 
-At assembly time, each section checks `ctx.tools.get(name, scope)` and renders only while its tool is visible. The grep paragraph includes its read follow-up sentence only while read is visible. The original text and section order stay unchanged for the same supported tool set, including PTC capabilities behind `run_code`. This scope-dependent text selection applies to system-prompt sections. Tool schema descriptions remain registration-time text; in particular, the grep schema still recommends read even in a scope that hides read. Scope-dependent schema wording is not implemented.
+At assembly time, each section checks `ctx.tools.get(name, scope)` and renders only while its tool is visible. The grep paragraph includes its read follow-up sentence only while read is visible. The original text and section order stay unchanged for the same supported tool set, including PTC capabilities behind `run_code`. This scope-dependent text selection applies to system-prompt sections. Tool schema descriptions remain registration-time text and do not name other tools.
 
-##### Glob guidance with `sampleOverCapGlobResults: true`
-
-```markdown
-Use the glob tool — not shell find — to discover files by path pattern. A pattern with no "/" matches basenames at any depth, so "*" matches every file in the tree rather than its top level. Results are files only, never directories, and include hidden and ignored files: a result that fits comes back in modification-time order, while a larger one is sampled across top-level entries, so it spans the tree instead of one subtree.
-```
-
-##### Glob guidance with `sampleOverCapGlobResults: false`
+##### Glob guidance
 
 ```markdown
-Use the glob tool — not shell find — to discover files by path pattern. A pattern with no "/" matches basenames at any depth, so "*" matches every file in the tree rather than its top level. Results are files only, never directories, and include hidden and ignored files: a result that fits comes back in modification-time order, while a larger one keeps the modification-time-ordered head.
+Use the glob tool — not shell find — to discover files by path pattern.
 ```
 
 ##### Grep guidance
@@ -225,5 +221,3 @@ These limits define when the search tools are a poor fit or need special operati
 None.
 
 </details>
-
-**Runtime invariant:** No companion is published. This model-facing adapter has no independent lifecycle stream; execution relations are owned by the capability seam it calls.

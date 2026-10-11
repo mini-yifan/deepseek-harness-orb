@@ -24,7 +24,9 @@ vi.mock('../src/client/readiness.ts', () => ({ observeReadiness: () => ({
 
 /** Narrow the erased registry payload before exercising its registered actions. */
 function assertVoiceActions(value: Record<string, unknown>): asserts value is Record<string, unknown> & VoiceInputInjected {
+  assert(typeof value.openSettings === 'function')
   assert(typeof value.createRecording === 'function')
+  assert(typeof value.selectMicrophone === 'function')
   assert(typeof value.configure === 'function')
   assert(typeof value.prepare === 'function')
   assert(typeof value.cancelPreparation === 'function')
@@ -42,6 +44,8 @@ async function fixture(fail = false) {
     }
   }
   new Remote()
+  const openBundle = vi.fn()
+  ctx.provide('pluginNavigation', { openBundle })
   const configure = vi.fn(async () => ({ ok: true, value: {} }))
   const prepare = vi.fn(async () => ({ ok: true, value: {} }))
   const cancelPreparation = vi.fn(async () => ({ ok: true, value: {} }))
@@ -56,7 +60,7 @@ async function fixture(fail = false) {
   } } as never,
   () => null)
   if (fail) vi.spyOn(ctx.slots, 'inject').mockImplementationOnce(() => { throw new Error('slot failed') })
-  return { ctx, unmount, configure, prepare, cancelPreparation, transcribe }
+  return { ctx, unmount, openBundle, configure, prepare, cancelPreparation, transcribe }
 }
 
 it('withdraws its Remote, localized slot and microphone captures on disposal', async () => {
@@ -69,6 +73,8 @@ it('withdraws its Remote, localized slot and microphone captures on disposal', a
     expect(entry).toMatchObject({ locale: 'voice-input' })
     const actions = entry!.inject!()
     assertVoiceActions(actions)
+    actions.openSettings()
+    expect(b.openBundle).toHaveBeenCalledWith('@deepseek-ai/dsh-experimental-voice-input-bundle')
     const finished = actions.createRecording()
     assert(finished instanceof Recording)
     await finished.dispose()
@@ -123,9 +129,12 @@ it('joins the same audio closure when cancellation overlaps Client plugin withdr
     const entry = b.ctx.slots.entries('conversation.input.activity').find(item => item.component === VoiceInput)!
     const actions = entry.inject!()
     assertVoiceActions(actions)
+    actions.selectMicrophone({ id: 'usb', label: 'USB microphone' })
+    expect(actions.hooks.microphoneDevice.getSnapshot()).toEqual({ id: 'usb', label: 'USB microphone' })
     const recording = actions.createRecording()
     assert(recording instanceof Recording)
     await recording.start()
+    expect(audio.getUserMedia.mock.calls.at(-1)?.[0].audio).toMatchObject({ deviceId: { exact: 'usb' } })
     cancelled = recording.dispose()
     const originalDispose = recording.dispose.bind(recording), joined = Promise.withResolvers<{ pending: Promise<void> }>()
     vi.spyOn(recording, 'dispose').mockImplementationOnce(() => {

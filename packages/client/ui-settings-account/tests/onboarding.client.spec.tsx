@@ -12,7 +12,7 @@ import { en } from '../src/client/locales.ts'
 afterEach(cleanup)
 
 const theme: ThemeSnapshot = {
-  preference: 'light', fontSize: 14,
+  preference: 'light', fontSizes: { text: 14, code: 11, terminal: 13 }, fontFamilies: { text: '', code: '', terminal: '' },
   active: { id: 'light', colorScheme: 'light', tokens: {} }, themes: [], revision: 0,
 }
 
@@ -25,11 +25,13 @@ it('claims onboarding while loading, offers API key fallback, and completes afte
   }
   const props = {
     ...globals,
+    hasRunningAccountTasks: vi.fn(async () => false),
     complete: vi.fn(), useApiKey: vi.fn(), setOnboarding: vi.fn(), showLogin: vi.fn(),
     useAccount: <T,>(select: (snapshot: AccountSnapshot) => T) => select(account),
     useTheme: <T,>(select: (snapshot: ThemeSnapshot) => T) => select(theme),
     start: vi.fn(async () => {}), cancel: vi.fn(async () => {}), signOut: vi.fn(async () => {}),
-    refresh: vi.fn(async () => {}), contactUs: vi.fn(), t: makeTranslate(en),
+    contactUs: vi.fn(), t: makeTranslate(en),
+    refreshAccount: vi.fn(async () => {}), bonusNoticeShown: vi.fn(), bonusNoticeDismissed: vi.fn(),
   }
   const view = render(<AccountOnboarding {...props} />)
   expect(props.setOnboarding).toHaveBeenCalledExactlyOnceWith(true)

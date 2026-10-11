@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-16-computer-use-transient-window-observation.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-16-computer-use-transient-window-observation.md
-2026-09-16-computer-use-transient-window-observation.md: fb0bc25486c2f13729050c7c24581a1f5f19de08
-2026-09-16-computer-use-transient-window-observation.zh.md: 4b5dda4dec10a7b7c35617163d5f090a44c63265
+/agent-note-computer-use-transient-window-observation:
+  en: f905ef7f7921b968
+  zh: 2c1817e7e3cb249e
+/agent-note-computer-use-transient-window-observation/problem:
+  en: 6adbef6d8c8713bb
+  zh: b7f9e9c9eb1db1bf
+/agent-note-computer-use-transient-window-observation/decision:
+  en: cfcb50e13c138c32
+  zh: d0cdc7e17849adac
+/agent-note-computer-use-transient-window-observation/alternatives-considered:
+  en: dcd82993966b1c00
+  zh: 4dff2cb5ba6308a8
+/agent-note-computer-use-transient-window-observation/consequences:
+  en: 15a757a494bfb7de
+  zh: 9d0c76d7cb6294c0
+/agent-note-computer-use-transient-window-observation/testing:
+  en: ff65adc5c790aee1
+  zh: 0c6d2b37533b82f2

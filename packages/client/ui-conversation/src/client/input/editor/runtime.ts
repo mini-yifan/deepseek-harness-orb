@@ -3,12 +3,13 @@ import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import type { LexicalEditor, NodeKey } from 'lexical'
 import {
   $addUpdateTag, $createParagraphNode, $createTextNode, $getRoot, $getSelection, $isRangeSelection,
-  CLEAR_HISTORY_COMMAND, createEditor, HISTORY_MERGE_TAG, PASTE_TAG,
+  BLUR_COMMAND, CLEAR_HISTORY_COMMAND, COMMAND_PRIORITY_CRITICAL, createEditor, HISTORY_MERGE_TAG, PASTE_TAG,
+  RootNode, SELECTION_CHANGE_COMMAND, SKIP_DOM_SELECTION_TAG,
 } from 'lexical'
 import { registerPlainText } from '@lexical/plain-text'
 import { createEmptyHistoryState, registerHistory } from '@lexical/history'
 import { mergeRegister } from '@lexical/utils'
-import type { Occurrence, ReferenceInsert } from '../../contract/draft-editor.ts'
+import type { DraftReference, ReferenceInsert } from '../../contract/draft-editor.ts'
 import { registerReferenceActivation } from './reference-activation.ts'
 import { ReferenceChipNode, $createReferenceChipNode } from './chip-node.tsx'
 import { refreshClaimDecoration, registerClaimDecoration } from './claim-decor.ts'
@@ -50,6 +51,7 @@ export class DraftEditorRuntime {
   private occurrenceSeq = 0
   /** Live lexicon subscription disposer; undefined until the controller resolves. */
   private lexiconOff: (() => void) | undefined
+  private lexiconSource: ObservableSnapshot<Lexicon> | undefined
 
   /** @param deps - model callbacks used by editor listeners and transforms. */
   constructor(private readonly deps: DraftEditorRuntimeDeps) {
@@ -65,15 +67,34 @@ export class DraftEditorRuntime {
    * @returns unregister callback that also detaches the editor root.
    */
   register(): () => void {
+    // A retained draft selection must not move keyboard focus back from another control.
+    const preserveExternalSelection = (): false => {
+      const root = this.editor.getRootElement()
+      if (root !== null && !root.contains(root.ownerDocument.activeElement)) {
+        $addUpdateTag(SKIP_DOM_SELECTION_TAG)
+      }
+      return false
+    }
     const unregister = mergeRegister(
       registerPlainText(this.editor),
+      this.editor.registerCommand(BLUR_COMMAND, () => {
+        // Finish this batch before an explicit focus can restore its updated selection.
+        this.editor.update(preserveExternalSelection, { discrete: true })
+        return false
+      }, COMMAND_PRIORITY_CRITICAL),
+      this.editor.registerCommand(SELECTION_CHANGE_COMMAND, preserveExternalSelection, COMMAND_PRIORITY_CRITICAL),
+      this.editor.registerNodeTransform(RootNode, preserveExternalSelection),
       registerReferenceActivation(this.editor, (source, reference) =>
         this.deps.openReference(source, reference)),
       registerHistory(this.editor, createEmptyHistoryState(), HISTORY_MERGE_DELAY_MS),
       this.editor.registerUpdateListener(() => { this.deps.onUpdate() }),
       registerClaimDecoration(this.editor, () => this.deps.activeClaimToken()),
       registerTextRefDecoration(this.editor, () => this.deps.lexicon(), () => this.deps.activeClaimToken()),
-      () => { this.lexiconOff?.() },
+      () => {
+        this.lexiconOff?.()
+        this.lexiconOff = undefined
+        this.lexiconSource = undefined
+      },
     )
     return () => {
       unregister()
@@ -107,16 +128,16 @@ export class DraftEditorRuntime {
   }
 
   /**
-   * Subscribe the text-ref re-scan to the controller's lexicon once the
-   * controller resolves. The deps thunk cannot resolve at construction (the
-   * shell is created inside the sessions provide materialization), so the
-   * first interactive updates retry until it can.
+   * Reconnect decorations when the optional trigger provider changes.
+   * The rescan reads the current editor and does not replace its content.
    */
-  private ensureLexiconSubscription(): void {
-    if (this.lexiconOff !== undefined) return
+  refreshLexiconSubscription(): void {
     const lexicon = this.deps.resolveLexicon()
-    if (lexicon === undefined) return
-    this.lexiconOff = lexicon.subscribe(() => { rescanTextRefs(this.editor) })
+    if (lexicon === this.lexiconSource) return
+    this.lexiconOff?.()
+    this.lexiconSource = lexicon
+    this.lexiconOff = lexicon?.subscribe(() => { rescanTextRefs(this.editor) })
+    rescanTextRefs(this.editor)
   }
 
   /**
@@ -124,7 +145,6 @@ export class DraftEditorRuntime {
    * @returns the projection preceding this read.
    */
   refreshProjection(): EditorProjection {
-    this.ensureLexiconSubscription()
     const prev = this.projected
     this.projected = this.editor.getEditorState().read(() =>
       $projectComposer(key => this.occurrenceIdOf(key)))
@@ -147,7 +167,7 @@ export class DraftEditorRuntime {
    */
   setDraft(text: string): void {
     const clean = text.replace(REFERENCE_PLACEHOLDER_RE, '')
-    if (clean === this.projection.clipboardText) return
+    if (clean === this.projection.clipboardText && this.projection.occurrences.length === 0) return
     this.editor.update(() => {
       const root = $getRoot()
       root.clear()
@@ -286,18 +306,18 @@ export class DraftEditorRuntime {
   }
 
   /**
-   * Rebuild one model-selected failure snapshot, creating fresh reference nodes.
+   * Import semantic content or a model-selected failure snapshot with fresh reference nodes.
    * @param draft - clipboard text.
    * @param occurrences - reference occurrences in clipboard order.
    */
-  restoreDraft(draft: string, occurrences: readonly Occurrence[]): void {
+  restoreDraft(draft: string, occurrences: readonly DraftReference[]): void {
     this.editor.update(() => {
       const root = $getRoot()
       root.clear()
       let paragraph = $createParagraphNode()
       root.append(paragraph)
       const appendText = (text: string): void => {
-        const lines = text.split('\n')
+        const lines = text.replace(REFERENCE_PLACEHOLDER_RE, '').split('\n')
         for (let i = 0; i < lines.length; i += 1) {
           const line = lines[i]
           if (line !== '') paragraph.append($createTextNode(line))

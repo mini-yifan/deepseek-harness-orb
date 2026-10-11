@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-与 `ui-conversation` 一起挂载本插件；用户在光标处键入触发器时，菜单随即出现在输入浮层中。分组候选项渲染在标题行之下，或渲染在 source 附加在自己各行上的小节标题之下；pick 路由到 source，消费方表面应用其结果——斜杠命令打开其弹窗或执行，引用插入其行内 token。每一行显示图标、标题（候选项的 `label`，没有 label 时显示 `name`）、当标题不是 `name` 的另一种大小写写法时跟在标题后的 `name` 别名，以及右对齐的说明；查询同时匹配 name 与 label。
+与 `ui-conversation` 一起挂载本插件；用户在光标处键入触发器时，菜单随即出现在输入浮层中。分组候选项渲染在标题行之下，或渲染在 source 附加在自己各行上的小节标题之下；pick 路由到 source，消费方表面应用其结果——斜杠命令打开其弹窗或执行，引用插入其行内 token。菜单图标和导航箭头使用 `--dsw-alias-menu-icon` 文本色。每一行显示图标、标题（候选项的 `label`，没有 label 时显示 `name`）、当标题不是 `name` 的另一种大小写写法时跟在标题后的 `name` 别名，以及右对齐的说明；查询同时匹配 name 与 label。
 
 ### 键盘与鼠标
 
@@ -37,6 +37,8 @@ kind: "package-reference"
 
 <a id="understand-the-implementation"></a>
 ## 理解实现
+
+菜单采用共享 `MenuSurface` 材质，包括用于背景模糊的 macOS 底层；自定义内容遵循[菜单规则](../../../docs/web-styling.zh.md#component-rules)。
 
 <details>
 <summary>实现细节——点击展开</summary>
@@ -55,7 +57,7 @@ kind: "package-reference"
 - [ui-commands](../ui-commands/README.zh.md)——把 `/` 命令 source 注册进本流水线并拥有命令弹窗外壳。
 - [ui-reference](../ui-reference/README.zh.md)——注册 `@` 文件与会话引用 source。
 - [ui-conversation](../ui-conversation/README.zh.md)——声明输入浮层 slot 并拥有 composer 与输入状态机。
-- [Web 客户端架构](../../../.agents/notes/implemented/architecture/2026-07-19-gui-web-client-architecture.zh.md)——浏览器插件行如何加载并注册 slot。
+- [Web 客户端架构](../../../docs/subsystems/web-client.zh.md)——浏览器插件行如何加载并注册 slot。
 
 -----
 
@@ -87,5 +89,3 @@ kind: "package-reference"
 无。
 
 </details>
-
-**运行时不变式：** 不发布伴生入口。触发流水线是浏览器侧纯内核（检测／归约／匹配）加一个注册表，其资源释放已由 HMR（热模块替换）安全性测试证明；它不发出 Cordis 事件，也不持有跨插件可变状态。

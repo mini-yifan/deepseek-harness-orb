@@ -44,6 +44,18 @@ interface FakePnpm {
 const command = vi.hoisted(() => ({ run: vi.fn<(...args: unknown[]) => Promise<FakeOutcome> & FakeChild>() }))
 vi.mock('execa', () => ({ execa: (...args: unknown[]) => command.run(...args) }))
 
+/** Whether the bounded wait for a recorded run returns at once; the wait itself is measured in run-tree.spec.ts. */
+const treeWait = vi.hoisted(() => ({ skip: false }))
+vi.mock('../src/run-tree.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/run-tree.ts')>()
+  return {
+    ...actual,
+    awaitTreeGone: async (...args: Parameters<typeof actual.awaitTreeGone>) => {
+      if (!treeWait.skip) await actual.awaitTreeGone(...args)
+    },
+  }
+})
+
 function fixture() {
   const home = mkdtempSync(join(tmpdir(), 'manager-pnpm-'))
   const dir = join(home, 'profiles', 'test')
@@ -73,7 +85,7 @@ function fixture() {
     if (argv.includes('--frozen-lockfile') || argv.includes('--config.lockfile=false')) return result(pnpm.repairExit, '')
     return result(pnpm.exitCode, pnpm.output, () => { pnpm.mutate(runDir) })
   })
-  onTestFinished(() => { command.run.mockReset(); rmSync(home, { recursive: true, force: true }) })
+  onTestFinished(() => { command.run.mockReset(); treeWait.skip = false; rmSync(home, { recursive: true, force: true }) })
   return { home, dir, context: { home, profile: 'test', installAnchor, cwd: home }, pnpm }
 }
 
@@ -579,6 +591,134 @@ it('initializes missing profiles under the same lock and reports initialization'
     expect(readProfileManifest('test', join(home, 'profiles', profile)).dsh?.profile?.bundles).toContain('@deepseek-ai/dsh-base')
   }
   expect(messages.filter(text => text.includes('initialized profile'))).toHaveLength(2)
+})
+
+/** The record an operation leaves for the pnpm run it started. */
+function runRecord(dir: string): string {
+  return join(dir, '.plugin-manager', 'run.json')
+}
+
+/**
+ * The record an operation writes for the run it started, read once the record
+ * appears. The write follows the run's launch, so a bound this far above one
+ * atomic file write keeps a missing record reporting as the assertion that
+ * names it rather than as a runner timeout.
+ */
+const RECORD_WAIT_MS = 2_000
+
+/**
+ * A run that stays in flight until the test has read the profile's run record,
+ * so the read observes the run and cannot race its end. `spawned` is the
+ * mocked launcher's hand-over: the wait for the record starts when the run
+ * does, not before the operation reached it under a loaded runner.
+ */
+function observingChild(dir: string, pid: number, waitMs = RECORD_WAIT_MS) {
+  const stdout = new PassThrough()
+  const stderr = new PassThrough()
+  const raw = new EventEmitter()
+  const observed: { record: string | undefined } = { record: undefined }
+  const spawned = Promise.withResolvers<undefined>()
+  const done = new Promise<FakeOutcome>((resolve) => {
+    void spawned.promise.then(async () => {
+      observed.record = await recordedRun(dir, waitMs)
+      stdout.end()
+      stderr.end()
+      raw.emit('exit', 0, null)
+      resolve({ exitCode: 0, failed: false, stdout: '', stderr: '' })
+    })
+  })
+  return {
+    child: Object.assign(done, { stdout, stderr, nodeChildProcess: raw, pid }),
+    observed,
+    spawned: () => { spawned.resolve(undefined) },
+  }
+}
+
+/** The written run record, or undefined once `waitMs` passes without one. */
+async function recordedRun(dir: string, waitMs: number): Promise<string | undefined> {
+  const deadline = Date.now() + waitMs
+  for (;;) {
+    if (existsSync(runRecord(dir))) return readFileSync(runRecord(dir), 'utf8')
+    if (Date.now() >= deadline) return undefined
+    await new Promise(resolve => setTimeout(resolve, 1))
+  }
+}
+
+it.each([8192, 30])('refuses to run while a run recorded by an exited operation is still active (output bound %i)', async (outputBytes) => {
+  const { dir, context } = fixture()
+  treeWait.skip = true
+  mkdirSync(join(dir, '.plugin-manager'), { recursive: true })
+  const record = JSON.stringify({ pid: process.pid, grouped: false })
+  writeFileSync(runRecord(dir), record)
+  const messages: string[] = []
+  const outcome = await runProfilePnpm(context, ['add', './extra'], {
+    execution: 'service', outputBytes, onOutput: (text) => { messages.push(text) },
+  })
+  const diagnostic = readFileSync(outcome.logPath, 'utf8')
+  expect(diagnostic).toContain(`process ${String(process.pid)}, started by an earlier package operation whose own process ended, is still running`)
+  expect(diagnostic).toContain(`delete ${runRecord(dir)}`)
+  expect(messages.join('')).toBe(diagnostic)
+  expect(outcome).toMatchObject({ exitCode: 1, truncated: diagnostic.length > outputBytes })
+  expect(outcome.output).toBe(diagnostic.slice(-outputBytes))
+  expect(command.run).not.toHaveBeenCalled()
+  expect(readFileSync(runRecord(dir), 'utf8')).toBe(record)
+})
+
+it('removes the record of a recorded run that stopped and runs', async () => {
+  const { dir, context } = fixture()
+  const exited = 2_000_000_000
+  const kill = process.kill.bind(process)
+  vi.spyOn(process, 'kill').mockImplementation((target, signal) => {
+    if (target === exited) throw Object.assign(new Error('ESRCH: injected'), { code: 'ESRCH' })
+    return kill(target, signal)
+  })
+  onTestFinished(() => { vi.restoreAllMocks() })
+  mkdirSync(join(dir, '.plugin-manager'), { recursive: true })
+  writeFileSync(runRecord(dir), JSON.stringify({ pid: exited, grouped: false }))
+  const outcome = await runProfilePnpm(context, ['add', './extra'], { execution: 'service', outputBytes: 8192 })
+  expect(outcome.exitCode).toBe(0)
+  expect(command.run).toHaveBeenCalledOnce()
+  expect(existsSync(runRecord(dir))).toBe(false)
+})
+
+it.each(['not json', 'null', '{"pid":0,"grouped":false}', '{"pid":12,"grouped":"no"}'])(
+  'refuses to run beside a run record that names no run: %s', async (record) => {
+    const { dir, context } = fixture()
+    mkdirSync(join(dir, '.plugin-manager'), { recursive: true })
+    writeFileSync(runRecord(dir), record)
+    const outcome = await runProfilePnpm(context, ['add', './extra'], { execution: 'service', outputBytes: 8192 })
+    expect(outcome).toMatchObject({ exitCode: 1 })
+    expect(outcome.output).toBe(`dsh: ${runRecord(dir)} does not name a package run; delete it once no earlier package operation is still running in this profile\n`)
+    expect(command.run).not.toHaveBeenCalled()
+  },
+)
+
+it.each(['cli', 'service'] as const)('records a %s run while it runs and removes the record once it ends', async (execution) => {
+  const { dir, context } = fixture()
+  const { child, observed, spawned } = observingChild(dir, 4242)
+  command.run.mockImplementationOnce(() => { spawned(); return child })
+  const outcome = await runProfilePnpm(context, ['list'], { execution, outputBytes: 8192 })
+  expect(outcome.exitCode).toBe(0)
+  expect(JSON.parse(observed.record ?? 'null')).toEqual({
+    pid: 4242, grouped: execution === 'service' && process.platform !== 'win32',
+  })
+  expect(existsSync(runRecord(dir))).toBe(false)
+})
+
+it('records the install that repairs a refused installation', async () => {
+  const { dir, context, pnpm } = fixture()
+  pnpm.mutate = (target) => { installGuarded(target, 'incompatible') }
+  const base = command.run.getMockImplementation() as (...call: unknown[]) => Promise<FakeOutcome> & FakeChild
+  const repair = observingChild(dir, 4343)
+  command.run.mockImplementation((...call: unknown[]) => {
+    if (!(call[1] as readonly string[]).includes('--config.lockfile=false')) return base(...call)
+    repair.spawned()
+    return repair.child
+  })
+  const outcome = await runProfilePnpm(context, ['add', 'incompatible'], { execution: 'service', outputBytes: 8192 })
+  expect(outcome.exitCode).toBe(1)
+  expect(JSON.parse(repair.observed.record ?? 'null')).toEqual({ pid: 4343, grouped: false })
+  expect(existsSync(runRecord(dir))).toBe(false)
 })
 
 it('terminates a run that stopped printing and reports the silence bound', async () => {

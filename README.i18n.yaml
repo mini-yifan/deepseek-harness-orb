@@ -1,6 +1,43 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write README.md
-README.md: 423bccd7d9352dbc48f1705f37d35642e74f5b41
-README.zh.md: c760f87e4ac3b7dbb7bb55d733e31db5ab379836
+/:
+  en: 9c91110541030075
+  zh: 777e93c87c310c38
+/deepseek-orb:
+  en: 44e3b6678b0d1044
+  zh: 8ea47f87a767e6c6
+/deepseek-orb/dual-track-agent-architecture:
+  en: 91b0d29d217d092b
+  zh: 4fddaba8269e22d8
+/deepseek-orb/the-floating-ball:
+  en: 04fac518554b7b32
+  zh: 5c15f3bb1585768c
+/deepseek-orb/computer-use:
+  en: fb6d7d85bf3ea84d
+  zh: 1d9d37678d084460
+/deepseek-orb/platform-support:
+  en: b8d3f88163f0e67e
+  zh: 2e03ac4ba7a7788f
+/deepseek-orb/getting-started:
+  en: 79eb659e005ff484
+  zh: 9c3fab52473664f8
+/deepseek-orb/getting-started/prerequisites:
+  en: 1bdde24cce3c84ff
+  zh: 2d0ecca7ed483e03
+/deepseek-orb/getting-started/run-from-source:
+  en: 4239f556ddebbcf4
+  zh: 4a2e0603432085e4
+/deepseek-orb/getting-started/local-packaging:
+  en: 6d7b4e18ff8953ab
+  zh: cf766a74d6017c84
+/deepseek-orb/relationship-to-deepseek-harness:
+  en: 77a111ef30e15b27
+  zh: 4d3dc5f0a9ebaa9c
+/deepseek-orb/known-limitations:
+  en: a21984200fbc7081
+  zh: 88b876473fd3bb67
+/deepseek-orb/license:
+  en: d40757dda43ce59e
+  zh: 717ea023067054e2

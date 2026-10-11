@@ -1,5 +1,4 @@
-/* User bubble: right-aligned column (bubble + IconActions). Figma
-   User_Bubble/message_container 659:38813 — r22 fill, actions gap 6 below. */
+/* User messages align their bubble and action row to the right. */
 
 .userRow {
   display: flex;
@@ -26,7 +25,7 @@
      keeps narrow windows sane. */
   max-width: 100%;
   background: var(--dsw-specific-bubble);
-  border-radius: 22px;
+  border-radius: var(--dsw-radius-xl);
   /* 42px single-line bubble at the default size: 22 line + 10 vertical
      padding each side; the Settings font-size preference moves size and line
      height together through the body-published axis. */
@@ -49,9 +48,8 @@
   padding: 2px 0;
 }
 
-/* Compaction marker: one dim 24px row with a context icon at rest and a
-   hover/focus disclosure for the summary body. Dimmed title (not
-   label-primary) — the row is a boundary notice, not conversation content. */
+/* Compaction marker: one 24px row with a context icon at rest and a
+   hover/focus disclosure for the summary body. */
 .compactionRow {
   /* The toggle's line, and the band a pinned toggle occupies. The button's
      height and the offset that holds a summary's code banner below that band
@@ -68,9 +66,10 @@
   min-width: 0;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--dsw-radius-sm);
   background: none;
-  color: inherit;
+  color: var(--dsw-alias-label-tertiary);
+  transition: color 100ms ease;
   font: inherit;
   text-align: left;
 }
@@ -80,7 +79,7 @@
    scroll container's top while the row is open (the body is a sibling rendered
    only when expanded); the base background masks the prose scrolling under it.
    The square corners apply for as long as the row is open, pinned or not: the
-   fill is what masks the prose, and a 6px radius would leave that prose visible
+   fill is what masks the prose, and rounded corners would leave that prose visible
    in the corners. z-index outranks the markdown code block's own sticky banner
    (z-index 6 in CodeBlock.module.css); that banner itself stops below this
    toggle (rule below), so a summary's fenced code block never puts a control
@@ -114,6 +113,10 @@
   cursor: pointer;
 }
 
+.compactionButton:hover {
+  color: var(--dsw-alias-label-secondary);
+}
+
 .compactionButton:not(:disabled):hover {
   background: var(--dsw-alias-interactive-bg-hover);
 }
@@ -125,7 +128,7 @@
   width: calc(16px + var(--dsh-content-font-delta, 0px));
   height: calc(16px + var(--dsh-content-font-delta, 0px));
   margin-right: 6px;
-  color: var(--dsw-alias-label-secondary);
+  color: inherit;
 }
 
 /* Same glyph-scaling rule as DisclosureRow's leading: the CSS edge overrides
@@ -161,7 +164,7 @@
   flex: none;
   font-size: var(--dsh-content-font-size-secondary, 13px);
   line-height: calc(24px + var(--dsh-content-font-delta, 0px));
-  color: var(--dsw-alias-label-primary-dimmed);
+  color: inherit;
 }
 
 .compactionSep {
@@ -177,7 +180,7 @@
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  color: var(--dsw-alias-label-tertiary);
+  color: inherit;
   font-size: var(--dsh-content-font-size-secondary, 13px);
   line-height: calc(24px + var(--dsh-content-font-delta, 0px));
   text-overflow: ellipsis;
@@ -202,9 +205,10 @@
   display: inline-flex;
   align-items: center;
   width: fit-content;
+  max-width: 100%;
   padding: 2px 0;
   gap: 7px;
-  border-radius: 3px;
+  border-radius: var(--dsw-radius-sm);
   color: inherit;
   cursor: pointer;
   list-style: none;
@@ -216,12 +220,13 @@
 }
 
 .retrySummary::after {
+  flex: none;
   width: 6px;
   height: 6px;
+  margin-right: 2px;
   border-right: 1.5px solid currentcolor;
   border-bottom: 1.5px solid currentcolor;
   content: '';
-  opacity: 0.8;
   transform: rotate(-45deg);
   transition: transform 120ms ease;
 }
@@ -230,30 +235,20 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .compactionButton {
+    transition: none;
+  }
+}
+
 .retrySummary:focus-visible {
-  outline: 1.5px solid var(--dsw-alias-button-info-fill);
+  outline: 1.5px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 2px;
 }
 
 .retryText {
-  color: inherit;
-}
-
-.retryRow[data-active] .retryText {
-  background:
-    linear-gradient(
-      90deg,
-      var(--dsw-alias-label-tertiary) 0%,
-      var(--dsw-alias-label-tertiary) 40%,
-      var(--dsw-alias-label-secondary) 50%,
-      var(--dsw-alias-label-tertiary) 60%,
-      var(--dsw-alias-label-tertiary) 100%
-    );
-  background-position: 100% 50%;
-  background-size: 200% 100%;
-  background-clip: text;
-  color: transparent;
-  animation: retry-shimmer 1.6s ease-in-out infinite;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .retryRow[open] .retrySummary::after {
@@ -314,24 +309,6 @@
   font-weight: 600;
 }
 
-@keyframes retry-shimmer {
-  from {
-    background-position: 100% 50%;
-  }
-
-  to {
-    background-position: 0 50%;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .retryRow[data-active] .retryText {
-    background: none;
-    color: inherit;
-    animation: none;
-  }
-}
-
 .attachmentRow {
   display: flex;
   flex-wrap: wrap;
@@ -349,7 +326,7 @@
   min-height: 64px;
   padding: 8px 12px;
   border: 0.5px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.12));
-  border-radius: 16px;
+  border-radius: var(--dsw-radius-xl);
   background: var(--dsw-specific-input-major, transparent);
   box-sizing: border-box;
 }

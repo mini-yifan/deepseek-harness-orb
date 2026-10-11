@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-14-desktop-floating-orb.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-14-desktop-floating-orb.md
-2026-09-14-desktop-floating-orb.md: d12bc8ecec674a256451a2430c19485ca2ba3efb
-2026-09-14-desktop-floating-orb.zh.md: db3edb58b45ed8939335861974637aa63d3f63d6
+/agent-note-desktop-floating-orb-and-dual-agent:
+  en: 5475a4a5ab69f7c9
+  zh: ee2876cdb9985747
+/agent-note-desktop-floating-orb-and-dual-agent/problem:
+  en: 78091dd1a779fe42
+  zh: b1e8d4a7904ad613
+/agent-note-desktop-floating-orb-and-dual-agent/decision:
+  en: 06fcabdb90fbaa98
+  zh: 6d987e414c7e2245
+/agent-note-desktop-floating-orb-and-dual-agent/alternatives-considered:
+  en: 032b9eb20cd02dc1
+  zh: 728e45d5466ee4d5
+/agent-note-desktop-floating-orb-and-dual-agent/consequences:
+  en: 8d2b4c8745ccf266
+  zh: 945e0b9bbbfa4c33
+/agent-note-desktop-floating-orb-and-dual-agent/testing:
+  en: bb9049e0d55efcf8
+  zh: 3c70d98c9988a81c

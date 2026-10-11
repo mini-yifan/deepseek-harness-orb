@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-15-computer-use-pointer-and-open-tools.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-15-computer-use-pointer-and-open-tools.md
-2026-09-15-computer-use-pointer-and-open-tools.md: 85fa84b161eaf202f32be8044cc28437eed4d305
-2026-09-15-computer-use-pointer-and-open-tools.zh.md: 667b8cabb18093d7e419ec153ed066a953cc8491
+/agent-note-computer-use-pointer-and-open-tools:
+  en: 109e642335001344
+  zh: e56c090fb066a934
+/agent-note-computer-use-pointer-and-open-tools/problem:
+  en: f062117d4632754c
+  zh: a925e105285aaac6
+/agent-note-computer-use-pointer-and-open-tools/decision:
+  en: 03500c3ddae7c78b
+  zh: 94fff7351020c95b
+/agent-note-computer-use-pointer-and-open-tools/alternatives-considered:
+  en: 7c0f90e2eb4c6a6f
+  zh: dd963487bc80eecf
+/agent-note-computer-use-pointer-and-open-tools/consequences:
+  en: 2be69528b247f2f8
+  zh: be5757de96056bb0
+/agent-note-computer-use-pointer-and-open-tools/testing:
+  en: 69b8a59129b46ffa
+  zh: eb0779a64a86bcd5

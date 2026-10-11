@@ -726,6 +726,7 @@ function collapseAssistantRecords(
 function stateOf(record: TableRecord): RecordState {
   if (record.cell.isError) return 'error'
   if (record.cell.kind === 'compacted' && record.cell.timeSeconds === null) return 'running'
+  if (record.cell.assistantMetrics?.completedTime === null) return 'running'
   if (
     (record.cell.kind === 'tool' || record.cell.kind === 'subtool')
     && record.cell.outputDetail === undefined
@@ -1525,6 +1526,10 @@ function MarkdownRecordContent({
   renderImages: RenderMessageImages
   t: TrajectoryTranslate
 }) {
+  if (record.cell.sourceBlocks?.length && record.cell.sourceBlocks.every(block =>
+    block.type === 'tool-addition' || block.type === 'tool-removal')) {
+    return <pre className={`${css.payload} ${css.toolUpdatePayload}`}>{record.cell.inputDetail}</pre>
+  }
   if (!rendered && record.cell.sourceBlocks && record.cell.sourceBlocks.length > 0) {
     return (
       <SourceBlocks
@@ -2253,7 +2258,7 @@ export function TrajectoryTable({
     ), [allRecords, selectedRequestInfo])
   const selectedRequestRecords = selectedRequestRecordTemplates.map(currentRecord)
   const selectedRequestAssistant = selectedRequestRecords.find(
-    record => record.cell.kind === 'message',
+    record => record.cell.kind === 'message' && record.cell.requestOnly !== true,
   )
   const selectedRequestAnchor = selectedRequestAssistant ?? selectedRequestRecords[0]
   const selectedRequestNumber = selectedRequestInfo?.number
@@ -2691,9 +2696,12 @@ export function TrajectoryTable({
                   const sectionActive = record.turn === null
                     ? activeSection === record.section
                     : activeTurn === record.turn
+                  const singleToolNotice = record.cell.kind === 'context'
+                    && record.cell.sourceBlocks?.length === 1
+                    && record.cell.sourceBlocks.every(block => block.type === 'tool-addition' || block.type === 'tool-removal')
                   return (
                     <tr
-                      tabIndex={isRequestOnly ? -1 : 0}
+                      tabIndex={isRequestOnly || singleToolNotice ? -1 : 0}
                       aria-rowindex={position + 1 + historyRowOffset}
                       aria-label={isCollapsedSummary
                         ? t('request.collapsedSummary', {
@@ -2728,7 +2736,7 @@ export function TrajectoryTable({
                       data-timeline-focus={isCollapsedSummary || timelineFocusIndexes === null
                         ? undefined
                         : timelineFocusIndexes.has(record.cell.index) ? 'inside' : 'outside'}
-                      onClick={isRequestOnly
+                      onClick={isRequestOnly || singleToolNotice
                         ? undefined
                         : isCollapsedSummary
                           ? () => {
@@ -2738,7 +2746,7 @@ export function TrajectoryTable({
                           }
                           : () => { selectRecord(record.cell.index) }}
                       onDoubleClick={(event) => {
-                        if (isCollapsedSummary || isRequestOnly) return
+                        if (isCollapsedSummary || isRequestOnly || singleToolNotice) return
                         if (record.turn !== null && collapsedTurns.has(record.turn)) {
                           event.preventDefault()
                           onToggleTurn(record.turn)
@@ -2762,7 +2770,7 @@ export function TrajectoryTable({
                         onToggleTurn(record.turn)
                       }}
                       onKeyDown={(event) => {
-                        if (isRequestOnly) return
+                        if (isRequestOnly || singleToolNotice) return
                         if (event.key !== 'Enter' && event.key !== ' ') return
                         event.preventDefault()
                         if (isCollapsedSummary) {
@@ -3143,15 +3151,19 @@ export function TrajectoryTable({
                   )}
                   {selectedRequestInfo.error !== undefined && (
                     <div>
-                      <dt>{t('details.error')}</dt>
-                      <dd className={css.error}>{requestErrorMessage(selectedRequestInfo, t)}</dd>
+                      <dt>{t(selectedRequestState !== 'error' && selectedRequestInfo.retry !== undefined
+                        ? 'details.lastAttemptError'
+                        : 'details.error')}</dt>
+                      <dd className={selectedRequestState === 'error' ? css.error : undefined}>
+                        {requestErrorMessage(selectedRequestInfo, t)}
+                      </dd>
                     </div>
                   )}
                   {selectedRequestInfo.retry !== undefined && (
                     <div>
                       <dt>{t('details.retry')}</dt>
                       <dd>
-                        {t('details.scheduled')} {selectedRequestInfo.maxRetries === undefined
+                        {selectedRequestInfo.maxRetries === undefined
                           ? selectedRequestInfo.retry
                           : t('request.retryProgress', {
                             retry: selectedRequestInfo.retry,

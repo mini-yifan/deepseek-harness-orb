@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-17-desktop-selection-send-to-agent.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-17-desktop-selection-send-to-agent.md
-2026-09-17-desktop-selection-send-to-agent.md: 7856b29fa9d0507ba77eac1d6308968d0ef01a0e
-2026-09-17-desktop-selection-send-to-agent.zh.md: 126f5c7a731bf6edfed48a859b43de66853832cc
+/agent-note-desktop-selection-send-to-agent:
+  en: 4891cae829e8757a
+  zh: 8f3c651ff9eaacc9
+/agent-note-desktop-selection-send-to-agent/problem:
+  en: 60f652a8d9ba2a22
+  zh: 9db32eee7985bd3c
+/agent-note-desktop-selection-send-to-agent/decision:
+  en: 4262fd39f596dc4a
+  zh: dbc5aef48a42f704
+/agent-note-desktop-selection-send-to-agent/alternatives-considered:
+  en: 1a0c2456a96b28e5
+  zh: fa1bfb74e19b8abe
+/agent-note-desktop-selection-send-to-agent/consequences:
+  en: 865ed04910dc9eae
+  zh: 50614dee8588b196
+/agent-note-desktop-selection-send-to-agent/testing:
+  en: 7aded92689d98dae
+  zh: c0923db0faa4d267

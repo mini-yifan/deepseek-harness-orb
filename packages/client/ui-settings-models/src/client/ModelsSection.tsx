@@ -1,8 +1,8 @@
 /**
  * Models settings section: the provider rows joined from the configurable
  * directory, settings namespaces, and credential states, with one editor
- * card at a time. The official DeepSeek provider appears first; other rows
- * retain directory order. Rows expose only confirmed API-key state through accessible
+ * card at a time. Rows retain the account-first order supplied by the store
+ * and expose only confirmed API-key state through accessible
  * solid configured or missing dots. A whole-section provider without a
  * configured key renders as its open setup card instead of a row, but only in
  * the first-run posture — no provider on the page can serve requests yet — and
@@ -167,7 +167,7 @@ export async function removeProviderProfile(
  * @returns whether to render the setup card.
  */
 export function needsSetup(row: ProviderRow, anyUsable: boolean): boolean {
-  if (anyUsable) return false
+  if (anyUsable || row.entry.provider === 'deepseek-account') return false
   if (row.entry.settingsPath.length > 0) return false
   return row.credential?.configured !== true
 }
@@ -231,7 +231,13 @@ export function ModelsSection(props: ModelsSectionProps): ReactNode {
 
 function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderSlot: ModelsRenderSlot }): ReactNode {
   const { controller, operations, schema, t } = injected
-  const state = injected.useSnapshot(snapshot => snapshot)
+  const snapshot = injected.useSnapshot(value => value)
+  const state = { ...snapshot, rows: snapshot.rows.map(row => row.entry.provider === 'deepseek-account'
+    ? { ...row, entry: { ...row.entry, displayName: t('deepSeekAccount') } } : row) }
+  /** A new or failed surface waits for a current snapshot; background refreshes preserve its drafts. */
+  const [hasReadySnapshot, setHasReadySnapshot] = useState(state.status === 'ready')
+  if (state.status === 'ready' && !hasReadySnapshot) setHasReadySnapshot(true)
+  if (state.status === 'error' && hasReadySnapshot) setHasReadySnapshot(false)
   const [editing, setEditing] = useState<EditorTarget | undefined>(undefined)
   const [addOpen, setAddOpen] = useState(false)
   const [addMode, setAddMode] = useState<AddMode>('catalog')
@@ -321,6 +327,14 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
       </div>
     )
   }
+  if (!hasReadySnapshot && state.status !== 'ready') {
+    return (
+      <div className={styles['section']}>
+        <h2 className={styles['title']}>{t('title')}</h2>
+        <p className={styles['intro']}>{t('intro')}</p>
+      </div>
+    )
+  }
 
   // The saved provider as the directory currently names it. The route id is
   // what the apply cannot change, so it is what the notice is keyed by; a row
@@ -336,9 +350,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
   // One fact decides both first-run postures on this page and the onboarding
   // step: whether the user already has a provider to talk to.
   const anyUsable = state.rows.some(providerUsable)
-  const configured = state.rows.filter(row => row.configured).sort((left, right) => (
-    Number(right.entry.provider === 'deepseek-official') - Number(left.entry.provider === 'deepseek-official')
-  ))
+  const configured = state.rows.filter(row => row.configured)
   const configurable = state.rows.filter(row => state.namespaces.has(row.entry.settingsNs))
   const addable: AddableRow[] = state.rows.flatMap((row) => {
     const namespace = state.namespaces.get(row.entry.settingsNs)
@@ -467,7 +479,9 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                     type="button"
                     className={styles['secondaryButton']}
                     aria-label={providerCopy(t('editProvider'), target)}
+                    disabled={!open && state.status !== 'ready'}
                     onClick={() => {
+                      if (!open && controller.store.getSnapshot().status !== 'ready') return
                       setSavedTarget(undefined)
                       // One card at a time: the add card closes with whatever
                       // it held, since closing either card would otherwise
@@ -484,8 +498,9 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                         type="button"
                         className={styles['dangerButton']}
                         aria-label={providerCopy(t('removeProvider'), target)}
-                        disabled={!state.writable}
+                        disabled={!state.writable || state.status !== 'ready'}
                         onClick={() => {
+                          if (controller.store.getSnapshot().status !== 'ready') return
                           setSavedTarget(undefined)
                           setDeleteFailure(undefined)
                           setDeleteTarget(target)
@@ -646,8 +661,9 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
                 <button
                   type="button"
                   className={styles['addButton']}
-                  disabled={!state.writable || (!catalogEnabled && !customEnabled)}
+                  disabled={!state.writable || state.status !== 'ready' || (!catalogEnabled && !customEnabled)}
                   onClick={() => {
+                    if (controller.store.getSnapshot().status !== 'ready') return
                     const first = addable[0]
                     const initial: AddMode = catalogEnabled ? 'catalog' : 'custom'
                     setSavedTarget(undefined)
@@ -681,7 +697,7 @@ function Loaded({ injected, renderSlot }: { injected: ModelsSectionFace; renderS
         className={styles['deleteDialog'] as string}
         footer={(
           <>
-            <Button variant="outline" autoFocus disabled={deleting} onClick={closeDelete}>
+            <Button variant="outline" data-modal-autofocus disabled={deleting} onClick={closeDelete}>
               {t('cancel')}
             </Button>
             <Button

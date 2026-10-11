@@ -37,7 +37,7 @@ export interface ProviderDirectoryEntry {
  * Join declared configurable providers with the currently registered routes.
  * @param registered - live provider routes in registration order.
  * @param directory - declared configurable providers in declaration order.
- * @returns declared rows followed by live routes with no declaration.
+ * @returns account and official routes first, then other routes in their original order.
  */
 export function joinProviderDirectory(
   registered: readonly LlmProviderInfo[],
@@ -64,11 +64,15 @@ export function joinProviderDirectory(
       active: true,
     })
   }
-  return rows
+  return rows.toSorted((left, right) =>
+    (left.provider === 'deepseek-account' ? 0 : left.provider === 'deepseek-official' ? 1 : 2)
+      - (right.provider === 'deepseek-account' ? 0 : right.provider === 'deepseek-official' ? 1 : 2))
 }
 
 /** One provider row the page renders. */
 export interface ProviderRow {
+  /** Account route has usable credentials for the configured inference origin. */
+  accountAvailable?: boolean
   /** The directory entry (route id, display name, settings address, live state). */
   entry: ProviderDirectoryEntry
   /** Whether any layer configures this provider (its profile resolves). */
@@ -156,6 +160,8 @@ export class ModelsSettingsStore {
 
   /** Latest load wins; an older response never overwrites a newer one. */
   private generation = 0
+  /** Callers follow the current refresh's outcome, including callers whose read was superseded. */
+  private readonly pendingLoads = new Set<PromiseWithResolvers<void>>()
 
   /**
    * @param ctx - the page plugin's context, whose `remote.llm` and
@@ -174,22 +180,36 @@ export class ModelsSettingsStore {
    * settings answer in parallel, then one batched credential describe over
    * every referenced ref. Provider failure or absence of an initial settings
    * answer keeps the last good rows and surfaces an error; a failed settings
-   * refresh reuses the mirror's held view.
-   * @returns nothing; the snapshot carries the outcome.
+   * refresh reuses the mirror's held view. Concurrent callers resolve only
+   * after the current refresh publishes its ready or error snapshot.
+   * @returns resolution after the current snapshot is published.
+   * @throws the current read's unexpected rejection; superseded rejections are ignored.
    */
-  async load(): Promise<void> {
+  load(): Promise<void> {
+    const pending = Promise.withResolvers<void>()
+    this.pendingLoads.add(pending)
     const generation = ++this.generation
+    void this.read(generation).then(
+      () => { this.settleLoads(generation, (load) => { load.resolve() }) },
+      (error: unknown) => { this.settleLoads(generation, (load) => { load.reject(error) }) },
+    )
+    return pending.promise
+  }
+
+  /** Publish one joined answer; stale answers leave the current refresh in charge. */
+  private async read(generation: number): Promise<void> {
     this.store.update((s) => { s.status = 'loading'; s.error = null })
     const [registered, declared] = await Promise.all([
       this.ctx.remote.llm.listProviders(),
       this.ctx.remote.llm.listConfigurableProviders(),
       this.describeFace.ensure(),
     ])
-    if (!registered.ok) { this.failLoad(generation, registered.error.message); return }
-    if (!declared.ok) { this.failLoad(generation, declared.error.message); return }
+    if (generation !== this.generation) return
+    if (!registered.ok) { this.failLoad(registered.error.message); return }
+    if (!declared.ok) { this.failLoad(declared.error.message); return }
     const mirrored = this.describeFace.getSnapshot()
     if (mirrored.view === undefined) {
-      this.failLoad(generation, mirrored.error ?? 'settings are unavailable in this browser')
+      this.failLoad(mirrored.error ?? 'settings are unavailable in this browser')
       return
     }
     const providers = joinProviderDirectory(registered.value, declared.value)
@@ -208,11 +228,18 @@ export class ModelsSettingsStore {
         entry,
         configured,
         removable,
-        apiKeyEnv: apiKeyEnvOf(namespace, entry.settingsPath, this.schema),
+        apiKeyEnv: entry.provider === 'deepseek-account' ? undefined : apiKeyEnvOf(namespace, entry.settingsPath, this.schema),
         credential: undefined,
       }
     })
-    const refs = [...new Set(rows.map(row => row.apiKeyEnv ?? deriveKeyRef(row.entry.provider)))]
+    if (rows.some(row => row.entry.provider === 'deepseek-account')) {
+      const catalog = await this.ctx.remote.session.modelCatalog()
+      for (const row of rows) {
+        if (row.entry.provider === 'deepseek-account') row.accountAvailable = catalog.ok
+          && catalog.value.groups.some(group => group.id === 'deepseek-account' && group.models.length > 0)
+      }
+    }
+    const refs = [...new Set(rows.filter(row => row.entry.provider !== 'deepseek-account').map(row => row.apiKeyEnv ?? deriveKeyRef(row.entry.provider)))]
     let credentials: Record<string, CredentialInfo> = {}
     let credentialError: string | null = null
     if (refs.length > 0) {
@@ -229,7 +256,8 @@ export class ModelsSettingsStore {
       s.error = null
       s.credentialError = credentialError
       s.writable = writable
-      s.rows = rows.map((row) => {
+      s.rows = rows.filter(row => row.entry.provider !== 'deepseek-account' || row.accountAvailable === true).map((row) => {
+        if (row.entry.provider === 'deepseek-account') return row
         const named = row.apiKeyEnv === undefined ? undefined : credentials[row.apiKeyEnv]
         const derived = row.apiKeyEnv !== undefined ? undefined : credentials[deriveKeyRef(row.entry.provider)]
         return {
@@ -242,9 +270,16 @@ export class ModelsSettingsStore {
     })
   }
 
-  /** Publish one load's failure text, unless a newer load already took over. */
-  private failLoad(generation: number, message: string): void {
+  /** Settle callers only while this read still owns the current refresh. */
+  private settleLoads(generation: number, settle: (load: PromiseWithResolvers<void>) => void): void {
     if (generation !== this.generation) return
+    const pending = [...this.pendingLoads]
+    this.pendingLoads.clear()
+    for (const load of pending) settle(load)
+  }
+
+  /** Publish the current joined read's failure text. */
+  private failLoad(message: string): void {
     this.store.update((s) => {
       s.status = 'error'
       s.error = message
@@ -264,6 +299,7 @@ export class ModelsSettingsStore {
  */
 export function providerUsable(row: ProviderRow): boolean {
   if (!row.entry.active) return false
+  if (row.entry.provider === 'deepseek-account') return row.accountAvailable === true
   if (row.apiKeyEnv === undefined) return true
   return row.credential?.configured === true
 }

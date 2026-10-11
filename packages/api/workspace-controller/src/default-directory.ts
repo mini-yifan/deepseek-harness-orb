@@ -3,6 +3,7 @@
 import { homedir } from 'node:os'
 import { posix, win32 } from 'node:path'
 import { runNativeCommand, type NativeCommandRunner } from '@deepseek-ai/dsh-native-command'
+import { DEFAULT_WORKSPACE_DIRECTORY } from './default-workspace.ts'
 
 /** Platform observations replaceable in directory-resolution tests. */
 interface DocumentsDirectoryInternals {
@@ -28,14 +29,12 @@ export function validateDocumentsDirectory(directory: string, platform: NodeJS.P
 
 /**
  * Resolve the first-use directory on the Host without creating files.
- * @param directoryName - validated single directory name supplied by the Client.
  * @param documentsDirectory - explicit deployment override for the system Documents directory.
  * @param signal - caller lifetime and lookup deadline.
  * @param internals - platform facts and native command runner.
  * @returns the absolute candidate path.
  */
 export async function defaultWorkspaceDirectory(
-  directoryName: string,
   documentsDirectory: string | undefined,
   signal: AbortSignal,
   internals: DocumentsDirectoryInternals = {},
@@ -51,7 +50,7 @@ export async function defaultWorkspaceDirectory(
       case 'darwin':
         ({ stdout } = await run('osascript', [
           '-e', 'POSIX path of (path to documents folder from user domain without folder creation)',
-        ], signal))
+        ], signal, 'hidden'))
         break
       case 'win32':
         ({ stdout } = await run('powershell.exe', [
@@ -59,10 +58,10 @@ export async function defaultWorkspaceDirectory(
           '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); '
           + '[Environment]::GetFolderPath([Environment+SpecialFolder]::MyDocuments, '
           + '[Environment+SpecialFolderOption]::DoNotVerify)',
-        ], signal))
+        ], signal, 'hidden'))
         break
       case 'linux':
-        ({ stdout } = await run('xdg-user-dir', ['DOCUMENTS'], signal))
+        ({ stdout } = await run('xdg-user-dir', ['DOCUMENTS'], signal, 'hidden'))
         break
       default:
         throw new Error(`system Documents directory is unavailable on ${platform}`)
@@ -75,5 +74,5 @@ export async function defaultWorkspaceDirectory(
   }
   directory = validateDocumentsDirectory(directory, platform)
   signal.throwIfAborted()
-  return paths.join(directory, 'deepseek-harness', directoryName)
+  return paths.join(directory, 'deepseek-harness', DEFAULT_WORKSPACE_DIRECTORY)
 }

@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-16-desktop-selection-toolbar.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-16-desktop-selection-toolbar.md
-2026-09-16-desktop-selection-toolbar.md: 40b3d630c74e536754b6cb74ef378a2e2c45f7a8
-2026-09-16-desktop-selection-toolbar.zh.md: 8ec129b503677772909a05e0e6b7a73070a8896d
+/agent-note-desktop-selection-toolbar:
+  en: 7301a1962267744b
+  zh: a1d52376bb642e3f
+/agent-note-desktop-selection-toolbar/problem:
+  en: 4c4440fcee3634da
+  zh: a088662d977ba97b
+/agent-note-desktop-selection-toolbar/decision:
+  en: d77c240b20b7683f
+  zh: 3c02a2d01d167b91
+/agent-note-desktop-selection-toolbar/alternatives-considered:
+  en: 9b8b4c65f83e0ffa
+  zh: 6ee0133e1eb04eff
+/agent-note-desktop-selection-toolbar/consequences:
+  en: 653f50c94af68ae3
+  zh: bd4b534ae8fdbabe
+/agent-note-desktop-selection-toolbar/testing:
+  en: 994d3a72fa882f74
+  zh: 02c7ae4ba8953379

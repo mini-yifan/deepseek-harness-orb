@@ -12,7 +12,7 @@ Status: implemented
 
 `selectWindowsObservation` 仅当 `foregroundHwnd` 是 owner，或是该 owner 的瞬时窗口（owned 窗口、相交的同进程 popup，或相交的系统菜单 / 组合框下拉）时，把 `focused` 设为 true。否则 `inspectForeground` 加上 `<focus_note>`，文本是 `UNFOCUSED_WINDOW_NOTE`：`Keyboard focus is on another window. hotkey brings this window forward first; click inside it if focus must land on a specific control.`。[Computer Use 观察前台元数据](../feature/2026-09-15-computer-use-observation-foreground.zh.md) 拥有该标签；本笔记拥有 Windows 这一情况。
 
-`createWindowsDesktopBackend` 记住最近一次 `listScreens` 的选择；之后一次空的列举会清掉它。当前前台 hwnd 既不是该 owner 也不在其瞬时窗口里时，`hotkey` 在提权检查和组合键之前对那个 owner 调用 `focusWindow`。`focusWindow` 与 `activateApp` 共用一个 helper：若窗口最小化则先恢复，按下 Alt，调用 `SetForegroundWindow`，重试一次，然后松开 Alt。[通过合成的 Alt 按键让 Win32 选择器获得前台激活](2026-09-07-win32-picker-foreground-alt-key.zh.md) 拥有为何需要这次 Alt 过渡。失败时抛出 `computer-use: keyboard focus could not be moved to <app>; click inside the window, then retry hotkey`，并且不发送按键。`input_text` 靠点击聚焦，不调用 `focusWindow`。
+`createWindowsDesktopBackend` 记住最近一次 `listScreens` 的选择；之后一次空的列举会清掉它。当前前台 hwnd 既不是该 owner 也不在其瞬时窗口里时，`hotkey` 在提权检查和组合键之前对那个 owner 调用 `focusWindow`。`focusWindow` 与 `activateApp` 共用一个 helper：若窗口最小化则先恢复，按下 Alt，调用 `SetForegroundWindow`，重试一次，然后松开 Alt。[通过合成的 Alt 按键让 Win32 选择器获得前台激活](../../archived/bug-fix/2026-09-07-win32-picker-foreground-alt-key.md) 拥有为何需要这次 Alt 过渡。失败时抛出 `computer-use: keyboard focus could not be moved to <app>; click inside the window, then retry hotkey`，并且不发送按键。`input_text` 靠点击聚焦，不调用 `focusWindow`。
 
 ## 考虑过的替代方案
 

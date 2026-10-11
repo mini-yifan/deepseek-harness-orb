@@ -1,6 +1,61 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/client/ui-plugin-manager/README.md
-README.md: ae6bae12c8fead7ba4a4f3529a16b8a5225f9e3b
-README.zh.md: 4ee4871f69dbcf4e14cdaa931c041631780a6e38
+/:
+  en: 65c981be6a40344b
+  zh: 468873de4e2db85f
+/deepseek-ai-dsh-client-ui-plugin-manager:
+  en: 719d90bd71d7b957
+  zh: 492767e7ea9f88f8
+/deepseek-ai-dsh-client-ui-plugin-manager/summary:
+  en: 0dc67850ca5358de
+  zh: 4ff1bb5bdc184e3e
+/deepseek-ai-dsh-client-ui-plugin-manager/table-of-contents:
+  en: d152484eb41ac6b4
+  zh: 09388d293f9be9cb
+/deepseek-ai-dsh-client-ui-plugin-manager/use-this-package:
+  en: 87e0c952a5bfcc41
+  zh: 8824e1b588fae213
+/deepseek-ai-dsh-client-ui-plugin-manager/use-this-package/installing-a-bundle:
+  en: fcb2e69c8b028c0a
+  zh: d505a075679974eb
+/deepseek-ai-dsh-client-ui-plugin-manager/use-this-package/switching-a-bundle:
+  en: 59e12480cf0c3e70
+  zh: f230ea8c752475d5
+/deepseek-ai-dsh-client-ui-plugin-manager/use-this-package/switching-one-row-of-a-bundle:
+  en: 620c6a3ee20848bd
+  zh: a9429f047a12bb4c
+/deepseek-ai-dsh-client-ui-plugin-manager/use-this-package/configuration-pages:
+  en: e9da90f03691101b
+  zh: 902cda935a4ce3c8
+/deepseek-ai-dsh-client-ui-plugin-manager/use-this-package/detail-page-extension-points:
+  en: 87f6d96467dc2383
+  zh: e0fb91aa4c4d5a12
+/deepseek-ai-dsh-client-ui-plugin-manager/understand-the-implementation:
+  en: 203168fc87e939bd
+  zh: 72d0ccd2c54f3f44
+/deepseek-ai-dsh-client-ui-plugin-manager/understand-the-implementation/registration:
+  en: 3d70281f082988a5
+  zh: 17c6f595e3b57260
+/deepseek-ai-dsh-client-ui-plugin-manager/understand-the-implementation/the-store:
+  en: 21a0bbe8eb92229c
+  zh: 096ff63db61992bb
+/deepseek-ai-dsh-client-ui-plugin-manager/understand-the-implementation/configuration-slots:
+  en: 928c1bcaace6ce0c
+  zh: 64d2aad4f01b324c
+/deepseek-ai-dsh-client-ui-plugin-manager/further-exploration:
+  en: f9a42dfed0360d6a
+  zh: 455a70bcb6c69624
+/deepseek-ai-dsh-client-ui-plugin-manager/model-experience:
+  en: 8dcc6c6fbfb567d2
+  zh: 43690ae350f1d6a7
+/deepseek-ai-dsh-client-ui-plugin-manager/model-experience/kv-cache-effect:
+  en: ca75c51c89c2c9b0
+  zh: 2064958b0754647e
+/deepseek-ai-dsh-client-ui-plugin-manager/known-limitations-and-deferred-work:
+  en: 149c0d23a56a4944
+  zh: e2feaadc871581ae
+/deepseek-ai-dsh-client-ui-plugin-manager/known-limitations-and-deferred-work/dev-note:
+  en: e67f633dc6fe7773
+  zh: 3bb0c20c93f16f98

@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-15-computer-use-wait-and-long-wait.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-15-computer-use-wait-and-long-wait.md
-2026-09-15-computer-use-wait-and-long-wait.md: 155b44a29c1240dcc21ee362cb1ab240a38fcb7d
-2026-09-15-computer-use-wait-and-long-wait.zh.md: 50d303f605e0f29831246f95e01b047832662f8e
+/agent-note-computer-use-wait-and-long-wait:
+  en: 64eca416da5de15b
+  zh: 70dab259f8f2176e
+/agent-note-computer-use-wait-and-long-wait/problem:
+  en: ed656cdbf5787df4
+  zh: ad67515ac1884ee6
+/agent-note-computer-use-wait-and-long-wait/decision:
+  en: 97e960a9496f29fa
+  zh: 40c76e29c94769c2
+/agent-note-computer-use-wait-and-long-wait/alternatives-considered:
+  en: 017b016532aa5e69
+  zh: 64009217f675c0be
+/agent-note-computer-use-wait-and-long-wait/consequences:
+  en: cde60d0ecc364b61
+  zh: bb222f19b530f996
+/agent-note-computer-use-wait-and-long-wait/testing:
+  en: 4a106385af5b4213
+  zh: e3a416618aac86a5

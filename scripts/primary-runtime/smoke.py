@@ -1,6 +1,8 @@
 """Exercise the relocated Office payload with its own isolated interpreter."""
 
+import csv
 import importlib.metadata
+import io
 import json
 from pathlib import Path
 import re
@@ -9,6 +11,8 @@ import sys
 import tempfile
 
 import numpy
+# NumPy testing helpers require this native extension even without upstream test directories.
+import numpy._core._multiarray_tests
 import pandas
 from docx import Document
 from docx.shared import Inches as DocxInches
@@ -38,6 +42,16 @@ def main():
         assert actual == expected, (name, actual, expected)
     assert numpy.arange(4).sum() == 6
     assert pandas.DataFrame({"n": [1, 2]}).n.sum() == 3
+    numpy.testing.assert_allclose(numpy.arange(4), [0, 1, 2, 3])
+    pandas.testing.assert_frame_equal(pandas.DataFrame({"n": [1, 2]}), pandas.DataFrame({"n": [1, 2]}))
+    for library in (numpy, pandas):
+        root = Path(library.__file__).parent
+        assert not any(path.is_dir() for path in root.rglob("tests")), root
+        distribution = importlib.metadata.distribution(library.__name__)
+        record = distribution.read_text("RECORD")
+        assert record, library.__name__
+        for file, _hash, _size in csv.reader(io.StringIO(record)):
+            assert distribution.locate_file(file).is_file(), file
 
     with tempfile.TemporaryDirectory(prefix="dsh-office-smoke-") as directory:
         root = Path(directory)

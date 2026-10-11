@@ -52,8 +52,25 @@ type DesktopHostEvent = ReadyEvent | FatalEvent | PlatformSessionEvent | Overlay
   readonly requestId: number
   readonly active: boolean
   readonly error?: string
+} | {
+  readonly type: 'quit-inspection'
+  readonly requestId: number
+  readonly activeTasks: boolean
+  readonly scheduledTasks: boolean
+  readonly error?: string
 }
 
+/** Correlated answer to one shell control request. */
+type DesktopHostControlResponse = Extract<DesktopHostEvent, { readonly requestId: number }>
+
+/** What quitting now would affect, as reported by the Host. */
+export interface DesktopQuitInspection {
+  readonly activeTasks: boolean
+  readonly scheduledTasks: boolean
+}
+
+/** Quit inspection deadline; a slower Host counts as unknown work and the shell asks before quitting. */
+export const QUIT_INSPECTION_DEADLINE_MS = 2_000
 /** Main-to-host facts the floating ball persists and the Host applies. */
 export type DesktopHostOrbCommand =
   | { readonly type: 'orb-permission'; readonly preset: OrbPermissionPreset; readonly sessionId?: string }
@@ -87,6 +104,8 @@ function isDesktopHostEvent(message: unknown): message is DesktopHostEvent {
       if (session === null) return true
       if (typeof session !== 'object' || !('origin' in session) || !('token' in session)
         || typeof session.origin !== 'string' || typeof session.token !== 'string' || session.token.length === 0) return false
+      if (!('userId' in session) || (session.userId !== null
+        && (typeof session.userId !== 'string' || session.userId.length === 0))) return false
       if ('embeddedPageDist' in session && typeof session.embeddedPageDist !== 'string') return false
       if ('requestHeaders' in session && (typeof session.requestHeaders !== 'object' || session.requestHeaders === null
         || Array.isArray(session.requestHeaders)
@@ -104,6 +123,9 @@ function isDesktopHostEvent(message: unknown): message is DesktopHostEvent {
     case 'update-tasks':
       return Number.isSafeInteger(candidate.requestId) && typeof candidate.active === 'boolean'
         && (candidate.error === undefined || typeof candidate.error === 'string')
+    case 'quit-inspection':
+      return Number.isSafeInteger(candidate.requestId) && typeof candidate.activeTasks === 'boolean'
+        && typeof candidate.scheduledTasks === 'boolean' && (candidate.error === undefined || typeof candidate.error === 'string')
     case 'overlay-guard':
       return Number.isSafeInteger(candidate.requestId)
         && (candidate.action === 'begin' || candidate.action === 'end')
@@ -180,7 +202,10 @@ export class DesktopHostProcess {
   private stopping = false
   private shutdownCompleted = false
   private nextControlId = 1
-  private readonly taskQueries = new Map<number, { resolve: (active: boolean) => void; reject: (error: Error) => void }>()
+  private readonly controlRequests = new Map<number, {
+    resolve: (response: DesktopHostControlResponse) => void
+    reject: (error: Error) => void
+  }>()
 
   /**
    * @param node - Absolute Electron executable in Node mode.
@@ -270,9 +295,9 @@ export class DesktopHostProcess {
       }
       else if (message.type === 'fatal') this.fail(new DesktopHostFatalError(message.message, message.diagnostic))
       else {
-        const query = this.taskQueries.get(message.requestId)
-        if (message.error === undefined) query?.resolve(message.active)
-        else query?.reject(new Error(message.error))
+        const request = this.controlRequests.get(message.requestId)
+        if (message.error === undefined) request?.resolve(message)
+        else request?.reject(new Error(message.error))
       }
     })
     child.once('error', (error) => { this.fail(error) })
@@ -317,21 +342,41 @@ export class DesktopHostProcess {
   }
 
   async updateTasks(action: 'inspect' | 'lock' | 'unlock'): Promise<boolean> {
+    const response = await this.control({ type: 'update-tasks', action }, 10_000, 'desktop update: task inspection timed out')
+    if (response.type !== 'update-tasks') throw new Error('desktop update: Host answered with a different control response')
+    return response.active
+  }
+
+  /**
+   * Ask the Host what quitting now would interrupt.
+   * @returns Active tasks and armed scheduled reminders; rejects when the Host is unavailable or misses
+   * {@link QUIT_INSPECTION_DEADLINE_MS}, and the shell then asks before quitting.
+   */
+  async inspectQuit(): Promise<DesktopQuitInspection> {
+    const response = await this.control({ type: 'quit-inspection' }, QUIT_INSPECTION_DEADLINE_MS, 'desktop quit: inspection timed out')
+    if (response.type !== 'quit-inspection') throw new Error('desktop quit: Host answered with a different control response')
+    return { activeTasks: response.activeTasks, scheduledTasks: response.scheduledTasks }
+  }
+
+  private async control(
+    request: { readonly type: 'update-tasks'; readonly action: 'inspect' | 'lock' | 'unlock' } | { readonly type: 'quit-inspection' },
+    deadlineMs: number, deadlineMessage: string,
+  ): Promise<DesktopHostControlResponse> {
     const child = this.child
     if (child === undefined || !child.connected || this.failureReported || this.stopping) {
-      throw new Error('desktop update: Host is unavailable')
+      throw new Error(`${request.type === 'update-tasks' ? 'desktop update' : 'desktop quit'}: Host is unavailable`)
     }
     const requestId = this.nextControlId++
     let timer: ReturnType<typeof setTimeout> | undefined
     try {
-      return await new Promise<boolean>((resolve, reject) => {
-        this.taskQueries.set(requestId, { resolve, reject })
-        timer = setTimeout(() => { reject(new Error('desktop update: task inspection timed out')) }, 10_000)
-        child.send({ type: 'update-tasks', requestId, action }, (error) => { if (error !== null) reject(error) })
+      return await new Promise<DesktopHostControlResponse>((resolve, reject) => {
+        this.controlRequests.set(requestId, { resolve, reject })
+        timer = setTimeout(() => { reject(new Error(deadlineMessage)) }, deadlineMs)
+        child.send({ ...request, requestId }, (error) => { if (error !== null) reject(error) })
       })
     } finally {
       clearTimeout(timer)
-      this.taskQueries.delete(requestId)
+      this.controlRequests.delete(requestId)
     }
   }
 
@@ -366,8 +411,8 @@ export class DesktopHostProcess {
   private fail(error: Error): void {
     this.onPlatformSession?.(null)
     this.readyReject(error)
-    for (const query of this.taskQueries.values()) query.reject(error)
-    this.taskQueries.clear()
+    for (const request of this.controlRequests.values()) request.reject(error)
+    this.controlRequests.clear()
     if (!this.failureReported && !this.stopping) {
       this.failureReported = true
       try { this.onFailure?.(error) } catch (listenerError) {

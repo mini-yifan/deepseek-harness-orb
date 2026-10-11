@@ -1,6 +1,0 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-16-desktop-window-menus.md
-2026-09-16-desktop-window-menus.md: 8a5343404e0cb3d2e7c4e20248a8b29f3bfbec47
-2026-09-16-desktop-window-menus.zh.md: d6ee6412462aecf49557a7994a683d37bf8e7253

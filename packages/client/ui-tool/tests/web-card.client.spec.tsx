@@ -6,12 +6,13 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import type { StartedToolCall, ToolResultNode } from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { ToolCallOwnerProps } from '@deepseek-ai/dsh-client-ui-tool/client'
 import { IconGlobeOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
-import { webCardModel } from '../src/client/tool/models/web-card-model.ts'
+import { webCardModel, webFetchHref } from '../src/client/tool/models/web-card-model.ts'
 import { GenericToolCard } from '../src/client/tool/toolviews/GenericToolCard.tsx'
 import { WebRow, webToolview } from '../src/client/tool/toolviews/web-row.tsx'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
 import { zh } from '@deepseek-ai/dsh-client-ui-conversation/src/client/locales.ts'
+import { PartialArguments } from '@deepseek-ai/dsh-util-values'
 
 afterEach(cleanup)
 
@@ -49,26 +50,37 @@ const fetchMeta = (over?: Partial<FetchMeta>): FetchMeta => ({
   url: 'https://example.com/page', statusCode: 200, truncated: false, ...over,
 })
 
-const runningSearch = (over?: Partial<StartedToolCall>): StartedToolCall => ({
-  phase: 'start' as const, callId: 'c1', name: 'web_search', argsRaw: SEARCH_ARGS,
-  turn: 1, step: 1, time: 1_000, subCalls: [], ...over,
-})
+const runningSearch = (over?: Partial<StartedToolCall>): StartedToolCall => {
+  const argsRaw = over?.argsRaw ?? SEARCH_ARGS
+  return {
+    phase: 'start' as const, args: PartialArguments.fromText(argsRaw), callId: 'c1', name: 'web_search', argsRaw,
+    turn: 1, step: 1, time: 1_000, subCalls: [], ...over,
+  }
+}
 
-const settledSearch = (over?: Partial<ToolResultNode>): ToolResultNode => ({
-  kind: 'tool-result', seq: 10, time: 2_000, callId: 'c1',
-  call: { name: 'web_search', argsRaw: SEARCH_ARGS },
-  callTime: 1_000,
-  content: [{ type: 'text', text: 'search text' }], isError: false,
-  meta: searchMeta(), subCalls: [], ...over,
-})
+const settledSearch = (over?: Partial<ToolResultNode>): ToolResultNode => {
+  const call = over?.call === undefined ? { name: 'web_search', argsRaw: SEARCH_ARGS } : over.call
+  return {
+    kind: 'tool-result', seq: 10, time: 2_000, callId: 'c1',
+    name: call?.name ?? '', args: call === null ? PartialArguments.EMPTY : PartialArguments.fromText(call.argsRaw),
+    call,
+    callTime: 1_000,
+    content: [{ type: 'text', text: 'search text' }], isError: false,
+    meta: searchMeta(), subCalls: [], ...over,
+  }
+}
 
-const settledFetch = (over?: Partial<ToolResultNode>): ToolResultNode => ({
-  kind: 'tool-result', seq: 11, time: 2_000, callId: 'c2',
-  call: { name: 'web_fetch', argsRaw: FETCH_ARGS },
-  callTime: 1_000,
-  content: [{ type: 'text', text: 'fetch body' }], isError: false,
-  meta: fetchMeta(), subCalls: [], ...over,
-})
+const settledFetch = (over?: Partial<ToolResultNode>): ToolResultNode => {
+  const call = over?.call === undefined ? { name: 'web_fetch', argsRaw: FETCH_ARGS } : over.call
+  return {
+    kind: 'tool-result', seq: 11, time: 2_000, callId: 'c2',
+    name: call?.name ?? '', args: call === null ? PartialArguments.EMPTY : PartialArguments.fromText(call.argsRaw),
+    call,
+    callTime: 1_000,
+    content: [{ type: 'text', text: 'fetch body' }], isError: false,
+    meta: fetchMeta(), subCalls: [], ...over,
+  }
+}
 
 describe('webCardModel', () => {
   it('derives a search card from result metadata, projecting every source field', () => {
@@ -123,6 +135,20 @@ describe('webCardModel', () => {
   })
 })
 
+describe('webFetchHref', () => {
+  it('returns only an http(s) web_fetch URL', () => {
+    expect(webFetchHref(settledFetch())).toBe('https://example.com/page')
+    expect(webFetchHref(settledFetch({ call: { name: 'web_fetch', argsRaw: '{"url":"http://a.test/"}' } })))
+      .toBe('http://a.test/')
+    expect(webFetchHref(settledFetch({ call: { name: 'web_fetch', argsRaw: '{"url":"javascript:alert(1)"}' } })))
+      .toBeUndefined()
+    expect(webFetchHref(settledFetch({ call: { name: 'web_fetch', argsRaw: '{"url":"not a url"}' } }))).toBeUndefined()
+    expect(webFetchHref(settledFetch({ call: { name: 'web_fetch', argsRaw: '{"url":1}' } }))).toBeUndefined()
+    expect(webFetchHref(settledFetch({ call: null }))).toBeUndefined()
+    expect(webFetchHref(settledSearch())).toBeUndefined()
+  })
+})
+
 describe('chat row web body', () => {
   const ownerProps = (block: StartedToolCall | ToolResultNode, toolName: string): ToolCallOwnerProps => ({
     useDisclosure, callId: block.callId, toolName, ...('kind' in block ? { phase: 'result' as const, block: block } : { phase: block.phase, block: block }), openFile: vi.fn(), loadImage: vi.fn(() => Promise.reject(new Error('not used'))),
@@ -163,6 +189,24 @@ describe('chat row web body', () => {
     const card = view.container.querySelector('[data-web="fetch"]')
     expect(card?.querySelector('a')?.getAttribute('href')).toBe('https://example.com/page')
     expect(view.getByText('HTTP 200')).toBeTruthy()
+  })
+
+  it('the collapsed WebRow summary opens the fetch URL in a new tab without expanding', () => {
+    const view = render(<WebRow {...rowProps(settledFetch(), 'web_fetch')} />)
+    const link = view.getByRole('link', { name: 'https://example.com/page' })
+    expect(link.getAttribute('href')).toBe('https://example.com/page')
+    expect(link.getAttribute('target')).toBe('_blank')
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer')
+    // jsdom does not implement navigation; cancel it after the row's handlers run.
+    link.addEventListener('click', (event) => { event.preventDefault() })
+    fireEvent.click(link)
+    fireEvent.keyDown(link, { key: 'Enter' })
+    expect(view.container.querySelector('[data-web]')).toBeNull()
+  })
+
+  it('a failed web fetch keeps its plain error summary', () => {
+    const view = render(<WebRow {...rowProps(settledFetch({ isError: true }), 'web_fetch')} />)
+    expect(view.queryByRole('link')).toBeNull()
   })
 
   it('a running web call is the summary row alone, with nothing to expand', () => {

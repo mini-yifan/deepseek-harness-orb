@@ -25,6 +25,8 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
+搜索使用 Session 的当前工作目录，包括通过 `working_directory` 切换后的目录。
+
 在 `ctx.subprocess` 后端之后挂载工具；无需宿主 `rg` 安装，也无需文件系统提供方。模型随后获得按修改时间排序的文件发现与按行组织的内容搜索，两者都有界并受超时防护。
 
 ### 最小组合
@@ -134,18 +136,12 @@ Node 部署在受支持的 macOS、Linux 与 Windows 目标上获得 `@vscode/ri
 
 #### 模型看到的内容
 
-组装时，每个段落通过 `ctx.tools.get(name, scope)` 检查对应工具，仅在其可见时输出。grep 段落仅在 read 可见时包含后续使用 read 的句子。同一受支持工具集合下，原文和段落顺序保持不变，包括通过 `run_code` 暴露的 PTC 能力。 这种按 scope 选择文本的机制适用于系统提示词段落。工具 schema 描述仍是注册时的文本；具体而言，即使 scope 隐藏了 read，grep 的 schema 仍会推荐 read。尚未实现按 scope 改变 schema 措辞。
+组装时，每个段落通过 `ctx.tools.get(name, scope)` 检查对应工具，仅在其可见时输出。grep 段落仅在 read 可见时包含后续使用 read 的句子。同一受支持工具集合下，原文和段落顺序保持不变，包括通过 `run_code` 暴露的 PTC 能力。 这种按 scope 选择文本的机制适用于系统提示词段落。工具 schema 描述仍是注册时的文本，不提及其他工具。
 
-##### 启用 `sampleOverCapGlobResults: true` 时的 Glob 指导
-
-```markdown
-Use the glob tool — not shell find — to discover files by path pattern. A pattern with no "/" matches basenames at any depth, so "*" matches every file in the tree rather than its top level. Results are files only, never directories, and include hidden and ignored files: a result that fits comes back in modification-time order, while a larger one is sampled across top-level entries, so it spans the tree instead of one subtree.
-```
-
-##### 启用 `sampleOverCapGlobResults: false` 时的 Glob 指导
+##### Glob 指导
 
 ```markdown
-Use the glob tool — not shell find — to discover files by path pattern. A pattern with no "/" matches basenames at any depth, so "*" matches every file in the tree rather than its top level. Results are files only, never directories, and include hidden and ignored files: a result that fits comes back in modification-time order, while a larger one keeps the modification-time-ordered head.
+Use the glob tool — not shell find — to discover files by path pattern.
 ```
 
 ##### Grep 指导
@@ -225,5 +221,3 @@ glob 描述声明了配置的超过上限排序方式。生成的 [`glob` 和 `g
 无。
 
 </details>
-
-**运行时不变式：** 不发布伴生入口。这个面向模型的适配器没有独立生命周期流；执行关系由它调用的能力 seam 负责。

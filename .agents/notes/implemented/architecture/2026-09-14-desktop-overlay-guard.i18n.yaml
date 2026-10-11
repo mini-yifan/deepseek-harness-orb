@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-14-desktop-overlay-guard.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-14-desktop-overlay-guard.md
-2026-09-14-desktop-overlay-guard.md: d4f02f611469feb4421ba6c742b2ecfb13c4ca74
-2026-09-14-desktop-overlay-guard.zh.md: c479e2ae4009d91b75c369c92235020d972a9621
+/agent-note-desktop-overlay-guard-ipc:
+  en: 2793a6c2d6ab97ba
+  zh: 075c11acdd2482e1
+/agent-note-desktop-overlay-guard-ipc/problem:
+  en: f7936ebc96758c44
+  zh: 61a59070d8259b3e
+/agent-note-desktop-overlay-guard-ipc/decision:
+  en: 637ca133c61ffc6f
+  zh: bd0fa4493737b7ae
+/agent-note-desktop-overlay-guard-ipc/alternatives-considered:
+  en: e24161280006d7b2
+  zh: c8ab37989b5359ad
+/agent-note-desktop-overlay-guard-ipc/consequences:
+  en: 969c39302d6ec99f
+  zh: e995f2728f9c321a
+/agent-note-desktop-overlay-guard-ipc/testing:
+  en: 04d49f0f1ecc38df
+  zh: 902d59e92e565b5a

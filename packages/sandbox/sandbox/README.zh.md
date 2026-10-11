@@ -63,7 +63,7 @@ kind: "package-reference"
 
 ### 被拒绝的调用与升权
 
-受限调用被拒绝时，操作会报告指明模式的拒绝标记——`[sandbox: file access denied under <mode> mode]`——组合声明升权能力时还会给出升权提示。模型可以用 `sandbox_permissions`（足以放行的最窄更宽模式）加 `justification` 重试一次完全相同的调用；用户会看到一次审批提示，可以选择允许一次、拒绝或取消。更宽的模式需要审批，且只作用于该次调用。重复指定调用的生效模式无需审批即可成功；更窄的目标仍然无效。
+受限调用被拒绝时，操作会报告指明模式的拒绝标记——`[sandbox: file access denied under <mode> mode]`——组合声明升权能力时还会给出升权提示。模型可以用 `sandbox_permissions`（足以放行的最窄更宽模式）加 `justification` 重试一次完全相同的调用；审批服务为操作取得同意。请求保留审计原因，同时提供英文和中文展示文案，模型给出的理由保持原样。缺失的译文遵循语言服务的回退链，最终回退到英文；请求方负责自己的展示译文。更宽的模式需要审批，且只作用于该次调用。重复指定调用的生效模式无需审批即可成功；更窄的目标仍然无效。
 
 ### 故障关闭行为
 
@@ -93,7 +93,6 @@ kind: "package-reference"
 | [`src/index.ts`](src/index.ts) | 插件入口：`SandboxProvider` 服务、模式/强制执行/策略类型、故障关闭错误 |
 | [`src/escalation.ts`](src/escalation.ts) | 升权词汇：更宽模式阶梯、参数校验、拒绝与提示标记、审批编排 |
 | [`src/roots.ts`](src/roots.ts) | 可写根目录推导，Seatbelt profile 与进程内 fs 栅栏共享 |
-| — | 不发布运行时不变式伴生入口；除所属 seam 强制执行的约定外，本包不公开独立的事件序列或可变数据关系。 |
 
 ### 升权编排
 
@@ -113,7 +112,7 @@ kind: "package-reference"
 先从子系统参考文档了解穷尽式约定，再看实现它的后端、消费方与策略来源。
 
 - [进程沙箱子系统](../../../docs/subsystems/sandbox.zh.md)——完整词汇、逐调用策略与分类方言。
-- [子进程沙箱决策](../../../.agents/notes/implemented/feature/2026-07-06-sandbox.zh.md)——能力边界、升权设计与延期阶段。
+- [历史子进程沙箱决策](../../../.agents/notes/archived/feature/2026-07-06-sandbox.md)——能力边界、升权设计与延期阶段。
 - [本地沙箱后端](../sandbox-local/README.zh.md)——`ctx.sandbox` 背后的各平台 runner。
 - [Bash 沙箱执行器](../../shell/bash-sandbox/README.zh.md)——受限的 bash 消费方。
 - [沙箱策略包](../sandbox-policy/README.zh.md)——逐调用模式与工作区根目录的来源。
@@ -180,6 +179,6 @@ sandbox mode "<mode>" is requested but no sandbox backend is usable on this host
 
 #### 未来：消费方与环境
 
-[沙箱决策](../../../.agents/notes/implemented/feature/2026-07-06-sandbox.zh.md)列出延期阶段——可选的 `subagent-acp` 消费方（隔离子 agent（智能体），默认不隔离）与环境一致的能力组示例。两者均未决定；该笔记列为延期的 Windows 链已通过 `sandbox-local` 的 ACL 受限令牌档交付。
+可选的 `subagent-acp` 消费方（隔离子 agent，默认不隔离）与环境一致的能力组示例仍未决定。Windows 隔离由 `sandbox-local` 的 ACL 受限令牌后端提供。
 
 </details>

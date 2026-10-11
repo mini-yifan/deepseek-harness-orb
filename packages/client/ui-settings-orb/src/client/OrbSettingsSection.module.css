@@ -78,6 +78,7 @@
   width: 72px;
   height: 72px;
   border-radius: 50%;
+  corner-shape: round;
   object-fit: cover;
   background: var(--dsw-alias-bg-layer-3);
   flex: 0 0 auto;

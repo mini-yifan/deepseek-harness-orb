@@ -17,11 +17,13 @@ import css from '../rows/WorkspaceBrowser.module.css'
  * @returns the row.
  */
 export function RenameSessionMenuItem({
-  sessionId, displayTitle, useMenuOpenState, requestSessionRename, t,
+  sessionId, displayTitle, useMenuOpenState, useShortcuts, requestSessionRename, t,
 }: SessionMenuItemProps<RenameSessionInjected>) {
   const [, setMenuOpen] = useMenuOpenState()
+  const shortcut = useShortcuts(rows => rows.find(row => row.id === 'session.rename'))
   return (
     <MenuItemButton
+      shortcut={shortcut}
       icon={<IconEditOutlineRegular />}
       onSelect={() => {
         setMenuOpen(false)
@@ -38,7 +40,7 @@ export function RenameSessionMenuItem({
  * one dialog per request (keyed by the Session, so a new request starts a
  * fresh draft). Sessions have no client-side name-conflict rule (the host
  * normalizes), and unlike Workspace rename an unchanged title is NOT
- * blocked: confirming the current automatic title is the gesture that pins it.
+ * blocked. An unnamed Session starts with an empty draft and requires a name.
  * @param props - the request hook, its settlement, the rename hop, and the locale seat.
  * @returns the open dialog, or null.
  */
@@ -103,7 +105,7 @@ function RenameForm({ request, renameSession, onSettle, t }: {
         className={css.renameInput}
         value={draft}
         aria-label={t('field.sessionName')}
-        autoFocus
+        data-modal-autofocus
         disabled={renaming}
         onFocus={(e) => { e.target.select() }}
         onChange={(e) => { setDraft(e.target.value); setError(null) }}

@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-18-desktop-in-process-webserver-and-plugin-market.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-18-desktop-in-process-webserver-and-plugin-market.md
-2026-09-18-desktop-in-process-webserver-and-plugin-market.md: 65f19832a179595f5af2922e2298e87b7b1c434b
-2026-09-18-desktop-in-process-webserver-and-plugin-market.zh.md: 52a047260ebf1cd2e01863060ce559907c82dfb5
+/agent-note-in-process-desktop-webserver-and-plugin-market:
+  en: 74f533a4ea50da89
+  zh: 1b109633f654b262
+/agent-note-in-process-desktop-webserver-and-plugin-market/problem:
+  en: c8f943037d20a006
+  zh: f4f6109f440c6ab6
+/agent-note-in-process-desktop-webserver-and-plugin-market/decision:
+  en: 6cb8c1bbf6d15cda
+  zh: 878e6d2a4b6b09cf
+/agent-note-in-process-desktop-webserver-and-plugin-market/alternatives-considered:
+  en: 51e40d0d43c6070c
+  zh: 976d903b52d5e9e6
+/agent-note-in-process-desktop-webserver-and-plugin-market/consequences:
+  en: 03c570b6db2cb1b5
+  zh: 2245844d86873978

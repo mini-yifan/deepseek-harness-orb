@@ -20,7 +20,7 @@ import {
   collectRuntimeSourceSpecifiers,
 } from './verify-client-packages.ts'
 
-const EXPERIMENTAL_PREFIX = '@deepseek-ai/dsh-experimental-'
+import { isExperimentalPackageName } from './experimental-package-policy.ts'
 // The independently published entry package owns platform-engine dependencies.
 const EXTERNAL_KIT_PACKAGES = new Set(['@deepseek-ai/libreoffice-kit'])
 const PROFILE_SOURCE = 'packages/boot/app-boot/src/profile.ts'
@@ -29,6 +29,8 @@ const RUNTIME_SECTIONS = ['dependencies', 'optionalDependencies', 'peerDependenc
 
 interface Manifest {
   name: string
+  icon?: unknown
+  exports?: Record<string, unknown>
   dependencies?: Record<string, string>
   optionalDependencies?: Record<string, string>
   peerDependencies?: Record<string, string>
@@ -79,7 +81,8 @@ export function verifyDefaultProductIsolation(root: string): ProductIsolationRes
   if (cli?.manifest.name !== '@deepseek-ai/dsh') {
     failures.push('apps/cli/package.json must identify @deepseek-ai/dsh')
   }
-  // The bundles the launcher ships switched off: each a runtime dependency of the installation that is a bundle, none a default.
+  // The bundles the launcher ships switched off: each a runtime dependency of the installation that is a bundle
+  // with an icon and locale display metadata for the plugin manager's Official group, none a default.
   const profilePath = resolve(root, PROFILE_SOURCE)
   const selection = existsSync(profilePath) ? profilePackages(readFileSync(profilePath, 'utf8')) : undefined
   const optionalBundles = new Set(selection?.optionalBundles ?? [])
@@ -87,8 +90,15 @@ export function verifyDefaultProductIsolation(root: string): ProductIsolationRes
     if (cli?.manifest.dependencies?.[name] === undefined) {
       failures.push(`${PROFILE_SOURCE}: optional bundle ${name} must be a runtime dependency of apps/cli`)
     }
-    if (packages.get(name)?.manifest.dsh?.bundle?.patch === undefined) {
+    const manifest = packages.get(name)?.manifest
+    if (manifest?.dsh?.bundle?.patch === undefined) {
       failures.push(`${PROFILE_SOURCE}: optional bundle ${name} must declare dsh.bundle.patch`)
+    }
+    if (typeof manifest?.icon !== 'string' && manifest?.exports?.['./icon'] == null) {
+      failures.push(`${PROFILE_SOURCE}: optional bundle ${name} must declare icon or export ./icon`)
+    }
+    if (manifest?.exports?.['./locale/*.json'] === undefined) {
+      failures.push(`${PROFILE_SOURCE}: optional bundle ${name} must export ./locale/*.json display metadata`)
     }
   }
 
@@ -97,7 +107,7 @@ export function verifyDefaultProductIsolation(root: string): ProductIsolationRes
   const sources = new Set<string>()
   const configs = new Set<string>()
   let webPluginCount = 0
-  const isExperimental = (pkg: Package): boolean => pkg.manifest.name.startsWith(EXPERIMENTAL_PREFIX)
+  const isExperimental = (pkg: Package): boolean => isExperimentalPackageName(pkg.manifest.name)
     || display(pkg.directory).startsWith('packages/experimental/')
   const add = (pkg: Package, origin: string): void => {
     if (isExperimental(pkg)) {
@@ -126,7 +136,7 @@ export function verifyDefaultProductIsolation(root: string): ProductIsolationRes
       return
     }
     const packageName = barePackageName(name)
-    if (packageName.startsWith(EXPERIMENTAL_PREFIX)) {
+    if (isExperimentalPackageName(packageName)) {
       failures.push(`${origin} -> ${name}: default product must not include experimental packages`)
       return
     }
@@ -283,7 +293,8 @@ export function verifyDefaultProductIsolation(root: string): ProductIsolationRes
     const { manifest } = pkg
     for (const section of RUNTIME_SECTIONS) {
       for (const [name, range] of Object.entries(manifest[section] ?? {})) {
-        if (pkg === cli && section === 'dependencies' && optionalBundles.has(name)) continue
+        const target = packages.get(name)
+        if (pkg === cli && section === 'dependencies' && optionalBundles.has(name) && target !== undefined && isExperimental(target)) continue
         dependency(name, range, pkg, `${manifest.name} ${section}`)
       }
     }

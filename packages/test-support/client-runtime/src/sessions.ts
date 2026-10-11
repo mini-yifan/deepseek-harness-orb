@@ -631,7 +631,7 @@ export class TestSessions implements ISessions {
     if (retained !== undefined) return retained
     for (const [parentSessionId, projections] of Object.entries(this.list.getSnapshot().projectionsBySession)) {
       const child = projections.values.subagentCatalog?.find(entry => entry.id === id)
-      if (child !== undefined) {
+      if (child !== undefined && child.mode !== 'external') {
         return { parentSessionId: parentSessionId as SessionId, childSessionId: id, mode: child.mode }
       }
     }
@@ -677,7 +677,7 @@ export class TestSessions implements ISessions {
    * @param opts - source session id, optional cut anchor, and client title policy.
    * @returns the source id (no child record is created).
    */
-  fork(opts: { sessionId: SessionId; atSeq?: number; increaseTitle?: boolean }): Promise<SessionId> {
+  fork(opts: Parameters<ISessions['fork']>[0]): Promise<SessionId> {
     this.calls.push({ method: 'fork', args: [opts] })
     return Promise.resolve(opts.sessionId)
   }

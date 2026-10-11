@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-13-computer-use-macos-hid.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-13-computer-use-macos-hid.md
-2026-09-13-computer-use-macos-hid.md: 20bf91017a1c53bc28355fdf798868407b9c413a
-2026-09-13-computer-use-macos-hid.zh.md: 0fd14c51a7e924c5b5e1f7368d9391a8aab04d63
+/agent-note-computer-use-macos-hid-posting:
+  en: 0cca6392d378d228
+  zh: f324fa2e1b8d3947
+/agent-note-computer-use-macos-hid-posting/problem:
+  en: 9e71e29925821386
+  zh: d5551fa69ef7ee62
+/agent-note-computer-use-macos-hid-posting/decision:
+  en: 3534ea9435e80544
+  zh: 752a8283d34375f0
+/agent-note-computer-use-macos-hid-posting/alternatives-considered:
+  en: d7a6aab98a063556
+  zh: 729429c19e721874
+/agent-note-computer-use-macos-hid-posting/consequences:
+  en: 5d5937d7006e123c
+  zh: b0cb6ff4886b7cb2
+/agent-note-computer-use-macos-hid-posting/testing:
+  en: 942c9a5ec125c759
+  zh: ac9d2bcbf882bfa7

@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-22-desktop-overlay-click-keeps-front-app.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-22-desktop-overlay-click-keeps-front-app.md
-2026-09-22-desktop-overlay-click-keeps-front-app.md: 0f391ae6bf572f5ac53618139f9b94c2249fef23
-2026-09-22-desktop-overlay-click-keeps-front-app.zh.md: fc1ab423070f626e7ffc15f341e9a14b0e202760
+/agent-note-desktop-overlay-click-keeps-the-front-app:
+  en: aefa61d17be00d90
+  zh: 647db230fd11e7a4
+/agent-note-desktop-overlay-click-keeps-the-front-app/problem:
+  en: d4c2010b6515c7c4
+  zh: f1d9641fa94c3ea7
+/agent-note-desktop-overlay-click-keeps-the-front-app/decision:
+  en: c0f10cf9a9c5f2a2
+  zh: 1d59fbf5e0f5c0b3
+/agent-note-desktop-overlay-click-keeps-the-front-app/alternatives-considered:
+  en: 9eed42e0c34ccdf7
+  zh: 10eb061b300640a8
+/agent-note-desktop-overlay-click-keeps-the-front-app/consequences:
+  en: 72eaa33def20ad75
+  zh: 7a0b0c02fe831472
+/agent-note-desktop-overlay-click-keeps-the-front-app/testing:
+  en: 0eb458d8fb7d2c44
+  zh: d1e0a2352b383f77

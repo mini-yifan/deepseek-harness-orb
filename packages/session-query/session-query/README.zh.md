@@ -31,7 +31,7 @@ kind: "package-reference"
 
 | 操作 | 你得到什么 |
 |---|---|
-| `listSessions()` | 每个逻辑会话，最新的在前，带 `live` 与 `persisted` 可用性标志 |
+| `listSessions()` | 每个逻辑会话，最新的在前，带 `live` 与 `persisted` 可用性标志及可选 `formatStatus` |
 | `readSession(id)` | 经过回放校验的完整原始事件日志，且不会让该会话变为实时 |
 | `filterSessions(filters)` | 匹配 AND 连接的元数据与可用性谓词的会话 |
 | `filterEvents(id, filters)` | 匹配元数据与字面文本谓词的语义事件文档 |
@@ -62,7 +62,7 @@ kind: "package-reference"
 
 ### 失败与恢复
 
-失败带有稳定的 `SessionQueryError.code` 类型。你会遇到的包括：id 不存在时 `SESSION_QUERY_SESSION_NOT_FOUND`；同一会话的实时与持久化观察在不可变 header 上不一致时 `SESSION_QUERY_SOURCE_CONFLICT`；已挂载持久化不可读时 `SESSION_QUERY_PERSISTENCE_FAILED`；持久化记录未通过 Session 校验时 `SESSION_QUERY_CORRUPT_SESSION`；加载的日志破坏表层约定时 `SESSION_QUERY_INVALID_SURFACE`。针对已知实时会话的读取从不查询持久化，因此后端故障不会让当前内存历史变得不可读。
+失败带有稳定的 `SessionQueryError.code` 类型。你会遇到的包括：id 不存在时 `SESSION_QUERY_SESSION_NOT_FOUND`；同一会话的实时与持久化观察在不可变 header 上不一致时 `SESSION_QUERY_SOURCE_CONFLICT`；已挂载持久化不可读时 `SESSION_QUERY_PERSISTENCE_FAILED`；持久化记录未通过 Session 校验，或实时或 prepared 观察的投影计算失败时 `SESSION_QUERY_CORRUPT_SESSION`；加载的日志破坏表层约定时 `SESSION_QUERY_INVALID_SURFACE`。投影失败会将原始错误保留为 `cause`。针对已知实时会话的读取从不查询持久化，因此后端故障不会让当前内存历史变得不可读。
 
 -----
 
@@ -100,7 +100,6 @@ kind: "package-reference"
 | [`src/documents.ts`](src/documents.ts) | 表层感知的语义文档投影 |
 | [`src/tracing.ts`](src/tracing.ts) | 一次性会话血缘与事件关系追踪 |
 | [`src/sources.ts`](src/sources.ts) | 不可变 header 兼容性检查 |
-| — | 不发布运行时不变式伴生入口；查询结果是每次调用产生的不可变投影，其血缘与事件关系会在构建时完成校验；服务不保留可观察的结果状态。 |
 
 ### 语料库解析
 
@@ -125,7 +124,7 @@ kind: "package-reference"
 
 - [会话查询子系统参考](../../../docs/subsystems/session-query.zh.md)——完整类型级约定：记录、过滤器、搜索页、血缘、有界读取与错误。
 - [dsh-session-query-sqlite](../session-query-sqlite/README.zh.md)——已发布的全文后端及其索引生命周期。
-- [dsh-tool-session-query](../tool-session-query/README.zh.md)——构建在本服务之上的面向模型消费方。
+- [dsh-tool-session-query](../../experimental/tool-session-query/README.zh.md)——构建在本服务之上的面向模型消费方。
 - [会话查询关系追踪](../../../.agents/notes/archived/feature/2026-07-13-session-query-tracing.md)——追踪语义与校验边界。
 - [SQLite FTS5 会话搜索](../../../.agents/notes/archived/feature/2026-07-10-sqlite-session-query-provider.md)——搜索表面如何实现与对账。
 
@@ -162,6 +161,6 @@ kind: "package-reference"
 
 #### 未来：提取器与搜索提供方注册表
 
-对被引用源事件的递归遍历、提取器与搜索提供方注册表以及更多面向模型表面均被推迟；[tool-session-query README](../tool-session-query/README.zh.md)说明了当前的消费方表面。
+对被引用源事件的递归遍历、提取器与搜索提供方注册表以及更多面向模型表面均被推迟；[tool-session-query README](../../experimental/tool-session-query/README.zh.md)说明了当前的消费方表面。
 
 </details>

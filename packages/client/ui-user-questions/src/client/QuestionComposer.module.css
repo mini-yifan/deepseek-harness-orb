@@ -21,7 +21,7 @@
   padding: 0 0 10px;
   border: 0;
   --dsw-elevation-stroke-color: var(--dsw-alias-border-l2-darkmode-thin);
-  border-radius: 20px;
+  border-radius: var(--dsw-radius-xl);
   background: var(--dsw-specific-input-major);
   box-shadow: var(--dsw-elevation-panel);
   color: var(--dsw-alias-label-primary);
@@ -60,6 +60,17 @@
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+}
+
+.waitButton {
+  white-space: nowrap;
+}
+
+.waitStatus {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 24px;
+  white-space: nowrap;
 }
 
 /* Figma 1019:36938 header, user-tuned: heading block left, close right; the
@@ -179,7 +190,7 @@
   flex-shrink: 0;
   padding: 8px 12px 8px 8px;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: var(--dsw-radius-md);
   background: transparent;
   color: inherit;
   text-align: left;
@@ -200,7 +211,7 @@
   cursor: default;
 }
 
-/* Leading indicator (figma 20×20, radius 6): single-select shows the option
+/* Leading indicator (20×20): single-select shows the option
    number, multi-select swaps in a checkbox; the custom-answer row follows —
    its checkbox mirrors the typed draft (styling only, exclusivity holds). */
 .number {
@@ -212,7 +223,7 @@
   /* (24px first-line box − 20px indicator) / 2: centers the indicator against
      the first text line under the row's flex-start alignment. */
   margin-top: 2px;
-  border-radius: 6px;
+  border-radius: var(--dsw-radius-xs);
   background: var(--dsw-alias-bg-overlay);
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
@@ -239,7 +250,7 @@
   width: 14px;
   height: 14px;
   border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: 4px;
+  border-radius: var(--dsw-radius-xs);
   transition: background-color 120ms ease, border-color 120ms ease;
 }
 
@@ -278,7 +289,7 @@
 
 .badge {
   padding: 0 4px;
-  border-radius: 6px;
+  border-radius: var(--dsw-radius-xs);
   background: var(--dsw-specific-sidebar-nav-item-active-accent);
   color: var(--dsw-alias-button-info-fill);
   font-size: 11px;
@@ -291,6 +302,16 @@
   font-size: 14px;
   line-height: 24px;
   font-weight: 400;
+}
+
+/* Read-only note standing in for a question the user skipped: it takes the
+   option rows' horizontal padding so it lines up with the choices above it. */
+.reviewNote {
+  margin: 0;
+  padding: 8px 12px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 14px;
+  line-height: 24px;
 }
 
 /* Custom answer row (figma 973:36427): an option-shaped row whose copy is an
@@ -308,7 +329,7 @@
   flex-shrink: 0;
   padding: 8px 12px 8px 8px;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: var(--dsw-radius-md);
   transition: background-color 120ms ease, border-color 120ms ease;
 }
 
@@ -391,7 +412,7 @@
   flex-shrink: 0;
   margin: 0 12px;
   border: 0.5px solid var(--dsw-alias-border-l4);
-  border-radius: 10px;
+  border-radius: var(--dsw-radius-lg);
   background: var(--dsw-alias-bg-module-platform);
   --dsh-answer-field-padding: 8px 12px;
 }
@@ -421,7 +442,7 @@
 
 @media (max-width: 720px) {
   .card {
-    border-radius: 16px;
+    border-radius: var(--dsw-radius-xl);
   }
 
   .header {

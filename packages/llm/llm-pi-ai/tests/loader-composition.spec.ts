@@ -9,6 +9,7 @@ import { Context } from '@deepseek-ai/cordis'
 import Loader, { type ModuleLoaderV2 } from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
 import LlmRuntime, { createMessage, createUserMessage, userAgent } from '@deepseek-ai/dsh-llm'
+import AuthorizationService from '@deepseek-ai/dsh-authorization'
 import LocalCredentialProvider from '@deepseek-ai/dsh-credentials-local'
 import { profileComposition } from '../../../settings/settings/tests/profile-composition.ts'
 import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
@@ -50,6 +51,8 @@ async function loadComposition(): Promise<{ ctx: Context; settingsPath: string }
     '  config:',
     `    path: ${JSON.stringify(join(root, '.credentials.yaml'))}`,
     '    debounceMs: 10',
+    '- id: authorization',
+    "  name: '@deepseek-ai/dsh-authorization'",
     '- id: llm-pi-ai',
     "  name: '@deepseek-ai/dsh-llm-pi-ai'",
     '',
@@ -63,6 +66,7 @@ async function loadComposition(): Promise<{ ctx: Context; settingsPath: string }
   const modules = new Map<string, unknown>([
     ['test-llm-service', LlmRuntime],
     ['@deepseek-ai/dsh-credentials-local', LocalCredentialProvider],
+    ['@deepseek-ai/dsh-authorization', AuthorizationService],
     ['@deepseek-ai/dsh-llm-pi-ai', LlmPiAi],
   ])
   const internal: ModuleLoaderV2 = {
@@ -105,9 +109,20 @@ describe('llm-pi-ai real dormant composition', () => {
       expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(['deepseek'])
     }, { timeout: 5000 })
 
-    const result = await assemble(ctx, { provider: 'deepseek', model: 'deepseek-v4-flash', messages: [] })
+    const result = await assemble(ctx, { provider: 'deepseek', model: 'deepseek-flash', messages: [] })
     expect(result.message.content).toEqual([{ type: 'text', text: 'hello' }])
     expect(server.headers[0]?.authorization).toBe('Bearer key-from-store')
+  })
+
+  it('offers OpenAI sign-in by API key only, while other subscription logins stay', async () => {
+    const { ctx } = await loadComposition()
+    const methods = (provider: string): string[] | undefined => ctx.authorization.list()
+      .find(entry => entry.key === LlmPiAi.recordKeyFor(provider))?.methods.map(method => method.id)
+
+    // pi-ai's Sign in with ChatGPT needs an installation ID the harness does
+    // not supply, so the route offers only its key login.
+    expect(methods('openai')).toEqual(['api-key'])
+    expect(methods('anthropic')).toEqual(['oauth', 'api-key'])
   })
 
   it('uses settings-only route headers for model discovery', async () => {
@@ -169,7 +184,7 @@ describe('llm-pi-ai real dormant composition', () => {
 
     const truncated = await assemble(ctx, {
       provider: 'deepseek',
-      model: 'deepseek-v4-flash',
+      model: 'deepseek-flash',
       messages: [],
     })
     expect(truncated.finish).toEqual({ kind: 'max-tokens' })
@@ -177,14 +192,14 @@ describe('llm-pi-ai real dormant composition', () => {
     expect(truncated.message.source).toEqual({
       kind: 'model',
       provider: 'deepseek',
-      model: 'deepseek-v4-flash',
+      model: 'deepseek-flash',
       replayState: {
         response: {
           kind: 'pi-ai',
           version: 2,
           api: 'openai-completions',
           provider: 'deepseek',
-          model: 'deepseek-v4-flash',
+          model: 'deepseek-flash',
           stopReason: 'length',
         },
         blocks: [{ type: 'text' }],
@@ -193,7 +208,7 @@ describe('llm-pi-ai real dormant composition', () => {
 
     const continued = await assemble(ctx, {
       provider: 'deepseek',
-      model: 'deepseek-v4-flash',
+      model: 'deepseek-flash',
       messages: [
         truncated.message,
         createUserMessage({ content: [{ type: 'text', text: 'continue' }], source: { kind: 'user' } }),
@@ -237,13 +252,13 @@ describe('llm-pi-ai real dormant composition', () => {
         kind: 'model',
         ...{
           provider: 'deepseek',
-          model: 'deepseek-v4-flash',
+          model: 'deepseek-flash',
           replayState: {
             kind: 'pi-ai',
             version: 1,
             api: 'openai-completions',
             provider: 'deepseek',
-            model: 'deepseek-v4-flash',
+            model: 'deepseek-flash',
             stopReason: 'length',
             blocks: [{ type: 'text' }, { type: 'tool-call' }],
           },
@@ -252,7 +267,7 @@ describe('llm-pi-ai real dormant composition', () => {
     })
     const continued = await assemble(ctx, {
       provider: 'deepseek',
-      model: 'deepseek-v4-flash',
+      model: 'deepseek-flash',
       messages: [
         poisoned,
         createUserMessage({ content: [{ type: 'text', text: 'continue' }], source: { kind: 'user' } }),

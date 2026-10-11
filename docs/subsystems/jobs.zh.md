@@ -2,7 +2,7 @@
 
 [English](jobs.md) | 中文
 
-长时间运行的生产方、`ctx.jobs` 与任务控制命令共用的类型。[seam 收敛 Agent Note](../../.agents/notes/implemented/architecture/2026-09-03-jobs-seam-consolidation.zh.md) 负责当前设计，[运行时 Agent Note](../../.agents/notes/implemented/architecture/2026-06-20-generic-long-running-tool-runtime.zh.md) 记录其起源；本页记录 [`packages/jobs/jobs/src/types.ts`](../../packages/jobs/jobs/src/types.ts) 与客户端安全叶子 [`view.ts`](../../packages/jobs/jobs/src/view.ts) 中的确切字段与变体。
+长时间运行的生产方、`ctx.jobs` 与任务控制命令共用的类型。[seam 收敛 Agent Note](../../.agents/notes/implemented/architecture/2026-09-03-jobs-seam-consolidation.zh.md) 负责当前设计，[运行时 reference](../../packages/jobs/jobs/README.zh.md) 记录其起源；本页记录 [`packages/jobs/jobs/src/types.ts`](../../packages/jobs/jobs/src/types.ts) 与客户端安全叶子 [`view.ts`](../../packages/jobs/jobs/src/view.ts) 中的确切字段与变体。
 
 ## ID 与状态
 
@@ -15,7 +15,6 @@
  */
 interface JobKindMap {
   bash: 'bash'
-  subagent: 'subagent'
 }
 ```
 
@@ -33,7 +32,7 @@ interface JobKindMap {
  * the output ring.
  */
 interface JobSpec {
-  /** Producer kind — also the id prefix (`bash`, `subagent`, …). */
+  /** Producer kind — also the id prefix (`bash`, …). */
   kind: JobKind
   /** One-line model-facing label (the command; the delegation description). */
   label: string
@@ -95,7 +94,7 @@ interface JobHandle {
 }
 ```
 
-`JobHooks.done` 会在生产方释放其资源后 resolve，而不是仅在工作完成时 resolve。结果是一个值而非流的 job——subagent 的报告、workflow 渲染出的结果——把它作为 `JobOutcome.result` 返回；模型在结算后的第一次读取携带它一次。
+`JobHooks.done` 会在生产方释放其资源后 resolve，而不是仅在工作完成时 resolve。结果是一个值而非流的 job——workflow 渲染出的结果——把它作为 `JobOutcome.result` 返回；模型在结算后的第一次读取携带它一次。
 
 ```ts type-equiv
 /** Hooks through which the runtime controls and observes producer work. */

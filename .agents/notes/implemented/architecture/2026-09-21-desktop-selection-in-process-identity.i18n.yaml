@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-21-desktop-selection-in-process-identity.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-21-desktop-selection-in-process-identity.md
-2026-09-21-desktop-selection-in-process-identity.md: e6ab94c64a22051c042d53f76f8e1ee9a5caf14b
-2026-09-21-desktop-selection-in-process-identity.zh.md: 87aa8f472ba010db5676e0d98b34f1a464d8af08
+/agent-note-desktop-selection-toolbar-in-the-orb-process:
+  en: 2a5da62fa648d55d
+  zh: fcf9d5c30d723965
+/agent-note-desktop-selection-toolbar-in-the-orb-process/problem:
+  en: 51244d748f03cdef
+  zh: 4bc63394a51832a3
+/agent-note-desktop-selection-toolbar-in-the-orb-process/decision:
+  en: d4d832f8ed9a2dc4
+  zh: 80d39b5ded95b4ac
+/agent-note-desktop-selection-toolbar-in-the-orb-process/alternatives-considered:
+  en: a959eada93648703
+  zh: db61205c3a551751
+/agent-note-desktop-selection-toolbar-in-the-orb-process/consequences:
+  en: 88868a44874ac94e
+  zh: 1b5aefea5ad1c5b0
+/agent-note-desktop-selection-toolbar-in-the-orb-process/testing:
+  en: fe7739f470ea095c
+  zh: 5655d19b91f82a77

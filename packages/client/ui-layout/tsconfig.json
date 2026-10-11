@@ -37,6 +37,9 @@
     },
     {
       "path": "../ui-session"
+    },
+    {
+      "path": "../shortcuts/tsconfig.client.json"
     }
   ]
 }

@@ -8,24 +8,28 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { TypertRemoteContribution } from '@deepseek-ai/dsh-typert-protocol'
 import { VoiceInput, type VoiceInputInjected } from './VoiceInput.tsx'
 import { Recording } from './audio.ts'
+import { createMicrophoneDeviceStore } from './microphone-device.ts'
 import { en, NS, zh } from './locales.ts'
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import { observeReadiness } from './readiness.ts'
 import { VoicePreparation } from './PreparationCard.tsx'
 import { VoiceSetupPrompt } from './VoiceSetupPrompt.tsx'
 
-export const inject = ['remote', 'slots', 'locale']
+export const inject = ['remote', 'slots', 'locale', 'pluginNavigation']
 
 function registerUi(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }))
   const recordings = new Set<Recording>()
+  const microphone = createMicrophoneDeviceStore()
   const readiness = observeReadiness(ctx)
   ctx.effect(() => readiness.dispose)
   ctx.effect(() => async () => { await Promise.all([...recordings].map(recording => recording.dispose())) })
   const actions: VoiceInputInjected = {
-    hooks: { speechReadiness: readiness.state },
+    openSettings: () => { ctx.pluginNavigation.openBundle('@deepseek-ai/dsh-experimental-voice-input-bundle') },
+    hooks: { speechReadiness: readiness.state, microphoneDevice: microphone },
+    selectMicrophone: (device) => { microphone.set(device) },
     createRecording: () => {
-      const recording = new Recording(() => { recordings.delete(recording) })
+      const recording = new Recording(() => { recordings.delete(recording) }, microphone.getSnapshot().id)
       recordings.add(recording)
       return recording
     },
@@ -58,7 +62,7 @@ function registerUi(ctx: Context): void {
  */
 export async function mountVoiceInput(ctx: Context, contribution: TypertRemoteContribution): Promise<() => Promise<void>> {
   const disposeRemote = await ctx.remote.$mount(contribution)
-  const ui = ctx.inject(['remote.speech', 'slots', 'locale'], registerUi)
+  const ui = ctx.inject(['remote.speech', 'slots', 'locale', 'pluginNavigation'], registerUi)
   try { await ui } catch (error) { await ui.dispose(); await disposeRemote(); throw error }
   return async () => { await ui.dispose(); await disposeRemote() }
 }

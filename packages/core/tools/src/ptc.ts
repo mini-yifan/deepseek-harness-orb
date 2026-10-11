@@ -53,9 +53,9 @@ interface RunCodeFlavor {
 const TYPESCRIPT_FLAVOR: RunCodeFlavor = {
   description:
     'Execute a TypeScript program against the available tools. Takes two required '
-    + 'arguments: `code`, the BODY of an async function (erasable syntax only; top-level '
-    + '`await` and `return` work), and `description`, a short summary of what the program '
-    + 'does. Call tools as `await tools.name(args)` per the declarations in the system '
+    + 'arguments: `description`, a short summary of what the program does, and `code`, '
+    + 'the BODY of an async function (erasable syntax only; top-level `await` and '
+    + '`return` work). Call tools as `await tools.name(args)` per the declarations in the system '
     + 'prompt. Only what you print or return is program output — curate it. Image-bearing '
     + 'subtool results are attached after the run.',
   codeDescription: 'The program: the body of an async TypeScript function.',
@@ -69,8 +69,8 @@ const TYPESCRIPT_FLAVOR: RunCodeFlavor = {
 const PYTHON_FLAVOR: RunCodeFlavor = {
   description:
     'Execute a Python program against the available tools. Takes two required '
-    + 'arguments: `code`, the BODY of an async function (top-level `await` and `return` '
-    + 'work), and `description`, a short summary of what the program does. Call tools as '
+    + 'arguments: `description`, a short summary of what the program does, and `code`, '
+    + 'the BODY of an async function (top-level `await` and `return` work). Call tools as '
     + '`await tools.name(args)` per the declarations in the system prompt. Use '
     + '`print(...)` and/or `return <value>` for program output — curate it. Image-bearing '
     + 'subtool results are attached after the run.',
@@ -102,13 +102,14 @@ const RUN_CODE_FLAVORS: Record<string, RunCodeFlavor> = {
  */
 const RUN_CODE_DESCRIPTION_PARAM_DESCRIPTION
   = 'Clear, concise description of what this program does in active voice, '
-    + '5-10 words (shown in the UI). Examples: "Count TODO markers across packages"; '
+    + '5-10 words (shown in the UI). Provide `description` before `code` in the arguments. '
+    + 'Examples: "Count TODO markers across packages"; '
     + '"Read failing test and its fixture"; "Rename config key in every cordis.yml".'
 
 const RUN_CODE_CONTROLS = {
   timeoutMs: { type: 'number', description: 'Positive elapsed-time budget in milliseconds, capped by the deployment maximum.' },
   sandbox_permissions: { type: 'string', enum: [...ESCALATION_TARGETS], description: 'Wider sandbox mode for this complete program execution; requires justification and approval.' },
-  justification: { type: 'string', description: 'Reason this complete program needs wider access, shown to the user for approval.' },
+  justification: { type: 'string', description: 'Reason this complete program needs wider access, shown to the user for approval. Use the language of the user’s current request.' },
 } as const
 
 function controlParameters(runtime: PtcRuntime | undefined) {
@@ -300,6 +301,8 @@ type RunCodeOutput = { logs: string[]; result?: JsonValue; sandbox?: PtcRunSandb
  * off its public service API and flow here as closures instead.
  */
 export interface RunCodeBridgeOptions {
+  /** Captures the calling Session current directory before program creation. */
+  resolveWorkingDirectory: (exec: ToolRunContext) => Promise<string | undefined>
   /** Reads the approval channel when a program requests a wider sandbox mode. */
   peekApprover: () => ApprovalService | undefined
   /** Resolves standing Session authority only for a runtime that enforces file policy. */
@@ -320,8 +323,8 @@ export interface RunCodeBridgeOptions {
 }
 
 /**
- * Build the `run_code` {@link ToolDefinition}: required `code` and
- * `description` parameters, executed through the dispatch bridge described
+ * Build the `run_code` {@link ToolDefinition}: required `description` and
+ * `code` parameters, executed through the dispatch bridge described
  * above. The
  * registry reserves it as presentation infrastructure under non-native modes,
  * outside the filterable global/scoped capability layers.
@@ -342,12 +345,12 @@ export function createRunCodeTool(registry: ToolRuntime, options: RunCodeBridgeO
     // independent (one required string `code`).
     description: TYPESCRIPT_FLAVOR.description,
     parameters: {
-      code: { type: 'string', required: true, description: TYPESCRIPT_FLAVOR.codeDescription },
       description: {
         type: 'string',
         required: true,
         description: RUN_CODE_DESCRIPTION_PARAM_DESCRIPTION,
       },
+      code: { type: 'string', required: true, description: TYPESCRIPT_FLAVOR.codeDescription },
       ...RUN_CODE_CONTROLS,
     },
     output: {
@@ -403,6 +406,7 @@ export function createRunCodeTool(registry: ToolRuntime, options: RunCodeBridgeO
         })
         policy = { ...standingPolicy, mode: approvedMode }
       }
+      const cwd = await options.resolveWorkingDirectory(exec)
       exec.signal.throwIfAborted()
 
       // The run-scoped abort: follows the outer signal in, and fires when the
@@ -595,6 +599,7 @@ export function createRunCodeTool(registry: ToolRuntime, options: RunCodeBridgeO
                 isError: result.isError,
                 ...result.error?.info === undefined ? {} : { error: result.error.info },
                 content: logged,
+                ...result.meta === undefined ? {} : { meta: result.meta },
               })
             })().finally(() => { logWork.delete(task) })
             logWork.add(task)
@@ -702,7 +707,7 @@ export function createRunCodeTool(registry: ToolRuntime, options: RunCodeBridgeO
               errorClass: { name: 'ToolCallError', memberNameProperty: 'toolName' },
             }],
             signal: runController.signal,
-            ...exec.agent?.session.header.cwd !== undefined ? { cwd: exec.agent.session.header.cwd } : {},
+            ...cwd !== undefined ? { cwd } : {},
             ...policy !== undefined ? { sandboxPolicy: policy } : {},
             ...args.timeoutMs !== undefined ? { timeoutMs: args.timeoutMs } : {},
           }))
@@ -752,7 +757,7 @@ export function createRunCodeTool(registry: ToolRuntime, options: RunCodeBridgeO
       const instructions = runtime?.executionInstructions
       return resolveFlavor(peekRuntime).description
         + (instructions ? ` ${instructions}` : '')
-        + (runtime === undefined ? '' : " The working directory is the Session's current directory.")
+        + (runtime === undefined ? '' : " Each program starts in the Session's current directory. Running programs keep their initial directory.")
         + escalationGuidance(runtime)
     },
   })
@@ -761,10 +766,10 @@ export function createRunCodeTool(registry: ToolRuntime, options: RunCodeBridgeO
     // Recompile through the same spec→schema projection defineTool used, so
     // the emitted schema always matches the validated specification.
     get: () => parameterSchemaSpecToJsonSchema({
-      code: { type: 'string', required: true, description: resolveFlavor(peekRuntime).codeDescription },
       description: { type: 'string', required: true, description: RUN_CODE_DESCRIPTION_PARAM_DESCRIPTION },
+      code: { type: 'string', required: true, description: resolveFlavor(peekRuntime).codeDescription },
       ...controlParameters(peekRuntime()),
-    }) as unknown as Record<string, unknown>,
+    }),
   })
   return definition
 }

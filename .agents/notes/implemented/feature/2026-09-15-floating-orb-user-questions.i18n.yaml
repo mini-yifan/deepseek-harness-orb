@@ -1,6 +1,19 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-15-floating-orb-user-questions.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-15-floating-orb-user-questions.md
-2026-09-15-floating-orb-user-questions.md: 179618a6a39f5e5235daf8a54b5b91974f74cb15
-2026-09-15-floating-orb-user-questions.zh.md: da7f7bd58a655fd9547a34d6aeaacfc13b40a732
+/agent-note-floating-orb-user-questions:
+  en: b05611d37a8f6979
+  zh: 3feac148257ba733
+/agent-note-floating-orb-user-questions/problem:
+  en: 0fb85db904d9b09b
+  zh: f19121b8324a9be6
+/agent-note-floating-orb-user-questions/decision:
+  en: 157b175d136b95e6
+  zh: abf363f441e4fcfb
+/agent-note-floating-orb-user-questions/alternatives-considered:
+  en: 8798cb6bd590f6ed
+  zh: e0033953ca753f6b
+/agent-note-floating-orb-user-questions/consequences:
+  en: 7bf96c508e25bbdd
+  zh: 3133b5b6c1297b8c

@@ -80,22 +80,34 @@ describe.skipIf(webSnapshotMode() === 'record')('web e2e: DeepSeek Messages sett
     await page.getByRole('menuitem', { name: /模型/ }).click()
     await page.getByRole('menuitemradio', { name: 'Messages Flash', exact: true }).waitFor()
     await compareOrRefreshGolden(join(EXPECTED, 'picker.expected.md'),
-      await captureStableAria(page, '[role="menu"]', scaffold.workspaceCwd), webSnapshotMode())
+      await captureStableAria(page, '[role="group"][aria-label="模型与推理等级"]', scaffold.workspaceCwd), webSnapshotMode())
+    await page.keyboard.press('Escape')
+    await page.getByRole('menuitem', { name: /推理等级/ }).click()
+    const effortWeights = await page.getByRole('menuitemradio').evaluateAll(rows => rows.map(row =>
+      getComputedStyle(row.querySelector('span span')!).fontWeight,
+    ))
+    expect(new Set(effortWeights)).toEqual(new Set(['400']))
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
-  it('keeps a saved DeepSeek selection available after editing provider settings', async () => {
+  it('selects an available DeepSeek model after provider settings remove the default', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-deepseek-messages-default'))
     await page.keyboard.press('Escape')
     await scaffold.ctx.agentDefaultModel.saveSelection({ provider: 'deepseek-official', model: 'deepseek-v4-flash' })
     await page.reload({ waitUntil: 'load' })
     const input = page.locator('[data-composer-input]').first()
-    await expect.poll(() => input.isEnabled()).toBe(true)
-    await page.getByRole('button', { name: /^选择模型/ }).click()
-    await page.getByRole('menuitem', { name: /模型/ }).click()
+    const trigger = page.getByRole('button', { name: '请选择模型', exact: true })
+    await trigger.waitFor()
+    expect(scaffold.ctx.agentDefaultModel.currentSelection()).toEqual({
+      provider: 'deepseek-official', model: 'deepseek-v4-flash',
+    })
+    await expect.poll(() => input.getAttribute('contenteditable')).toBe('true')
+    await trigger.click()
     await page.getByRole('menuitemradio', { name: 'Messages Flash', exact: true }).click()
-    await expect.poll(() => input.isEnabled()).toBe(true)
-    await expect.poll(() => scaffold.ctx.agentDefaultModel.currentSelection().provider).toBe('deepseek-official')
+    await expect.poll(() => input.getAttribute('contenteditable')).toBe('true')
+    await expect.poll(() => scaffold.ctx.agentDefaultModel.currentSelection()).toMatchObject({
+      provider: 'deepseek-official', model: 'deepseek-flash',
+    })
     const settings = await readFile(join(scaffold.harnessHome, 'profiles', 'scaffold', 'cordis.patch.yml'), 'utf8')
     expect(settings).toContain('provider: deepseek-official')
     expect(tripwire.pageErrors).toEqual([])

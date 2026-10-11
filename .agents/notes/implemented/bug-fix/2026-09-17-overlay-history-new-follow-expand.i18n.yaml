@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-17-overlay-history-new-follow-expand.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-09-17-overlay-history-new-follow-expand.md
-2026-09-17-overlay-history-new-follow-expand.md: c529f3ea1bb721747a94c2e115e09b41e7fd48a7
-2026-09-17-overlay-history-new-follow-expand.zh.md: 6f270cad9033a4387d6e3464b4f6534b24744aab
+/agent-note-overlay-history-and-new-follow-the-input-pill-edge:
+  en: 3118cc59634831d1
+  zh: 2da5d4ab8f820f20
+/agent-note-overlay-history-and-new-follow-the-input-pill-edge/problem:
+  en: b6a3a688da045b48
+  zh: a429cb494b921504
+/agent-note-overlay-history-and-new-follow-the-input-pill-edge/decision:
+  en: f0e6e987cfc45887
+  zh: 3dc70080d8f89b3c
+/agent-note-overlay-history-and-new-follow-the-input-pill-edge/alternatives-considered:
+  en: 30aa50085d7c101d
+  zh: 284109b838a85f2c
+/agent-note-overlay-history-and-new-follow-the-input-pill-edge/consequences:
+  en: e9e5792d618a4d02
+  zh: e4189b50029cec1c
+/agent-note-overlay-history-and-new-follow-the-input-pill-edge/testing:
+  en: 8ff61a123b20a5f5
+  zh: 2c126221f2f2a1d2

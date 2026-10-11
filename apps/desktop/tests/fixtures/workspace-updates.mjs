@@ -11,7 +11,7 @@ import updaterModule from 'electron-updater'
 import { createUpdateServer } from './update-server.mjs'
 import { fixture } from './workspace-update-adapters.mjs'
 import { DesktopUpdateHttpExecutor } from '../../lib/types/update-http-executor.js'
-import { resolveDesktopLocale } from '../../lib/types/locale.js'
+import { desktopUpdateReadyConfirmation, resolveDesktopLocale } from '../../lib/types/locale.js'
 
 const root = process.env.DSH_WORKSPACE_UPDATE_ROOT
 assert.ok(root)
@@ -218,7 +218,7 @@ async function qualify() {
     const checking = await dialogWith(messages.updateChecking)
     await screenshot(checking, 'checking.png')
     server.release()
-    const current = await dialogWith(messages.updateCurrent.replace('{version}', app.getVersion()))
+    const current = await dialogWith(messages.updateCurrent)
     assert.equal(current, checking)
     await clickText(current, messages.updateAcknowledge)
     assert.equal(server.requests.filter(path => path === '/payload.exe').length, 0)
@@ -227,7 +227,7 @@ async function qualify() {
 
     server.select('healthy', '0.1.6-nightly.1')
     checkMenu.click()
-    const available = await dialogWith(messages.updateAvailable)
+    const available = await dialogWith(messages.updateAvailable.replace('{version}', '0.1.6-nightly.1'))
     server.select('corrupt', '0.1.6-nightly.1')
     await clickText(available, messages.updateDownload)
     await waitFor(() => fixture.coordinator.state.phase === 'error', 'checksum failure')
@@ -252,7 +252,8 @@ async function qualify() {
     assert.equal(BrowserWindow.getAllWindows().some(window => window.webContents.getURL() === 'dsh-app://shell/update-dialog.html'), false)
     await screenshot(mainWindow, 'downloading.png')
     server.release()
-    const ready = await dialogWith(messages.updateDownloadedTitle.replace('{version}', '0.1.6-nightly.1'))
+    const confirmation = desktopUpdateReadyConfirmation(messages, '0.1.6-nightly.1', process.platform)
+    const ready = await dialogWith(confirmation.message)
     assert.equal(fixture.installations.length, 0)
     await screenshot(ready, 'install-confirmation.png')
     cases.push('sidebar-retry-direct-download-and-separate-install-dialog')
@@ -337,7 +338,7 @@ async function qualify() {
     await waitFor(() => fixture.host !== stoppedHost && fixture.readyHosts.has(fixture.host), 'replacement Host after non-graceful shutdown')
     await waitFor(async () => !await fixture.host.updateTasks('inspect'), 'replacement Host ready without active work')
     await press(mainWindow, `document.querySelector('button[data-error="true"]')`)
-    const retryInstall = await dialogWith(messages.updateDownloadedTitle.replace('{version}', '0.1.6-nightly.1'))
+    const retryInstall = await dialogWith(confirmation.message)
     assert.equal(fixture.installations.length, 0)
     await screenshot(retryInstall, 'recovered-install-confirmation.png')
     await press(retryInstall, `document.getElementById('close')`)

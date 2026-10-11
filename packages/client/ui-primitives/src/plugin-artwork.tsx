@@ -12,11 +12,11 @@ import type { IconProps } from './icons/props.ts'
  */
 const useArtworkId = (): string => `dsh_plugin_art_${useId().replaceAll(':', '')}`
 
-/** Terminal plugin artwork (prompt chevron and cursor bar). */
+/** Light-blue terminal artwork shared by plugin cards and sidebar guide entries. */
 export const PluginArtworkTerminal = ({ size = 36, className }: IconProps) => (
   <svg width={size} height={size} className={className} viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M10 11L16.606 17.606C16.6841 17.6841 16.6841 17.8107 16.606 17.8888L10 24.4948" stroke="#145AF3" strokeWidth="3.5" />
-    <path d="M20.1211 24.4946H26.8685" stroke="#145AF3" strokeWidth="3.5" />
+    <path d="M10 11L16.606 17.606C16.6841 17.6841 16.6841 17.8107 16.606 17.8888L10 24.4948" stroke="#679EFE" strokeWidth="3.5" />
+    <path d="M20.1211 24.4946H26.8685" stroke="#679EFE" strokeWidth="3.5" />
   </svg>
 )
 
@@ -70,13 +70,13 @@ export const PluginArtworkSearch = ({ size = 36, className }: IconProps) => {
   const uid = useArtworkId()
   return (
     <svg width={size} height={size} className={className} viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M26.5362 26.9865L22.3813 22.8317" stroke="#2F2295" strokeWidth="3" />
+      <path d="M26.5362 26.9865L22.3813 22.8317" stroke="#658EFF" strokeWidth="3" />
       <g clipPath={`url(#${uid}ring)`}>
         <g transform="matrix(0.0119394 -0.00173904 0.00173904 0.0119394 15.7661 16.2159)">
           <foreignObject x="-958.94" y="-958.94" width="1917.88" height="1917.88">
             <div
               style={{
-                background: 'conic-gradient(from 90deg, rgb(65, 225, 172) 0deg, rgb(85, 71, 210) 62.0619deg, rgb(65, 225, 172) 360deg)',
+                background: 'conic-gradient(from 90deg, rgb(65, 225, 172) 0deg, rgb(101, 142, 255) 62.0619deg, rgb(65, 225, 172) 360deg)',
                 height: '100%',
                 width: '100%',
               }}

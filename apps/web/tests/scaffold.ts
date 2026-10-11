@@ -113,11 +113,11 @@ export const WELCOME_NOTICE_SETTINGS_NAMESPACE = 'ui-settings-general'
 /** The installed bundle carrying the scaffold's deployment defaults; the plugin manager lists it beside fixture bundles. */
 export const SCAFFOLD_DEFAULTS_BUNDLE = 'dsh-web-scaffold-defaults'
 export const WELCOME_NOTICE_ACK_FIELD = 'welcomeNoticeVersion'
-export const WELCOME_NOTICE_VERSION = '2026-08-13.1'
+export const WELCOME_NOTICE_VERSION = '2026-09-28.1'
 export const WELCOME_NOTICE_COPY = {
   zh: {
-    title: '内测声明',
-    body: 'DeepSeek Harness 目前的 0.1 版本仍处在面向 Harness 开发者进行测试的阶段，还有许多地方需要持续改进和打磨，希望听取广大开发者的反馈建议。预计 DeepSeek Harness 的核心插件以及基础 API 都会在接下来的一段时间内快速迭代、持续演化。\n\n我们期待与全球开发者一起，在开源、开放、可复用、可组合的基础设施之上，共同探索智能上限。欢迎全球 Harness 开发者加入 DSH 插件生态。',
+    title: '预览版说明',
+    body: 'DeepSeek Harness 目前的 0.2 版本仍处于预览阶段，还有许多地方需要持续改进和打磨，希望听取广大开发者和用户的反馈建议。现在，新的桌面端面向广泛用户，开发者相关的进阶功能可在配置中开启使用。预计 DeepSeek Harness 的产品功能以及插件 API 都会继续快速迭代、持续演化，并逐渐趋于稳定。\n\n我们期待与全球用户和开发者一起，在开源、可复用、可组合的基础设施之上，共同探索智能上限。欢迎大家用 DeepSeek Harness 将想法变成现实，与社区一起丰富插件生态。',
     continueLabel: '继续',
   },
 } as const
@@ -388,7 +388,7 @@ export interface LaunchOptions {
    * yml default. The PTC runtime row is always in the tree, so no extra
    * insertion is needed.
    */
-  toolsMode?: 'native' | 'ptc' | 'both'
+  toolsMode?: 'native' | 'ptc'
   /**
    * Keep the shipped DeepSeek adapter mounted while masking the process
    * environment's DEEPSEEK_API_KEY for this scaffold lifetime. This is the
@@ -682,7 +682,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
   // Live fields use a shared deployment layer; process-specific ports and roots stay in CLI overlays.
   const formEntries = new Set(['agent-default-model', 'agent-preset-registry', 'llm-deepseek', 'llm-pi-ai',
     'web-search-deepseek', 'agent-loop', 'subagent', 'bash-sandbox', 'pwsh-sandbox',
-    'ui-theme', 'locale', 'ui-chat', 'ui-conversation', 'ui-settings', 'ui-settings-general', 'permission'])
+    'session-log-deepseek', 'ui-theme', 'locale', 'ui-chat', 'ui-conversation', 'ui-settings', 'ui-settings-general', 'permission'])
   const formDefaults: PatchOptions[] = []
   const processOverlays = overlayPatches.map((patch) => {
     if (patch.id === undefined || !formEntries.has(patch.id) || patch.config === undefined) return patch
@@ -734,7 +734,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
         patches: [],
       }
     }))
-    const profile: Profile = {
+    const profile: Profile = { skippedBundles: [],
       name: 'scaffold',
       dir: profileDir,
       layers: extraLayers,
@@ -742,7 +742,6 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
       patches: [],
     }
     const resolutionOptions = { installAnchor: INSTALL_ANCHOR, home: harnessHome, profile }
-    const resolution = await createRuntimeResolution(resolutionOptions)
     await mkdir(profileDir, { recursive: true })
     const rootConfig = join(profileDir, 'cordis.yml')
     await writeFile(rootConfig, '[]\n')
@@ -796,6 +795,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
         throw new Error(`web e2e scaffold: the web app requested exit ${String(code)} with no arguments to reject`)
       },
     })
+    const resolution = await createRuntimeResolution(resolutionOptions)
     await ctx.plugin(PluginPackages, {
       resolution,
     })
@@ -812,7 +812,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
       }])
     }
     if (options.firstUse !== true && ctx.workspaceRegistry.list().length === 0) {
-      const initial = await ctx.workspaceRegistry.initializeDefault(async () => ({ path: workspaceCwd, title: 'Workspace' }))
+      const initial = await ctx.workspaceRegistry.initializeDefault(async () => workspaceCwd)
       if (initial !== undefined) await ctx.workspaceRegistry.delete(initial.id)
     }
     const boundPort = ctx.get('webServer')?.port
@@ -1025,6 +1025,27 @@ function mapJsonStringValues(value: unknown, map: (value: string) => string): un
   return value
 }
 
+/** Volatile fields inside one durable time-context reading, each replaced by a fixed token. */
+const TIME_CONTEXT_READING_FIELDS: readonly (readonly [RegExp, string])[] = [
+  [/(Time sampled while preparing turn \d+, step \d+: )[^\n]*/, '$1{{timeContextTimestamp}}'],
+  [/(Browser time zone for this request: )[^.]*\./, '$1{{clientTimeZone}}.'],
+  [/(Elapsed since the preceding [^:]*: )[^\n]*/, '$1{{elapsed}}'],
+]
+
+/** Replace the sampled instant, browser zone, and elapsed duration a time-context reading carries. */
+function tokenizeTimeContextReading(text: string): string {
+  let normalized = text
+  for (const [pattern, replacement] of TIME_CONTEXT_READING_FIELDS) normalized = normalized.replace(pattern, replacement)
+  return normalized
+}
+
+/** Whether one parsed Session record is a durable time-context reading. */
+function isTimeContextReading(value: unknown): boolean {
+  if (value === null || typeof value !== 'object') return false
+  const record = value as { type?: unknown; data?: { source?: { kind?: unknown } } }
+  return record.type === 'user/message' && record.data?.source?.kind === 'time-context'
+}
+
 /** Tokenize the browser timezone carried by user message sources. */
 function normalizeClientTimeZones(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(item => normalizeClientTimeZones(item))
@@ -1102,7 +1123,7 @@ export function normalizeWebSessionVolatiles(log: string, workspaceCwd?: string)
     }))].sort((left, right) => right.length - left.length)
   return log.split(/\r?\n/).map((line) => {
     if (line.trim() === '') return line
-    const record = normalizeClientTimeZones(mapJsonStringValues(JSON.parse(line), (value) => {
+    let record = normalizeClientTimeZones(mapJsonStringValues(JSON.parse(line), (value) => {
       let normalized = value
         .replace(/Anonymous user: [0-9a-f-]{36}(?=\.$)/gi, 'Anonymous user: {{anonymousUserId}}')
       for (const cwd of cwdSpellings) normalized = replaceWebCwd(normalized, cwd)
@@ -1110,6 +1131,9 @@ export function normalizeWebSessionVolatiles(log: string, workspaceCwd?: string)
     })) as { type?: unknown; data?: { endpoint?: unknown } }
     if (record.type === 'web/deepseek-search-llm-request' && typeof record.data?.endpoint === 'string') {
       record.data.endpoint = '{{webSearchEndpoint}}'
+    }
+    if (isTimeContextReading(record)) {
+      record = mapJsonStringValues(record, tokenizeTimeContextReading) as typeof record
     }
     return JSON.stringify(record)
   }).join('\n')

@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-19-canonical-repository-org-only-workflows.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-09-19-canonical-repository-org-only-workflows.md
-2026-09-19-canonical-repository-org-only-workflows.md: 80438d25828b90fbf1081d14405871868c0677d9
-2026-09-19-canonical-repository-org-only-workflows.zh.md: 5b6f702b2a30355cec7c26caf4cf0b71dc6bd70a
+/agent-note-canonical-repository-skip-for-org-only-github-actions:
+  en: 71f00fae6d4c0749
+  zh: 7f86606616d9a798
+/agent-note-canonical-repository-skip-for-org-only-github-actions/problem:
+  en: 5ae37072f3e412e5
+  zh: df13f3268e86f030
+/agent-note-canonical-repository-skip-for-org-only-github-actions/decision:
+  en: 820efe89220d7b44
+  zh: ec92234d3f978ccf
+/agent-note-canonical-repository-skip-for-org-only-github-actions/alternatives-considered:
+  en: c3522d7d7a1409e5
+  zh: d2cd5ccedc5bcf25
+/agent-note-canonical-repository-skip-for-org-only-github-actions/consequences:
+  en: e551810aa2ecdbac
+  zh: a26dd399fe8f32a5
+/agent-note-canonical-repository-skip-for-org-only-github-actions/verification:
+  en: b6f622379d3590d1
+  zh: 46343cb40b7a1d03

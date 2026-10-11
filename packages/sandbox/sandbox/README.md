@@ -63,7 +63,7 @@ Enforcement is reported per call: `full` means the backend governs every promise
 
 ### Denied calls and escalation
 
-When a confined call is denied, the operation reports a denial marker naming the mode — `[sandbox: file access denied under <mode> mode]` — and, when the composition advertises escalation, an escalation hint. The model may retry the exact call once with `sandbox_permissions` (the narrowest wider mode that suffices) plus a `justification`; the user sees one approval prompt and can allow once, reject, or cancel. A wider mode requires approval and applies to that one call only. Repeating the call's effective mode succeeds without approval; narrower targets remain invalid.
+When a confined call is denied, the operation reports a denial marker naming the mode — `[sandbox: file access denied under <mode> mode]` — and, when the composition advertises escalation, an escalation hint. The model may retry the exact call once with `sandbox_permissions` (the narrowest wider mode that suffices) plus a `justification`; the approval service obtains consent for the operation. The request retains its audit reason and supplies English and Chinese presentation copy with the model's justification unchanged. Missing translations follow the locale service's fallback chain, ultimately English; requesters own their translated presentation text. A wider mode requires approval and applies to that one call only. Repeating the call's effective mode succeeds without approval; narrower targets remain invalid.
 
 ### Fail-closed behavior
 
@@ -93,7 +93,6 @@ This section explains the design decisions behind the contract and points at the
 | [`src/index.ts`](src/index.ts) | Plugin entry: `SandboxProvider` service, mode/enforcement/policy types, fail-closed error |
 | [`src/escalation.ts`](src/escalation.ts) | Escalation vocabulary: wider-mode ladder, argument validation, denial and hint markers, approval choreography |
 | [`src/roots.ts`](src/roots.ts) | Writable-root derivation shared by the Seatbelt profile and the in-process fs fence |
-| — | No runtime invariant companion is published; this package exposes no independent event sequence or mutable data relation beyond contracts enforced at its owning seam. |
 
 ### Escalation choreography
 
@@ -113,7 +112,7 @@ The ladder is a closed table — `read-only` may escalate to `workspace-write` o
 Start with the subsystem reference for the exhaustive contract, then the backends, consumers, and policy source that realize it.
 
 - [Process sandbox subsystem](../../../docs/subsystems/sandbox.md) — the complete vocabulary, per-call policy, and classification dialects.
-- [The subprocess sandbox decision](../../../.agents/notes/implemented/feature/2026-07-06-sandbox.md) — capability boundary, escalation design, and deferred phases.
+- [The historical subprocess sandbox decision](../../../.agents/notes/archived/feature/2026-07-06-sandbox.md) — capability boundary, escalation design, and deferred phases.
 - [Local sandbox backends](../sandbox-local/README.md) — the per-platform runners behind `ctx.sandbox`.
 - [Bash sandbox executor](../../shell/bash-sandbox/README.md) — the confined bash consumer.
 - [Sandbox policy package](../sandbox-policy/README.md) — where the per-call mode and workspace root come from.
@@ -180,6 +179,6 @@ This Dev Note is working context for maintainers: undecided directions and open 
 
 #### Future: consumers and environments
 
-The [sandbox decision](../../../.agents/notes/implemented/feature/2026-07-06-sandbox.md) lists deferred phases — an optional `subagent-acp` consumer that confines child agents (unconfined default) and environment-coherent capability group examples. Neither is decided; the Windows chain that note listed as deferred has since shipped through the ACL restricted-token rung of `sandbox-local`.
+An optional `subagent-acp` consumer that confines child agents with an unconfined default, and environment-coherent capability group examples, remain undecided. Windows confinement is provided by the ACL restricted-token backend of `sandbox-local`.
 
 </details>

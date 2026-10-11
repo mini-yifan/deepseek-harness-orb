@@ -47,6 +47,7 @@ async function bench(isLoopback = true, mock = RemoteMock.create().load(remoteDe
       ...services,
     },
     settings: mock.remote.settings,
+    session: { initializeDefaultModel: vi.fn(async () => ({ ok: true, value: undefined })) },
   })
   // The fixed Host facts the settings provider reads its persistence from.
   remote.$host = { home: undefined, isLoopback }
@@ -109,7 +110,7 @@ describe('ui-settings-models apply', () => {
 
   it('declares the services it uses', () => {
     expect(inject).toEqual([
-      'slots', 'locale', 'remote', 'remote.credentials', 'remote.llm', 'remote.settings',
+      'slots', 'locale', 'remote', 'remote.credentials', 'remote.llm', 'remote.settings', 'remote.session',
       'configForms', 'settingsSchema',
     ])
   })
@@ -140,6 +141,12 @@ describe('ui-settings-models apply', () => {
     })
     const deepSeek = onboarding.find(entry => entry.options.id === 'deepseek-official')!
     expect(deepSeek.component).toBe(DeepSeekOnboardingDialog)
+    const analytics = (deepSeek.inject!() as object) as import('../src/client/DeepSeekOnboardingDialog.tsx').DeepSeekOnboardingInjected
+    analytics.track?.('api_key_save_click', {})
+    const track = vi.fn()
+    before.ctx.provide('productAnalytics', { track } as never)
+    analytics.track?.('api_key_save_click', {})
+    expect(track).toHaveBeenCalledWith('api_key_save_click', {})
     expect(deepSeek.options).toMatchObject({ id: 'deepseek-official', order: 0 })
     const deepSeekInjected = (
       deepSeek.inject as unknown as () => import('../src/client/DeepSeekOnboardingDialog.tsx').DeepSeekOnboardingInjected

@@ -7,9 +7,11 @@ kind: "package-reference"
 
 [English](README.md) | 中文
 
+桌面端产品事件使用可选的[产品埋点服务](../product-analytics/README.zh.md)，不包含普通 Web 交互。
+
 ## 概述
 
-Web GUI 允许用户通过 `/model` 弹窗或 composer 模型控件切换既有会话使用的模型与推理（reasoning）强度。两个界面呈现同一组按提供方分组的选择；所选模型决定可用的推理强度名称与默认值。完整选择从下一次请求开始生效；运行中的步骤保留其启动时的模型与推理强度。如果没有适配器可以服务会话路由，composer 会保持停用，直至路由恢复可用。
+Web GUI 允许用户通过 `/model` 弹窗或 composer 模型控件切换既有会话使用的模型与推理（reasoning）强度。两个界面呈现同一组按提供方分组的选择；所选模型决定可用的推理强度名称与默认值。完整选择从下一次请求开始生效；运行中的步骤保留其启动时的模型与推理强度。所选模型不可用时，composer 保持停用，直到用户选择可用模型或同一模型恢复可用。
 
 ## 目录
 
@@ -25,21 +27,27 @@ Web GUI 允许用户通过 `/model` 弹窗或 composer 模型控件切换既有�
 <a id="use-this-package"></a>
 ## 使用本包
 
-与 `ui-conversation` 及命令包一起挂载本插件；composer 随即在待处理指示器旁显示模型位，`/model` 则以弹窗打开同一份目录。模型位菜单打开期间，`↑`／`↓` 在所显示面板的行间移动焦点，`Tab` 选定聚焦行，Escape 与 `Shift+Tab` 先退出已下钻的面板，否则关闭并回到触发器。下钻落在正在使用的那一行，返回则落在打开该面板的格子上。当确切提供方／模型对仍在已公布分组中时，两个界面都显示 Host 报告的当前选择；目录行缺席时，可路由的选择保持不变，触发器提示 `Select model`。
+DeepSeek 账号和 API Key 路由显示为独立提供方分组，各自展示相同的已配置模型目录。
 
-鼠标选择沿用浏览器原生点击及其取消行为；仅按下按钮不会选定。打开菜单时聚焦触发按钮，再次点击触发按钮会关闭菜单并把焦点还给它。等待选择结果时，焦点停在触发按钮；选择被拒绝后菜单保持打开，Tab 可回到当前选中的行。
+未选择模型或已保存的选择不在目录中时，composer 以常规字重显示“请选择模型”，并隐藏推理强度文案。点击后直接打开模型列表，Escape 和 Shift+Tab 关闭列表。目录为空时显示“暂无可用模型”
+
+与 `ui-conversation` 及命令包一起挂载本插件；composer 随即在待处理指示器旁显示模型位，`/model` 则以弹窗打开同一份目录。模型位菜单打开期间，`↑`／`↓` 在根菜单和推理等级行间移动焦点，或在模型列表中移动高亮并让焦点保留在搜索框。Enter 和 Tab 选定高亮模型或聚焦行；Escape 与 `Shift+Tab` 先退出已下钻的面板，否则关闭并回到触发器。下钻时若显示模型搜索框则聚焦搜索框，否则聚焦当前模型或推理强度行，返回则落在打开该面板的格子上。所选模型可用时，composer 显示目录中的模型名称。模型或提供方被删除时（包括账号退登），保留已保存的提供方、模型和推理强度，但不展示其 ID。目录条目恢复后重新显示名称和推理强度。
+
+鼠标选择沿用浏览器原生点击及其取消行为；仅按下按钮不会选定。打开根菜单时聚焦触发按钮，再次点击触发按钮会关闭菜单并把焦点还给它。根菜单行和搜索清除按钮的键盘焦点与悬停使用相同底色，不显示原生焦点轮廓。选定模型或推理等级后，焦点返回触发按钮但不显示焦点环；焦点离开按钮或重新打开菜单后恢复正常焦点提示。等待任一入口发起的选择结果时，焦点停在触发按钮，触发按钮以加载图标代替下拉箭头，该选择包含的值所在行以加载图标代替勾选标记；选择被拒绝后菜单保持打开。显示模型搜索框时，Tab 返回搜索框并高亮当前模型，否则返回当前选中行。
 
 ### 模型与推理强度
 
-模型按提供方分组。composer 菜单只显示模型与推理强度名称。`/model` 弹窗显示提供方名称与目录说明；其中两个内置 DeepSeek 模型的说明使用当前语言，外部提供方说明保持原文。弹窗应用所选模型的默认推理强度；composer 随后可以选择任一已公布的推理强度。适配器没有推理元数据时不显示 Effort 行；不存在任意推理强度输入。
+按钮模型菜单仅在完整目录超过四个模型时显示搜索框；较小目录聚焦当前模型或首行，直接支持键盘导航。`/model` 命令始终保留搜索框。两个搜索框均按模型名称进行不区分大小写的匹配，支持按顺序输入不连续字符，并忽略首尾空格。每个提供方内的结果优先按前缀匹配、其次按匹配得分、最后按目录顺序排列。没有匹配项的分组会隐藏。空目录和无匹配结果均通过状态区域通知屏幕阅读器。方向键在各提供方分组的结果间循环移动高亮，焦点保留在搜索框；Enter 或 Tab 选定高亮项。左右方向键仍用于移动输入光标。打开时高亮当前模型或首个可用选项，修改搜索内容后高亮首个结果。重新打开模型面板会清空搜索内容。
+
+composer 菜单中的模型名称和推理等级均使用 400（regular）字重，包括选中项。搜索框沿用 command 弹窗的紧凑样式，在浅／深色主题下均保持背景和边框透明，不显示前置图标，占位文字使用 caption 色。搜索内容非空时显示清除按钮；点击后恢复完整列表，并将焦点留在搜索框。
+
+两个入口均按提供方分组，DeepSeek 账号排第一，DeepSeek 排第二，第三方提供方保持目录原有顺序。两者采用 [ui-primitives](../ui-primitives/README.zh.md#understand-the-implementation) 异步观察的共享吸顶标题：原位透明，仅吸顶时使用主题的 94% 不透明填充，macOS 桌面端以外使用 `md` 圆角。composer 菜单只显示模型与推理强度名称。导航箭头使用 `--dsw-alias-menu-icon` 文本色。`/model` 弹窗以提供方名称作为分组标题、模型名称作为选项行，不在每行重复提供方，也不显示目录说明。搜索占位文字、无匹配提示和空目录提示与 composer 模型菜单共用同一组本地化文案。弹窗应用所选模型的默认推理强度；composer 随后可以选择任一已公布的推理强度。适配器没有推理元数据时不显示 Effort 行；不存在任意推理强度输入。
 
 展开的控件无法排在同一行时，composer 将模型与推理强度文字替换为模型图标；空间足够后恢复文字。触发器的无障碍名称、提示和菜单仍提供完整选择。
 
 ### 不可路由的会话
 
-当 Host 报告没有适配器服务该会话的路由时，本插件注册一个 composer 阻塞块，输入框随之停用并显示本插件自己的文案；恢复后无需重新加载即清除。首次加载之前或加载失败之后的 `null` 绝不阻断；目录成员关系同样不阻断——一条仍在服务、只是不公布该模型的路由不在分组里，却可用。
-
-只有当前 Client binding 的目录可以发布对应的 composer 阻塞块。旧 binding 的清理保留后继目录的阻塞块；若尚无后继目录，则移除已失效的阻塞块。
+目录可用性不会阻止使用已保存选择发送消息；请求执行负责报告凭据缺失或模型不可用。刷新及刷新失败期间保留上次显示的选择和分组。Host 重置时清空这些显示。退登后选择器隐藏账号提供方，同时保留已保存的提供方／模型 ID 和推理强度。再次登录且该模型可用时恢复目录名称。既有会话日志保持不变。
 
 ### 选择失败
 
@@ -50,10 +58,14 @@ Web GUI 允许用户通过 `/model` 弹窗或 composer 模型控件切换既有�
 <a id="understand-the-implementation"></a>
 ## 理解实现
 
+菜单采用共享 `MenuSurface` 材质，包括用于背景模糊的 macOS 底层；自定义内容遵循[菜单规则](../../../docs/web-styling.zh.md#component-rules)。
+
 <details>
 <summary>实现细节——点击展开</summary>
 
-两个入口共用一份由 `ModelDirectoryResolver`（`ctx.modelDirectories`）持有的会话级目录：`/model` popupSelect 贡献项（经 `ctx.commandUi` 注册）与 composer 的具名 `conversation.input.model` 位都经 `session.models` 加载会话的建议目录、经 `session.selectModel` 通过同一个 `ModelDirectory` 实例提交，因此任一入口所做的切换正是另一个入口接下来显示的。目录加载与选择共享一个代次计数器，旧响应不会覆盖新结果；连接重置丢弃所有常驻投影，并在显示前重新拉取 Host 恢复的选择。目录按会话惰性解析，随会话作用域一并 dispose（资源释放）；已寻址 subagent 会话不公开任一入口。每份常驻目录都会直接在转发的 `llm/adapters-updated` 与 `settings/document-updated` owner 事件上重拉。
+composer 的 `ModelSelect` 与 `/model` 选项构建器共用[提供方排序](src/client/provider-order.ts)，两个搜索框均在每个提供方内使用 `rankByName`。命令通过 [popupSelect API](../ui-commands/README.zh.md#use-this-package) 提供可选分组与 `searchMode: 'fuzzy-label'`；两个入口均使用 `MenuGroup`，并在渲染分组变化时重建其吸顶观察器。命令弹窗撑满 composer 浮层，按钮则保留紧凑菜单。
+
+两个入口共用一份由 `ModelDirectoryResolver`（`ctx.modelDirectories`）持有的会话级目录：`/model` popupSelect 贡献项（经 `ctx.commandUi` 注册）与 composer 的具名 `conversation.input.model` 位都经 `session.models` 加载会话的可用目录、经 `session.selectModel` 通过同一个 `ModelDirectory` 实例提交，因此任一入口所做的切换正是另一个入口接下来显示的。目录加载与选择共享一个代次计数器，旧响应不会覆盖新结果。目录把最近一次提交的选择发布为 `pending`，直到它完成或被连接重置作废；连接重置丢弃所有常驻投影，并在显示前重新拉取 Host 恢复的选择。目录按会话惰性解析，随会话作用域一并 dispose（资源释放）；已寻址 subagent 会话不公开任一入口。每份常驻目录都会直接在转发的 `llm/adapters-updated`、`settings/document-updated` 与凭据更新事件上重拉。
 
 </details>
 
@@ -65,7 +77,7 @@ Web GUI 允许用户通过 `/model` 弹窗或 composer 模型控件切换既有�
 当仅了解模型界面还不够时，请阅读以下页面。这些页面从浏览器界面逐步深入到命令弹窗外壳与选择约定。
 
 - [ui-commands](../ui-commands/README.zh.md)——`/model` 贡献项注册进的 popupSelect 外壳。
-- [ui-conversation](../ui-conversation/README.zh.md)——声明 composer 的 `conversation.input.model` 位与 composer 阻塞块。
+- [ui-conversation](../ui-conversation/README.zh.md)——声明 composer 的 `conversation.input.model` 位。
 - [dsh-agent-default-model](../../core/agent-default-model/README.zh.md)——为从未选择的会话提供默认模型的默认模型服务。
 - [客户端包映射](../README.zh.md)——相邻的浏览器 UI 包。
 
@@ -84,7 +96,6 @@ Web GUI 允许用户通过 `/model` 弹窗或 composer 模型控件切换既有�
 
 <a id="known-limitations-and-deferred-work"></a>
 
-
 这些限制界定了当前模型选择界面。它们是当前包约束，不是通用模型路由器对比或任务积压。
 
 - **无创建期或已寻址 subagent 选择**——两个入口都要求既有普通会话的 agent（智能体）；没有可纳入会话创建的草稿阶段模型选择，subagent 继续执行也有意不公开独立的模型选择约定。
@@ -100,5 +111,3 @@ Web GUI 允许用户通过 `/model` 弹窗或 composer 模型控件切换既有�
 无。
 
 </details>
-
-**运行时不变式：** 不发布伴生入口。插件只注册一个 command contribution，HMR（热模块替换）安全性测试证明该注册的 dispose 能正确完成；它不发出 Cordis 事件，也不持有跨插件可变状态。

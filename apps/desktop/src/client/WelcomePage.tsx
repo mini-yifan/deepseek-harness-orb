@@ -1,6 +1,7 @@
 /** Desktop welcome presentation; account and credential operations stay in the preload. */
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
+import { Toast } from '@deepseek-ai/dsh-client-ui-primitives/src/Toast.tsx'
 import { StateDot } from '@deepseek-ai/dsh-client-ui-primitives/src/StateDot.tsx'
 import type { AccountView } from '@deepseek-ai/dsh-deepseek-account/types'
 import type { WelcomeApi } from '../welcome-api.ts'
@@ -9,13 +10,16 @@ type Page = 'entry' | 'key' | 'account'
 
 /**
  * Render the standalone welcome flow using shell-owned operations and localized copy.
+ * Clearing the account attempt returns the sign-in status page to the initial choices.
  * @param props.api - isolated preload API; no account credentials reach the renderer.
  * @returns welcome pages with fixed bottom actions.
  */
 export function Welcome({ api }: { api: WelcomeApi }) {
   const { messages: m } = api
+  const [expiryNotice, setExpiryNotice] = useState(false)
   const [page, setPage] = useState<Page>('entry')
   const pageRef = useRef<Page>('entry')
+  const visiblePage = useRef<Page>('entry')
   const [attempt, setAttempt] = useState<AccountView['attempt']>(null)
   const attemptRef = useRef<AccountView['attempt']>(null)
   const [starting, setStarting] = useState(false)
@@ -42,27 +46,38 @@ export function Welcome({ api }: { api: WelcomeApi }) {
     setAttempt(state.attempt)
     setStarting(false)
     setCopyFeedback({ status: 'idle' })
-    navigate(state.attempt?.phase === 'cancelled' ? 'entry' : 'account')
+    navigate(state.attempt === null || state.attempt.phase === 'cancelled' ? 'entry' : 'account')
   }
 
   useEffect(() => {
     mounted.current = true
     document.documentElement.lang = api.id
     document.title = m.welcomeTitle
+    const takeNotice = (): void => {
+      void api.takeNotice().then((notice) => {
+        if (mounted.current && notice === 'session-expired') setExpiryNotice(true)
+      }).catch((_closedChannel: unknown) => {
+        // A closed Welcome IPC channel must not interrupt the sign-in page.
+      })
+    }
+    takeNotice()
     const stop = api.onAccountState((state) => {
       revision.current++
+      takeNotice()
       showAccount(state)
     })
     return () => { mounted.current = false; stop() }
   }, [api, m.welcomeTitle])
 
   useEffect(() => {
+    if (page === 'entry' && visiblePage.current !== 'entry') void api.analytics?.('auth_page_view', {})
+    visiblePage.current = page
     if (page === 'key') input.current?.focus()
     else if (page === 'entry' && focusEntry.current) {
       focusEntry.current = false
       keyButton.current?.focus()
     }
-  }, [page])
+  }, [page, api])
 
   useEffect(() => {
     if (copyState !== 'copied' && copyState !== 'failed') return
@@ -73,6 +88,7 @@ export function Welcome({ api }: { api: WelcomeApi }) {
   async function saveKey(event: FormEvent) {
     event.preventDefault()
     if (busyRef.current) return
+    void api.analytics?.('api_key_save_click', {})
     const value = draft.trim()
     if (!/^[\x21-\x7e]+$/.test(value) || /^[A-Z][A-Z0-9_]*=[^=]/.test(value)
       || ((value.startsWith('"') || value.startsWith("'") || value.charCodeAt(0) === 96) && value.at(-1) === value[0])) {
@@ -156,6 +172,7 @@ export function Welcome({ api }: { api: WelcomeApi }) {
   const heading = page === 'entry' ? 'welcome-heading' : page === 'key' ? 'key-title' : 'auth-status'
 
   return <>
+    {expiryNotice && <Toast text={m.welcomeSessionExpired} onDone={() => { setExpiryNotice(false) }} />}
     <div className="titlebar" aria-hidden="true" />
     <main className="welcome" aria-labelledby={heading}>
       <img className="brand" src="assets/welcome-brand.svg" alt={m.welcomeBrand} width="472" height="40" />
@@ -167,7 +184,7 @@ export function Welcome({ api }: { api: WelcomeApi }) {
         <header className="key-heading"><h1 id="key-title">{m.welcomeKeyTitle}</h1><p id="key-description">{m.welcomeKeyDescription}</p></header>
         <div className="key-field">
           <label className="visually-hidden" htmlFor="key-input">{m.welcomeKeyPlaceholder}</label>
-          <input ref={input} id="key-input" type="password" autoComplete="off" autoCapitalize="off" spellCheck={false} required
+          <input ref={input} id="key-input" type="password" autoComplete="new-password" autoCapitalize="off" spellCheck={false} required
             aria-describedby="key-description key-error" aria-invalid={error !== ''} placeholder={m.welcomeKeyPlaceholder}
             value={draft} disabled={busy} onChange={(event) => { setDraft(event.target.value); setError('') }} />
           <p id="key-error" className="key-error" role="alert" hidden={error === ''}>{error}</p>
@@ -185,15 +202,15 @@ export function Welcome({ api }: { api: WelcomeApi }) {
         <button id="auth-loading" className="primary" type="button" hidden={failed} disabled aria-label={m.welcomeAuthExchanging}>
           <StateDot state="ongoing" size={16} className="welcome-loading" />
         </button>
-        <button id="auth-retry" className="primary" type="button" hidden={!failed} onClick={() => { void start() }}>{m.welcomeAuthRetry}</button>
-        <button id="auth-api-key" className="secondary" type="button" hidden={!failed} onClick={() => { navigate('key') }}>{m.welcomeApiKey}</button>
+        <button id="auth-retry" className="primary" type="button" hidden={!failed} onClick={() => { void api.analytics?.('auth_page_click', { button_name: 'sign_in' }); void start() }}>{m.welcomeAuthRetry}</button>
+        <button id="auth-api-key" className="secondary" type="button" hidden={!failed} onClick={() => { void api.analytics?.('auth_page_click', { button_name: 'api-key' }); navigate('key') }}>{m.welcomeApiKey}</button>
         <button id="auth-cancel" className="secondary" type="button" hidden={failed}
           disabled={cancelling || phase === 'committing' || phase === 'succeeded' || (phase === 'initializing' && !attempt?.id)}
           onClick={() => { void cancel() }}>{m.welcomeAuthCancel}</button>
       </div>
       <div id="entry-actions" className="actions" hidden={page !== 'entry'}>
-        <button id="sign-in" className="primary" type="button" onClick={() => { void start() }}>{m.welcomeSignIn}</button>
-        <button ref={keyButton} id="api-key" className="secondary" type="button" onClick={() => { navigate('key') }}>{m.welcomeApiKey}</button>
+        <button id="sign-in" className="primary" type="button" onClick={() => { void api.analytics?.('auth_page_click', { button_name: 'sign_in' }); void start() }}>{m.welcomeSignIn}</button>
+        <button ref={keyButton} id="api-key" className="secondary" type="button" onClick={() => { void api.analytics?.('auth_page_click', { button_name: 'api-key' }); navigate('key') }}>{m.welcomeApiKey}</button>
       </div>
       <div id="key-actions" className="actions" hidden={page !== 'key'}>
         <button id="save-key" className="primary" type="submit" form="key-form" disabled={busy || draft.trim() === ''}>{m.welcomeKeySave}</button>

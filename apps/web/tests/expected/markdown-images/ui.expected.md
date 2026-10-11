@@ -7,8 +7,8 @@
     - tab "Trajectory"
 - text: Show the Markdown image policy. {{clock}}
 - button "Copy"
-- status: Worked
-- button "Took {{duration}}" [disabled]
+- status: Completed
+- button "Completed in {{duration}}" [disabled]
 - heading "Markdown images" [level=2]
 - paragraph:
   - 'button "View full image: Remote test image"':
@@ -27,6 +27,9 @@
 - paragraph:
   - 'button "View full image: Encoded path"':
     - img "Encoded path"
+- paragraph:
+  - 'button "View full image: Encoded filename"':
+    - img "Encoded filename"
 - paragraph: Image preview unavailable · Oversized image
 - paragraph:
   - 'button "View full image: Outside workspace image"':

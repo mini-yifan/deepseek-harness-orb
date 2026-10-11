@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-23-windows-computer-use-per-monitor-dpi.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-23-windows-computer-use-per-monitor-dpi.md
-2026-09-23-windows-computer-use-per-monitor-dpi.md: 8a1aee8d433367402ae9d2dfe55fcddc58d2fc4f
-2026-09-23-windows-computer-use-per-monitor-dpi.zh.md: 789af9e7560440d45a9d0ca0a7a405a1848765b7
+/agent-note-windows-computer-use-per-monitor-coordinates:
+  en: ddfacdce50ec6e14
+  zh: f60831fb8fda41ff
+/agent-note-windows-computer-use-per-monitor-coordinates/problem:
+  en: 6e0c4a6acbed23e5
+  zh: 87fa426aff8166e1
+/agent-note-windows-computer-use-per-monitor-coordinates/decision:
+  en: b2243cb37cbb59ed
+  zh: 7fb18e3f164d1413
+/agent-note-windows-computer-use-per-monitor-coordinates/alternatives-considered:
+  en: 8ca33b7759f4c644
+  zh: 81dd0008cdfccbad
+/agent-note-windows-computer-use-per-monitor-coordinates/consequences:
+  en: 03d6bff33535d4f2
+  zh: 15c573cb37aaa0af
+/agent-note-windows-computer-use-per-monitor-coordinates/testing:
+  en: c21a09d4d72ae7a8
+  zh: b8f128d82cd958e4

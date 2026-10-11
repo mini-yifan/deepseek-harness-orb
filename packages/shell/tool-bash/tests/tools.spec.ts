@@ -1,4 +1,5 @@
 import { mkdtempSync, rmSync } from 'node:fs'
+import { provideWorkingDirectoryFixture } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it, vi } from 'vitest'
@@ -40,6 +41,7 @@ afterAll(() => {
 /** Foreground-only harness: no job runtime (backgrounding fails loud here). */
 async function setup() {
   const ctx = new Context()
+  provideWorkingDirectoryFixture(ctx)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
@@ -54,6 +56,7 @@ async function setup() {
 /** Full harness: the generic job runtime + its controller, then the bash tool. */
 async function setupWithJobs() {
   const ctx = new Context()
+  provideWorkingDirectoryFixture(ctx)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
@@ -201,6 +204,7 @@ class CountingStartExecutor extends ShellExecutor {
 
 async function setupSandboxed(withApproval = false) {
   const ctx = new Context()
+  provideWorkingDirectoryFixture(ctx)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(AgentRegistry)
@@ -302,6 +306,7 @@ describe('bash tool', () => {
 
   it('reports truncation with the spill path', async () => {
     const ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(LocalSubprocessRuntime)
@@ -389,6 +394,22 @@ describe('bash tool', () => {
     expect(text(result)).toContain('tool execution arguments must be losslessly JSON-serializable')
   })
 
+  it.each([
+    ['foreground-only', setup],
+    ['job-backed', setupWithJobs],
+  ] as const)('requests description before command in the %s schema', async (_mode, setupContext) => {
+    const ctx = await setupContext()
+    try {
+      const schema = ctx.tools.schemas().find(tool => tool.name === 'bash')!
+      expect(Object.keys(schema.parameters.properties as Record<string, unknown>).slice(0, 2))
+        .toEqual(['description', 'command'])
+      expect(schema.parameters).toHaveProperty('required', ['description', 'command'])
+      expect(schema.description).toContain('Provide `description` before `command` in the arguments.')
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('registers the bash schema with run_in_background exposed while a job registry is composed', async () => {
     const ctx = await setupWithJobs()
     const schemas = ctx.tools.schemas()
@@ -396,12 +417,12 @@ describe('bash tool', () => {
     const bashSchema = schemas.find(schema => schema.name === 'bash')!
     expect(bashSchema.parameters).toMatchObject({
       type: 'object',
-      required: ['command', 'description'],
+      required: ['description', 'command'],
     })
     expect(Object.keys(bashSchema.parameters.properties as Record<string, unknown>))
       .toContain('run_in_background')
-    expect(bashSchema.description).toContain('job_output')
-    expect(bashSchema.description).toContain('A foreground command that reaches its timeout is not killed')
+    expect(JSON.stringify(bashSchema.parameters)).toContain('job_output')
+    expect(JSON.stringify(bashSchema.parameters)).toContain('moves to the background as a job')
   })
 
   it('registers a foreground-only schema without a job registry', async () => {
@@ -410,9 +431,8 @@ describe('bash tool', () => {
     expect(schemas.map(schema => schema.name)).toEqual(['bash'])
     const bashSchema = schemas[0]!
     expect(Object.keys(bashSchema.parameters.properties as Record<string, unknown>))
-      .toEqual(['command', 'description', 'timeoutMs', 'workdir'])
-    expect(bashSchema.description).toContain('Background execution is not available')
-    expect(bashSchema.description).not.toContain('job_output')
+      .toEqual(['description', 'command', 'timeoutMs', 'workdir'])
+    expect(JSON.stringify(bashSchema.parameters)).not.toContain('job_output')
     expect(JSON.stringify(bashSchema.parameters)).toContain('kills the command on expiry')
   })
 
@@ -443,6 +463,7 @@ describe('bash tool', () => {
 
   it('unregisters everything when the plugin fiber is disposed (HMR safety)', async () => {
     const ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(LocalSubprocessRuntime)
@@ -459,6 +480,7 @@ describe('bash tool', () => {
 
   it('tools depend on the executor: no registration without ctx.shell', async () => {
     const ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     // inject: ['tools', 'bash'] keeps the plugin pending until bash exists.
@@ -475,6 +497,7 @@ describe('bash tool', () => {
     // Bypasses the schemastery defaults on purpose: apply() must stand on its
     // own `?? true` fallback when embedded programmatically without the schema.
     const ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
@@ -493,6 +516,7 @@ describe('bash tool', () => {
 describe('the background surface follows the job registry', () => {
   async function bare() {
     const ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
@@ -548,7 +572,7 @@ describe('background execution through the job runtime', () => {
     const started = await call(ctx, 'bash', { command: 'echo bg-ok', description: 'test command', run_in_background: true })
     expect(started.isError).toBe(false)
     if (started.isError) throw new Error('expected background bash success')
-    expect(started.value).toEqual({ kind: 'background', jobId: 'bash-1' })
+    expect(started.value).toEqual({ kind: 'background', jobId: 'bash-1', cwd: process.cwd() })
     expect(text(started)).toBe('started background job bash-1')
 
     const read = await callUntilText(ctx, 'job_output', { job_id: 'bash-1' }, 'bg-ok')
@@ -603,6 +627,7 @@ describe('background execution through the job runtime', () => {
 
   it('a pre-aborted call is skipped before the process starts', async () => {
     const ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
@@ -632,6 +657,7 @@ describe('background execution through the job runtime', () => {
   it('never spawns the process when tasks.start preflight throws (no orphan, by construction)', async () => {
     // With no job controller, preflight fails before the executor can spawn.
     const ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
@@ -647,8 +673,9 @@ describe('background execution through the job runtime', () => {
     expect((ctx.shell as CountingStartExecutor).starts).toBe(0)
   })
 
-  it('enableRunInBackground: false removes the parameter and flips the description', async () => {
+  it('enableRunInBackground: false removes the parameter and rejects the call', async () => {
     const ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(LocalSubprocessRuntime)
@@ -658,8 +685,7 @@ describe('background execution through the job runtime', () => {
 
     const schema = ctx.tools.schemas().find(s => s.name === 'bash')!
     expect(Object.keys(schema.parameters.properties as Record<string, unknown>))
-      .toEqual(['command', 'description', 'timeoutMs', 'workdir'])
-    expect(schema.description).toContain('Background execution is not available')
+      .toEqual(['description', 'command', 'timeoutMs', 'workdir'])
     expect(schema.description).not.toContain('run_in_background')
     // The registry-held definition agrees (schema and capability never disagree).
     const parameters = ctx.tools.get('bash')!.parameters as { properties: Record<string, unknown> }
@@ -684,6 +710,7 @@ describe('sandbox escalation through the generic task producer', () => {
 
   it('fails load when a confining executor has no shared sandbox-policy resolver', async () => {
     const ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(RecordingSandboxExecutor)
@@ -694,9 +721,9 @@ describe('sandbox escalation through the generic task producer', () => {
   it('advertises the sandbox fields and validates their pairing', async () => {
     const { ctx } = await setupSandboxed()
     const schema = ctx.tools.schemas().find(item => item.name === 'bash')!
-    const properties = schema.parameters.properties as Record<string, { enum?: string[] }>
+    const properties = schema.parameters.properties as Record<string, { enum?: string[]; description?: string }>
     expect(properties['sandbox_permissions']?.enum).toEqual(['workspace-write', 'danger-full-access'])
-    expect(schema.description).toContain('approval prompt')
+    expect(properties['sandbox_permissions']?.description).toContain('asks the user for approval')
 
     for (const args of [
       { command: 'true', description: 'd', sandbox_permissions: 'workspace-write' },
@@ -1300,6 +1327,7 @@ describe('the model-facing bash tool builds its request from named args only (no
 
   async function setupRecording() {
     const ctx = new Context()
+    provideWorkingDirectoryFixture(ctx)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(AgentRegistry)
@@ -1442,5 +1470,45 @@ describe('the model-facing bash tool builds its request from named args only (no
     expect('env' in request).toBe(false)
     expect('stdin' in request).toBe(false)
     expect('stdoutMaxBytes' in request).toBe(false)
+  })
+})
+
+
+describe('resolved launch directory metadata', () => {
+  it.each([
+    { background: false, workdir: undefined },
+    { background: false, workdir: 'relative' },
+    { background: true, workdir: undefined },
+    { background: true, workdir: 'relative' },
+  ])('records the executor directory for background=$background and workdir=$workdir', async ({ background, workdir }) => {
+    const ctx = await setupWithJobs()
+    const directory = mkdtempSync(join(tmpdir(), 'dsh-bash-cwd-meta-'))
+    const current = join(directory, 'current')
+    const ensure = vi.spyOn(ctx.workingDirectory, 'ensure').mockResolvedValue(current)
+    const resolve = ctx.shell.resolve.bind(ctx.shell)
+    const resolving = vi.spyOn(ctx.shell, 'resolve').mockImplementation(request => ({ ...resolve(request), workdir: directory }))
+    const launch = vi.spyOn(ctx.shell, 'execute')
+    try {
+      const owner = await registerFakeAgent(ctx, 'directory-metadata')
+      const result = await call(ctx, 'bash', {
+        command: 'printf metadata-ok', description: 'Read launch metadata', run_in_background: background,
+        ...workdir === undefined ? {} : { workdir },
+      }, owner)
+      expect(result.isError).toBe(false)
+      if (result.isError) throw new Error('expected shell success')
+      expect(result.value).toMatchObject({ cwd: directory })
+      expect(result.meta).toEqual({ cwd: directory })
+      expect(resolving).toHaveBeenCalledOnce()
+      expect(resolving).toHaveBeenCalledWith(expect.objectContaining({ workdir: workdir === undefined ? current : join(current, workdir) }))
+      expect(launch).toHaveBeenCalledWith(expect.objectContaining({ workdir: directory }))
+      expect(text(result)).toBe(background ? 'started background job bash-1' : 'metadata-ok')
+      if (background) await call(ctx, 'job_output', { job_id: 'bash-1', wait: true }, owner)
+    } finally {
+      ensure.mockRestore()
+      resolving.mockRestore()
+      launch.mockRestore()
+      await ctx.fiber.dispose()
+      rmSync(directory, { recursive: true, force: true })
+    }
   })
 })

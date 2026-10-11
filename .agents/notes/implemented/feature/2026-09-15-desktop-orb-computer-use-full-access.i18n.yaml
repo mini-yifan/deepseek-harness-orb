@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-15-desktop-orb-computer-use-full-access.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-15-desktop-orb-computer-use-full-access.md
-2026-09-15-desktop-orb-computer-use-full-access.md: 6894ba1b93a9bef0b3258288bb829c2c1951378d
-2026-09-15-desktop-orb-computer-use-full-access.zh.md: e7214b01ada2996313ddc6d20f954c5f435a89c6
+/agent-note-desktop-orb-computer-use-full-access:
+  en: fb2ab80824440756
+  zh: 0093c8083eeb3da7
+/agent-note-desktop-orb-computer-use-full-access/problem:
+  en: 95a2208d5a5c5a40
+  zh: 914ea92aa4d8ef8a
+/agent-note-desktop-orb-computer-use-full-access/decision:
+  en: 8c41d1a60c04ced2
+  zh: 7cd2e35ecb0b47a3
+/agent-note-desktop-orb-computer-use-full-access/alternatives-considered:
+  en: a7430fa1f315cffa
+  zh: 36609443fd9ae987
+/agent-note-desktop-orb-computer-use-full-access/consequences:
+  en: bf215832fc7962df
+  zh: b382d3cb90038b2f
+/agent-note-desktop-orb-computer-use-full-access/testing:
+  en: 140297ae066ddc8a
+  zh: 324d46e2c5b8e2d5

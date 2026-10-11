@@ -79,7 +79,11 @@ kind: "package-reference"
 
 ### 读取日志
 
+已实体化的 `stat` 与 `list` 快照在转换后的逻辑 `header` 之外，通过 `formatStatus` 保留格式 catalog 的头部分类。只读准备不会改变所选历史版本；发布后继之后，状态才变为 `current`。尚未实体化的待定 Session 省略 `formatStatus`。
+
 `open(id, 'read'|'write')` 选择最高规范 generation。当前格式输入走普通快速路径。对于历史输入，只读 open 会单遍解码并迁移源、校验当前逻辑结果，然后在不发布后继的情况下返回。写 open 会在可用时复用按 revision 为键的 preparation，否则执行同一套 preparation，再按有界分片编码同目录临时文件、在 Worker Thread 中校验、复查源修订，并在返回前以不覆盖方式发布当前后继。源保持逐字节不变。如果源在 preparation 后发生变化，该次写 open 会失败，已经返回给读方的逻辑历史不会被替换；后续写 open 会针对新的 revision 重新执行 preparation。后端在 memo 化前冻结已解码的 event graph，并在此时将其标记为 `shared-frozen`；每个嵌套对象和数组都会冻结，句柄读取和 slice 即使为空也保留该状态。只有尚未实体化的 pending 空日志报告 `detached`。`stat(id)` 与 `list()` 只选择并转换最高 generation 的 header，不读取事件行，也不启动迁移；快照携带所选文件的 `sizeBytes` 与尽力而为的修订号。当前格式修订号标识该文件；历史格式修订号还包含持久化根目录中所选文件的指纹，因此子日志变化会使缓存的逻辑事件失效。指纹只读取文件系统元数据；无关变化也会保守地使历史修订号失效。一次 `list()` 为其历史条目共用一个全库指纹。选择 `compression: 'none'` 后，日志是外部读取方可直接消费的换行分隔文本；压缩默认值必须经后端读取。
+
+校验只有在 Worker 自然以退出码 0 结束后，才接受其成功响应。并发配额一直保留到该次退出；取消或 Worker 错误会先终止并等待 Worker 退出，再使校验失败。
 
 历史正文准备通过 [V3→V4](../session-format-v3-to-v4/README.zh.md) 补齐父目录：从 header 找到候选直属子 Session，通过历史编解码器逐个读取其自身 descriptor，保留紧凑证据与来源修订。此过程不准备子目录，也不发布子后继。不可读或不支持的 header（包括损坏的 Zstandard header 帧）不参与发现，也不出现在 `list()` 中。直接访问损坏的压缩 header 仍会失败；header 的 I/O 错误与取消错误继续传播。子日志解码或 descriptor 字段失败会产生带子路径的警告；父目录没有完整条目时，通过 `subagent/catalog` 保留 header 身份信息。健康子项和已有父目录项仍可使用。打开损坏子 Session 时仍报告该子会话的错误。缺失、不支持或多个 descriptor 同样生成模式未知的目录项，不编造标签。已发布的未知条目仍可浏览；读取子历史时会重试实际日志，并从有效 descriptor 确定模式。准备返回、复用与发布前会重新检查成员集合及已检查来源的修订，也包括读取失败的子日志，使修复后的子日志能够使旧准备缓存失效。来源变化时只读打开重试一次，写打开拒绝发布。取消仍会中止操作。当前 V4 打开跳过发现，并在暴露事件前校验目录字段、唯一性及当前投递归属。
 
@@ -101,7 +105,7 @@ kind: "package-reference"
 
 ### 物理编码
 
-默认产物是独立 [Zstandard 帧](../../../.agents/notes/implemented/architecture/2026-07-19-zstandard-jsonl-session-logs.zh.md) 的标准拼接：一个仅包含 header 行的带校验和帧，后跟每个持久 append 批次一个带校验和帧，使用 Node 内置 Zstandard API 的默认压缩级别（无级别开关）。当前格式为每个事件写一行；`sourceEventSeqs` 使用无损存储形式：至少包含三个序列号的连续段会变成 `[start, end]` 区间对，其他列表原样保留；读取时会展开回精确的内存数组。历史迁移会复用一个 Zstandard decoder，让已解析行流经有状态格式 Stage，并通过一个压缩 context 以约 1 MiB 主线程分片流式写入当前记录，同时只保留最终当前事件、有界 decoder 状态与必需的序号重映射表。列表只读取并验证 header 帧。`compression: 'none'` 保留相同的存储形式逻辑行，但不使用帧压缩。一个根只属于一种编码：启动发现与定向查找会拒绝使用另一后缀的 generation；格式迁移保留已配置编码，而压缩转换、混合根回退与双写仍不受支持。冻结的 v0 与 v1 codec 仅为历史 generation 保留 packed-row decoder。
+默认产物是独立 Zstandard 帧 的标准拼接：一个仅包含 header 行的带校验和帧，后跟每个持久 append 批次一个带校验和帧，使用 Node 内置 Zstandard API 的默认压缩级别（无级别开关）。当前格式为每个事件写一行；`sourceEventSeqs` 使用无损存储形式：至少包含三个序列号的连续段会变成 `[start, end]` 区间对，其他列表原样保留；读取时会展开回精确的内存数组。历史迁移会复用一个 Zstandard decoder，让已解析行流经有状态格式 Stage，并通过一个压缩 context 以约 1 MiB 主线程分片流式写入当前记录，同时只保留最终当前事件、有界 decoder 状态与必需的序号重映射表。列表只读取并验证 header 帧。`compression: 'none'` 保留相同的存储形式逻辑行，但不使用帧压缩。一个根只属于一种编码：启动发现与定向查找会拒绝使用另一后缀的 generation；格式迁移保留已配置编码，而压缩转换、混合根回退与双写仍不受支持。冻结的 v0 与 v1 codec 仅为历史 generation 保留 packed-row decoder。
 
 ### 源码地图
 
@@ -114,7 +118,6 @@ kind: "package-reference"
 | [`src/migration-verifier.ts`](src/migration-verifier.ts) | stage 与竞争 generation 校验的 Worker 生命周期 |
 | [`src/zstd.ts`](src/zstd.ts) | Zstandard 帧压缩、解码与帧扫描 |
 | [`src/win32.ts`](src/win32.ts) | Windows write-through 发布与目录创建 |
-| — | 不发布运行时不变式伴生入口；身份在存储层强制；持久化正确性依赖后端往返与崩溃尾部测试，本包不公开可持续观察的进程内关系。 |
 
 </details>
 
@@ -127,8 +130,6 @@ kind: "package-reference"
 
 - [会话持久化子系统](../../../docs/subsystems/persistence.zh.md)——后端无关的服务语义与提供方关系。
 - [会话持久化 seam](../session-persistence/README.zh.md)——本后端实现的服务约定。
-- [项目会话目录决策](../../../.agents/notes/implemented/architecture/2026-07-24-project-session-directories.zh.md)——项目与会话目录布局背后的取舍。
-- [Zstandard JSONL 会话日志](../../../.agents/notes/implemented/architecture/2026-07-19-zstandard-jsonl-session-logs.zh.md)——带校验和帧编码的理由。
 - [已发布 Session 格式迁移](../../../.agents/notes/implemented/architecture/2026-08-31-released-session-format-migrations.zh.md)——不可变 generation、相邻迁移边与发布规则。
 
 -----

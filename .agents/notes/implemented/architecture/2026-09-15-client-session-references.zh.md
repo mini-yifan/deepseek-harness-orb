@@ -30,7 +30,7 @@ Client Session 对象、Agent 作用域的 Client Context、引用、使用方�
 
 [Client 分层设计](../../implemented/architecture/2026-08-20-client-session-conversation-ownership.zh.md)定义数据、适配器、渲染器与展示层的单向依赖。引用来源统计不会使 Controller 依赖 UI 包。
 
-本决策部分取代 [Web Client Session scope 与 provide channel 决策](2026-07-25-web-client-session-scope-and-provide-channel.zh.md)中由 list 选择驱动的 scope 生命周期；后者保留显式 Provider 所有权下的 blank Session 与收养语义理由。
+[空白 Session 决策](2026-09-17-process-local-blank-sessions.zh.md)负责创建与复用；本决策负责显式 Provider 引用与收养。
 
 ### 地址、binding 与引用
 
@@ -156,7 +156,7 @@ Conversation 的引用属于其视图所有者，不属于 Chat、Trajectory 或
 | Chat/Trajectory 恢复 | 为显式选中的主目标恢复视图；独立绑定的视图保留自己的状态 |
 | Cordis inventory 面板 | 使用不区分 current/other 的单一列表；runner 不提供主区域选择的公开 getter |
 
-DOM 焦点移动或全局面板隐藏仍被持有的视图时，来源元数据不变。[全局主面板设计](../../implemented/architecture/2026-09-08-global-main-panels.zh.md)拥有面板选择与布局；Session 引用所有权不替代它。
+DOM 焦点移动或全局面板隐藏仍被持有的视图时，来源元数据不变。[全局主面板设计](../../../../packages/client/ui-layout/README.zh.md)拥有面板选择与布局；Session 引用所有权不替代它。
 
 Conversation 保留 `hero`、`settling`、`active` 组合与既有历史加载和 `openError` 处理。获取引用不增加外层 loading/error 阶段展示、额外隐藏 composer 的条件、Retry 按钮或替换 Sidebar 内容的恢复面板。已有错误处理方继续处理自己的错误；没有错误展示的调用点不增加展示。Promise 拒绝与正确释放引用不意味着额外增加 UI 处理方。
 
@@ -166,7 +166,7 @@ Workspace 连接保持既有导航检查与面板切换失效规则。侧边栏 
 
 预设目录与部署默认值可以共享。已绑定 Session 的预设通过 Provider 的 binding 读取或修改；预设控制器按 `SessionBinding` 缓存，不由根级 current-Session 跟随器管理。Hero 的 preset seat 使用 `session-maybe` Provider：没有 Session 时显示创建流程选择，绑定空白 Session 后操作该确切 Session。标题标签读取同一 Provider 绑定 Session 的投影。
 
-Session 创建前选择的 preset 保留在主 Conversation 的 `session-maybe` preset surface 中。Workspace 创建或复用空白 Session 并建立主 Provider 后，该 surface 将选择应用到 Provider 绑定的 Session。设置页修改默认 preset 或 picker 设置时，preset 服务从 Provider 已建立的 binding 缓存中选择带 `mainView` 所有权标记的空白 Session，并更新该 Session。非空白主 Session、Sidebar 的独立 Provider 与其他后台引用均不受该设置动作影响；preset 子树不读取主引用，也不通过全局 current follower 寻找目标。
+Session 创建前选择的 preset 保留在主 Conversation 的 `session-maybe` preset surface 中。Workspace 创建或复用空白 Session 并建立主 Provider 后，该 surface 将选择应用到 Provider 绑定的 Session。设置页修改默认 preset 时，preset 服务从 Provider 已建立的 binding 缓存中选择带 `mainView` 所有权标记的空白 Session，并更新该 Session。非空白主 Session、Sidebar 的独立 Provider 与其他后台引用均不受该设置动作影响；preset 子树不读取主引用，也不通过全局 current follower 寻找目标。
 
 ### Host 事件 Context 所有权与 Typert
 

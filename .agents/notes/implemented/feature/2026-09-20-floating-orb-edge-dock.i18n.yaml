@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-20-floating-orb-edge-dock.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-20-floating-orb-edge-dock.md
-2026-09-20-floating-orb-edge-dock.md: 44ee776f9341e2c415acaaaf2b0bed1a702d7f3b
-2026-09-20-floating-orb-edge-dock.zh.md: c89cb6b83dc3bfe56725e8ac5a41e55700f98f02
+/agent-note-floating-orb-left-right-edge-dock:
+  en: dbb1f2d539833f13
+  zh: 69911d1953c5975b
+/agent-note-floating-orb-left-right-edge-dock/problem:
+  en: 602e0b8d4718d6a0
+  zh: 8faa405c248b2c90
+/agent-note-floating-orb-left-right-edge-dock/decision:
+  en: 50e91bb27e63c84b
+  zh: 0cd8293e9d8cd083
+/agent-note-floating-orb-left-right-edge-dock/alternatives-considered:
+  en: e4151055d37e0c39
+  zh: d7aa6835bc31f369
+/agent-note-floating-orb-left-right-edge-dock/consequences:
+  en: 8404b1484eb77b54
+  zh: 1eb944b5377ab029
+/agent-note-floating-orb-left-right-edge-dock/testing:
+  en: 2a9e23d7af2ba842
+  zh: 27446b19442b8b25

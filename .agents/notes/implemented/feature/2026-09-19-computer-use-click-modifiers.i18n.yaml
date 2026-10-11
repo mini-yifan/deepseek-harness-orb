@@ -1,6 +1,22 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
-# side as of the last confirmed-consistent state. Both languages carry equal authority;
-# after editing either side, bring the other along and re-record with:
+# Bilingual-pair consistency record for 2026-09-19-computer-use-click-modifiers.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-19-computer-use-click-modifiers.md
-2026-09-19-computer-use-click-modifiers.md: 22e9ab0ff89c193a306be66b6e3c1a8fc28dadeb
-2026-09-19-computer-use-click-modifiers.zh.md: b6d6c83124ae5997e90a6a939ce6858fb7b0cea9
+/agent-note-computer-use-click-modifiers:
+  en: 0cb27ca3aeb66e38
+  zh: c0b4e6b5ed4b4c03
+/agent-note-computer-use-click-modifiers/problem:
+  en: e4677d3ab689eea8
+  zh: f3ac340438e91334
+/agent-note-computer-use-click-modifiers/decision:
+  en: 413b043617ca0b18
+  zh: a6294282ff229ea1
+/agent-note-computer-use-click-modifiers/alternatives-considered:
+  en: 877cf20f8fa0d46f
+  zh: b7cbd7e165490cc8
+/agent-note-computer-use-click-modifiers/consequences:
+  en: 1520e45613e2627c
+  zh: b597e873dd006c3d
+/agent-note-computer-use-click-modifiers/testing:
+  en: 3933be35cf5f90f5
+  zh: 39ecc652061c05cf
