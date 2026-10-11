@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for 2026-10-11-upstream-sync-merge-procedure.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-10-11-upstream-sync-merge-procedure.md
+/agent-note-upstream-sync-merge-procedure-for-the-deepseek-orb-fork:
+  en: 2724322d4a7768a9
+  zh: 93f70082c9310fd9
+/agent-note-upstream-sync-merge-procedure-for-the-deepseek-orb-fork/problem:
+  en: 307a1ee2b5a8855b
+  zh: 32c8353a81c850fe
+/agent-note-upstream-sync-merge-procedure-for-the-deepseek-orb-fork/decision:
+  en: f7858add411a532f
+  zh: 4428fb54b27b105e
+/agent-note-upstream-sync-merge-procedure-for-the-deepseek-orb-fork/alternatives-considered:
+  en: d30cd288e446d14f
+  zh: 52a33f893817da2a
+/agent-note-upstream-sync-merge-procedure-for-the-deepseek-orb-fork/consequences:
+  en: 0eb5222996d6c8a8
+  zh: 67a6a29cb43e44bb
+/agent-note-upstream-sync-merge-procedure-for-the-deepseek-orb-fork/status:
+  en: 8f1a74e1af47510d
+  zh: 107473e208c1bbee
