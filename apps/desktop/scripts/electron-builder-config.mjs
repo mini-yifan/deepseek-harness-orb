@@ -147,7 +147,7 @@ export function createElectronBuilderConfig(
     asarUnpack: unpack,
     extraResources: [
       { from: buildPaths.runtime, to: 'runtime' },
-      { from: fileURLToPath(new URL('../resources/icon-windows.png', import.meta.url)), to: 'icon.png' },
+      { from: fileURLToPath(new URL('../build/icon.png', import.meta.url)), to: 'icon.png' },
       // Windows tray bitmaps; macOS keeps the Dock and ships no menu bar icon.
       ...(packagesWindows ? [{ from: fileURLToPath(new URL('../resources/tray-windows.ico', import.meta.url)), to: 'tray.ico' }] : []),
       {
@@ -230,7 +230,9 @@ export function createElectronBuilderConfig(
       )
     },
     win: {
-      icon: fileURLToPath(new URL('../resources/icon-windows.png', import.meta.url)),
+      // build/icon.png is the released Windows icon; the 0.1.5-rc.2 base upgrades in place
+      // and must keep one application identity across versions.
+      icon: fileURLToPath(new URL('../build/icon.png', import.meta.url)),
       forceCodeSigning: !unsigned,
       signtoolOptions: {
         sign: windowsSigner,
@@ -249,7 +251,9 @@ export function createElectronBuilderConfig(
       include: fileURLToPath(new URL('./installer.nsh', import.meta.url)),
       oneClick: false,
       perMachine: false,
-      allowElevation: false,
+      // allowElevation stays at its default (true): the released Windows base (0.1.5-rc.2)
+      // installed per machine under Program Files, and a per-user-only installer refuses
+      // that installation instead of upgrading it in place.
       allowToChangeInstallationDirectory: false,
       installerLanguages: ['en_US', 'zh_CN'],
       differentialPackage: true,
