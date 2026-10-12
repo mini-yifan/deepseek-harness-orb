@@ -71,11 +71,15 @@ if ($ranges.Length -lt 1) { return }
 $text = $ranges[0].GetText(4000)
 if ([string]::IsNullOrWhiteSpace($text)) { return }
 $rects = @($ranges[0].GetBoundingRectangles())
-$x = 0; $y = 0; $width = 0; $height = 0
-if ($rects.Length -ge 4) { $x = $rects[0]; $y = $rects[1]; $width = $rects[2]; $height = $rects[3] }
-[pscustomobject]@{
-  text = $text; x = $x; y = $y; width = $width; height = $height; pid = $focused.Current.ProcessId
-} | ConvertTo-Json -Compress
+# Without a rectangle the selection has no screen position; omit the fields instead of
+# reporting the virtual-screen origin, which would anchor the toolbar there.
+if ($rects.Length -ge 4) {
+  [pscustomobject]@{
+    text = $text; x = $rects[0]; y = $rects[1]; width = $rects[2]; height = $rects[3]; pid = $focused.Current.ProcessId
+  } | ConvertTo-Json -Compress
+} else {
+  [pscustomobject]@{ text = $text; pid = $focused.Current.ProcessId } | ConvertTo-Json -Compress
+}
 `
 
 function dip(user32: ReturnType<typeof koffi.load>, shcore: ReturnType<typeof koffi.load>, x: number, y: number): { x: number; y: number } {

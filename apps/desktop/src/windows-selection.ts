@@ -26,6 +26,9 @@ export interface WindowsSelectionProbe {
   activatePid(pid: number): void
 }
 
+/** Guard state for callers that omit the argument, so the staleness check still works there. */
+const DEFAULT_READS = { generation: 0 }
+
 /**
  * Translate one hook message into toolbar events.
  * A left mouse-up also asks `probe` for the selected text.
@@ -33,12 +36,14 @@ export interface WindowsSelectionProbe {
  * @param handlers - toolbar sink.
  * @param probe - selection reader.
  * @param excluded - process ids whose selections are ignored.
+ * @param reads - shared read generation; a newer press or release makes a pending read stale.
  */
 export function dispatchWindowsSelectionMessage(
   message: WindowsSelectionMessage,
   handlers: SelectionMonitorHandlers,
   probe: WindowsSelectionProbe,
   excluded: ReadonlySet<number>,
+  reads: { generation: number } = DEFAULT_READS,
 ): void {
   if (message.type === 'key' || message.type === 'wheel') {
     handlers.onEvent({ type: message.type === 'key' ? 'key' : 'dismiss' })
@@ -48,9 +53,14 @@ export function dispatchWindowsSelectionMessage(
     handlers.onEvent({ type: 'dismiss' })
     return
   }
+  // The read is a slow PowerShell round trip. A newer press or release makes this one stale:
+  // its result must not pop the toolbar back up after the click that dismissed it.
+  if (message.type === 'mouse-down' || message.type === 'mouse-up') reads.generation += 1
   handlers.onEvent({ type: message.type, x: message.x, y: message.y })
   if (message.type !== 'mouse-up') return
+  const generation = reads.generation
   void probe.readSelection().then((selection) => {
+    if (generation !== reads.generation) return
     if (selection === undefined || selection.text.trim() === '') return
     if (selection.pid !== undefined && excluded.has(selection.pid)) return
     const event: SelectionHelperEvent = {
@@ -92,8 +102,11 @@ export function startWindowsSelectionMonitor(
   }
   handlers.onEvent({ type: 'ready' })
   let unhook = (): void => undefined
+  const reads = { generation: 0 }
   try {
-    unhook = install((message) => { dispatchWindowsSelectionMessage(message, handlers, tracking, excluded) })
+    unhook = install((message) => {
+      dispatchWindowsSelectionMessage(message, handlers, tracking, excluded, reads)
+    })
   } catch (error: unknown) {
     console.error('dsh desktop: selection hook failed', error)
   }

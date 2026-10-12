@@ -160,7 +160,9 @@ private final class SelectionMonitor: @unchecked Sendable {
         if hypot(dx, dy) >= minDragPixels { dragged = true }
       }
     case .leftMouseUp:
-      let shouldRead = press != nil && dragged
+      // A double- or triple-click selects a word or paragraph without moving the pointer,
+      // so the click count counts as a selection too; a lone click still reads nothing.
+      let shouldRead = press != nil && (dragged || event.clickCount >= 2)
       press = nil
       dragged = false
       emit(["type": "mouse-up", "x": point.x, "y": point.y])

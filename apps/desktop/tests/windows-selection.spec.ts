@@ -39,6 +39,33 @@ describe('windows selection monitor', () => {
     expect(events).toEqual([{ type: 'mouse-up', x: 10, y: 20 }])
   })
 
+  it('drops a stale read when a newer press already dismissed the toolbar', async () => {
+    const events: SelectionHelperEvent[] = []
+    let finish: (value: { text: string; pid: number }) => void = () => undefined
+    const readSelection = vi.fn(() => new Promise<{ text: string; pid: number }>((resolve) => { finish = resolve }))
+    const reads = { generation: 0 }
+    dispatchWindowsSelectionMessage(
+      { type: 'mouse-up', x: 10, y: 20, button: 'left' },
+      { onEvent: (event) => { events.push(event) } },
+      { readSelection, activatePid: () => undefined },
+      new Set(),
+      reads,
+    )
+    expect(events).toEqual([{ type: 'mouse-up', x: 10, y: 20 }])
+    // A second click dismisses the toolbar while the first PowerShell read is still running.
+    dispatchWindowsSelectionMessage(
+      { type: 'mouse-down', x: 30, y: 40, button: 'left' },
+      { onEvent: (event) => { events.push(event) } },
+      { readSelection, activatePid: () => undefined },
+      new Set(),
+      reads,
+    )
+    finish({ text: 'stale', pid: 7 })
+    await vi.waitFor(() => { expect(readSelection).toHaveBeenCalled() })
+    await Promise.resolve()
+    expect(events.map(event => event.type)).toEqual(['mouse-up', 'mouse-down'])
+  })
+
   it('remembers the last selection pid for overlay focus restore', async () => {
     const events: SelectionHelperEvent[] = []
     let dispatch: (message: { type: 'mouse-up'; x: number; y: number; button: 'left' }) => void = () => undefined
