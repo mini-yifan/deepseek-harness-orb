@@ -58,6 +58,12 @@ export interface DshDesktopAppApi {
     setSelectionEnabled(enabled: boolean): Promise<void>
     setMillifractionEnabled(enabled: boolean): Promise<OrbMillifractionWriteResult>
     openTcc(right: TccRight): Promise<OrbSettingsSnapshot>
+    /**
+     * Subscribe to the floating ball's agent-strip jump requests.
+     * @param listener - called with the background Code session id.
+     * @returns an unsubscribe function.
+     */
+    onOpenSession(listener: (sessionId: string) => void): () => void
   }
 }
 

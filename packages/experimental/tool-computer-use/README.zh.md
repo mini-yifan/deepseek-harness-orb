@@ -120,6 +120,7 @@ Desktop 上新建 `code_agent` 会在 `session.create` 之后、`session.prompt`
 | [`src/code-agent.ts`](src/code-agent.ts) | 仅 Computer Use 的 `code_agent`、`code_agent_status` 与 `code_agent_stop`：调用方登记表、子目录 cwd、`session.create`、Desktop 新建时可选 `selectModel`、`session.prompt` |
 | [`src/code-agent-completion.ts`](src/code-agent-completion.ts) | Code 会话与 Computer Use 调用方都空闲后投递的插件通知；停止时可中止 |
 | [`src/code-agent-unattended.ts`](src/code-agent-unattended.ts) | 在活的 Code agent 上前置自动允许 `approval/request` 与自动应答 `user-questions/request` |
+| [`src/code-agent-registry.ts`](src/code-agent-registry.ts) | 后台 Code 会话的进程级书签注册表；`apply` 行把它作为应用级 `codeAgentRegistry` 服务提供，预设内的 `code_agent` 记录进同一个模块单例 |
 | [`src/macos.ts`](src/macos.ts) | Darwin 用 `screencapture -x -C -R` 截前台应用窗口并集（`-R` 由拥有该矩形的显示器按其倍率出图，`-C` 把光标烤进图里），或在设置了 overlay 窗口 id 时走排除 overlay 的 ScreenCaptureKit `--region=`（Desktop IPC 进 Electron，CLI 派生 helper）；click、scroll、hotkey、长按与拖拽走 JXA `CGEvent`（脚本被取消时先抬起鼠标键与修饰键）；`input_text` 通过 NSPasteboard 粘贴，并把快照里的每一种剪贴板格式放回；`list_apps` / `open_app` 走 NSWorkspace；`open_in_browser` / `open_in_finder` 走 `/usr/bin/open`；`inspectForeground` 绑定 `CGWindowListCopyWindowInfo` 再 unwrap（跳过 overlay id，并按所属显示器裁切）加 Finder AppleScript |
 | [`src/windows.ts`](src/windows.ts) | Win32 用 GDI 把选中窗口并集截成 PNG，坐标是每监视器物理像素，并合成系统光标；click、scroll、hotkey、长按与拖拽走 `SendInput`（点击修饰键只在本次调用内按住，取消时抬起按键）；`input_text` 用 Ctrl+V 粘贴，并在粘贴发出后恢复快照里的全部剪贴板格式；`open_in_finder` 打开资源管理器；提权的目标窗口在发出任何输入前就被拒绝 |
 | [`src/windows-native.ts`](src/windows-native.ts) | Win32 绑定：GDI 截图加光标合成、`SendInput`、剪贴板格式快照、每监视器 DPI 上下文，以及失败即拦截的完整性级别检查 |
@@ -133,6 +134,7 @@ Desktop 上新建 `code_agent` 会在 `session.create` 之后、`session.prompt`
 | [`src/screenshot.ts`](src/screenshot.ts) | `screenshot` 的桌面文件名与唯一路径写入 |
 | [`src/overlay-guard.ts`](src/overlay-guard.ts) | 可选的 Desktop overlay 遮蔽：把 listScreens（观察框彩带确认）、capture、inspect、HID、`open_app` 与 `withGuiTurn` 包进 `wrapDesktopBackend`；`list_apps` / `open_in_browser` / `open_in_finder` / `copyImageToClipboard` 不包 |
 | [`src/coordinate-mode.ts`](src/coordinate-mode.ts) | 按会话的千分比/像素打戳、投影、观察栅格缓存，以及像素工具 schema 改写 |
+| [`src/gui-lock.ts`](src/gui-lock.ts) | 屏幕控制类 GUI 动作的进程级互斥锁：跨会话的 HID 与激活快速失败，而不是交错执行 |
 | [`presets/computer-use/`](presets/computer-use/) | Computer Use agent preset：Shell、网页、GUI 工具、`code_agent` 一族、`ask_user_question`、压缩 |
 | — | 不发布运行时不变式伴生入口：assemble、execute 与信封都读本条会话日志，独立观察无法分叉。 |
 

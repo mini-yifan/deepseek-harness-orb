@@ -6,10 +6,14 @@
  */
 
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
+import { readDesktopAppApi } from './desktop-api.ts'
 import { OrbSettingsSection } from './OrbSettingsSection.tsx'
 import type { OrbSettingsSectionInjected } from './section-store.ts'
 import { OrbSettingsController } from './section-store.ts'
@@ -32,7 +36,7 @@ export type {
 } from './desktop-api.ts'
 
 /** Required services (cordis fiber inject). */
-export const inject = ['slots', 'locale', 'remote', 'remote.session']
+export const inject = ['slots', 'locale', 'remote', 'remote.session', 'uiWorkspace']
 
 /**
  * Register the floating-ball Settings section.
@@ -41,6 +45,18 @@ export const inject = ['slots', 'locale', 'remote', 'remote.session']
 export function apply(ctx: ClientContext): void {
   const controller = new OrbSettingsController(ctx)
   ctx.effect(() => ctx.locale.register('settings.orb', { zh, en }), 'ui-settings-orb: dictionaries')
+
+  // The floating ball's agent strip asks this window to open a background session; the
+  // Settings package is the orb's main-window half, so the bridge lives here.
+  const desktop = readDesktopAppApi()
+  if (desktop !== undefined) {
+    ctx.effect(
+      () => desktop.orb.onOpenSession((sessionId) => {
+        ctx.uiWorkspace.openSession(brandString<SessionId>(sessionId))
+      }),
+      'ui-settings-orb: agent-strip jump',
+    )
+  }
 
   const sectionInjected = (): OrbSettingsSectionInjected => ({
     hooks: { orbSettings: controller.store },

@@ -19,12 +19,17 @@
       "types": "./lib/types/code-agent.d.ts",
       "default": "./lib/code-agent.js"
     },
+    "./code-agent-registry": {
+      "types": "./lib/types/code-agent-registry.d.ts",
+      "default": "./lib/code-agent-registry.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "files": [
     "lib/index.js",
     "lib/code-agent.js",
+    "lib/code-agent-registry.js",
     "lib/macos-sck-capture",
     "lib/libmacos-sck-capture.dylib",
     "lib/types/**/*.d.ts"

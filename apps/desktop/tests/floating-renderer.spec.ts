@@ -199,7 +199,7 @@ it('creates a Computer Use session on dsh_orb and sends from the overlay', async
       dragBegin: vi.fn(),
       dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
       dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
-        expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+        expanded: false, horizontal: 'left', vertical: 'up', docked: undefined, strip: 0,
       })),
       setExpanded,
       orbWorkspacePath: async () => '/tmp/dsh_orb',
@@ -361,7 +361,7 @@ it('collapses on drag start and commits the gesture through main-process drag si
       dragBegin: vi.fn(),
       dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
       dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
-        expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+        expanded: false, horizontal: 'left', vertical: 'up', docked: undefined, strip: 0,
       })),
       setExpanded,
       orbWorkspacePath: async () => '/tmp/dsh_orb',
@@ -430,6 +430,7 @@ async function mountPointerOverlay(options?: { dark?: boolean; running?: boolean
     runScripts: 'outside-only',
     url: 'dsh-app://shell/floating.html',
   })
+  let agentListener: ((items: unknown) => void) | undefined
   if (options?.dark === true) {
     Object.defineProperty(dom.window, 'matchMedia', {
       configurable: true,
@@ -487,8 +488,16 @@ async function mountPointerOverlay(options?: { dark?: boolean; running?: boolean
         { docked: undefined }
       )),
       dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
-        expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+        expanded: false, horizontal: 'left', vertical: 'up', docked: undefined, strip: 0,
       })),
+      setStrip: vi.fn(async (width: number): Promise<FloatingExpandState> => ({
+        expanded: true, horizontal: 'left', vertical: 'up', docked: undefined, strip: width,
+      })),
+      onAgents: (listener: (items: unknown) => void) => {
+        agentListener = listener
+        return () => { agentListener = undefined }
+      },
+      openAgent: vi.fn(),
       unsnap: vi.fn(async (): Promise<FloatingDockState> => ({ docked: undefined })),
       setExpanded,
       orbWorkspacePath: async () => '/tmp/dsh_orb',
@@ -533,7 +542,8 @@ async function mountPointerOverlay(options?: { dark?: boolean; running?: boolean
     Object.assign(event, init)
     ball.dispatchEvent(event)
   }
-  return { dom, document, api, dispatchPointer }
+  const emitAgents = (items: unknown) => { agentListener?.(items) }
+  return { dom, document, api, dispatchPointer, emitAgents }
 }
 
 it('restores the front app on a running overlay click outside a text field', async () => {
@@ -602,6 +612,34 @@ it('pins the panel when the input is clicked and stays pinned on later input cli
   }
 })
 
+it('renders background-agent chips, reserves the strip, and opens a session on click', async () => {
+  const overlay = await mountPointerOverlay()
+  try {
+    overlay.emitAgents([
+      { sessionId: 's1', task: 'Make a site', cwd: '/tmp/x', state: 'running', startedAt: 1, unread: false },
+      { sessionId: 's2', task: 'Report', cwd: '/tmp/y', state: 'completed', startedAt: 2, endedAt: 3, outcome: 'done', unread: true },
+    ])
+    await expect.poll(() => overlay.document.querySelectorAll('.agent-chip').length).toBe(2)
+    await expect.poll(() => overlay.api.floating.setStrip.mock.calls.at(-1)).toEqual([208])
+    await expect.poll(() => overlay.document.body.classList.contains('has-strip')).toBe(true)
+    const running = overlay.document.querySelector('.agent-chip')
+    expect(running?.getAttribute('data-state')).toBe('running')
+    expect(running?.getAttribute('title')).toContain('Make a site')
+    const finished = overlay.document.querySelectorAll('.agent-chip')[1]
+    expect(finished?.getAttribute('data-state')).toBe('completed')
+    expect(finished?.getAttribute('title')).toContain('done')
+    expect(finished?.querySelector('.agent-chip-unread')).not.toBeNull()
+    if (running === null) throw new Error('missing chip')
+    running.dispatchEvent(new overlay.dom.window.Event('click', { bubbles: true }))
+    await expect.poll(() => overlay.api.floating.openAgent.mock.calls).toEqual([['s1']])
+    overlay.emitAgents([])
+    await expect.poll(() => overlay.api.floating.setStrip.mock.calls.at(-1)).toEqual([0])
+    expect(overlay.document.querySelectorAll('.agent-chip').length).toBe(0)
+  } finally {
+    overlay.dom.window.close()
+  }
+})
+
 async function dragUntilRelease(overlay: Awaited<ReturnType<typeof mountPointerOverlay>>) {
   overlay.dispatchPointer('pointerdown', {
     pointerId: 1, button: 0, clientX: 268, clientY: 368,
@@ -628,7 +666,7 @@ it('docks from the release, ignores hover for 800ms, then unsnaps', async () => 
   try {
     overlay.api.floating.dragMove.mockResolvedValue({ docked: undefined })
     overlay.api.floating.dragEnd.mockResolvedValue({
-      expanded: false, horizontal: 'left', vertical: 'up', docked: 'right',
+      expanded: false, horizontal: 'left', vertical: 'up', docked: 'right', strip: 0,
     })
     overlay.api.floating.unsnap.mockResolvedValue({ docked: undefined })
     dragUntilRelease(overlay)
@@ -714,7 +752,13 @@ it('guesses dark chrome from prefers-color-scheme then follows the overlay Host 
 it('paints collapsed ball shadow, expanded hairline, and outer pin stroke', () => {
   const css = readFileSync(new URL('../renderer/floating.css', import.meta.url), 'utf8')
   expect(css).toMatch(/--chrome: 12px/u)
-  expect(css).toMatch(/#panel \{[^}]*inset: var\(--chrome\)/u)
+  expect(css).toMatch(/#panel \{[^}]*top: var\(--chrome\)/u)
+  expect(css).toMatch(/#panel \{[^}]*left: var\(--panel-left\)/u)
+  expect(css).toMatch(/#panel \{[^}]*right: var\(--panel-right\)/u)
+  expect(css).toMatch(/body\.has-strip\.expand-left \{\s*--panel-left: calc\(var\(--chrome\) \+ var\(--strip-w\)\)/u)
+  expect(css).toMatch(/body\.has-strip\.expand-right \{\s*--panel-right: calc\(var\(--chrome\) \+ var\(--strip-w\)\)/u)
+  expect(css).toMatch(/#agent-strip \{[^}]*width: var\(--strip-w\)/u)
+  expect(css).toMatch(/body\.expanded\.has-strip #agent-strip \{\s*display: flex/u)
   expect(css).toMatch(/body\.expanded #panel \{[^}]*border: 1px solid var\(--border\)/u)
   expect(css).toMatch(/body\.expanded #panel \{[^}]*box-shadow: var\(--panel-shadow\)/u)
   expect(css).toMatch(/#ball \{[^}]*box-shadow: var\(--ball-shadow\)/u)
@@ -810,7 +854,7 @@ async function mountComposerOverlay() {
         dragBegin: vi.fn(),
         dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
         dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
-          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined, strip: 0,
         })),
         setExpanded: vi.fn(async (expanded: boolean) => ({
           expanded, horizontal: 'left', vertical: 'up',
@@ -1058,7 +1102,7 @@ it('lists orb Computer Use chats and reopens the selected session', async () => 
       dragBegin: vi.fn(),
       dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
       dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
-        expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+        expanded: false, horizontal: 'left', vertical: 'up', docked: undefined, strip: 0,
       })),
       setExpanded: async (expanded: boolean) => ({ expanded, horizontal: 'left', vertical: 'up' }),
       orbWorkspacePath: async () => '/tmp/dsh_orb',
@@ -1241,7 +1285,7 @@ async function mountQuestionOverlay() {
         dragBegin: vi.fn(),
         dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
         dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
-          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined, strip: 0,
         })),
         setExpanded,
         orbWorkspacePath: async () => '/tmp/dsh_orb',
@@ -1558,7 +1602,7 @@ it('expands and session/prompts a Desktop selection-toolbar translate message', 
       dragBegin: vi.fn(),
       dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
       dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
-        expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+        expanded: false, horizontal: 'left', vertical: 'up', docked: undefined, strip: 0,
       })),
       setExpanded,
       orbWorkspacePath: async () => '/tmp/dsh_orb',
@@ -1671,7 +1715,7 @@ it('attaches selected text to the composer until the first send or dismiss', asy
       dragBegin: vi.fn(),
       dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
       dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
-        expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+        expanded: false, horizontal: 'left', vertical: 'up', docked: undefined, strip: 0,
       })),
       setExpanded,
       orbWorkspacePath: async () => '/tmp/dsh_orb',
@@ -1785,7 +1829,7 @@ it('places an attached selection chip below the input when the panel expands dow
         dragBegin: vi.fn(),
         dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
         dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
-          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined, strip: 0,
         })),
         setExpanded: async (expanded: boolean) => ({ expanded, horizontal: 'left', vertical: 'down' }),
         orbWorkspacePath: async () => '/tmp/dsh_orb',
@@ -1859,7 +1903,7 @@ it('applies a live overlay model change without writing the Agent default', asyn
         dragBegin: vi.fn(),
         dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
         dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
-          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined, strip: 0,
         })),
         setExpanded: vi.fn(async (expanded: boolean) => ({
           expanded, horizontal: 'left', vertical: 'up',
@@ -1965,7 +2009,7 @@ it('creates a blank overlay session from Host New IPC without selectModel-as-enc
         dragBegin: vi.fn(),
         dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
         dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
-          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined, strip: 0,
         })),
         setExpanded: vi.fn(async (expanded: boolean) => ({
           expanded, horizontal: 'left', vertical: 'up',
@@ -2040,7 +2084,7 @@ it('sends from the overlay when Access IPC is missing', async () => {
         dragBegin: vi.fn(),
         dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
         dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
-          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined, strip: 0,
         })),
         setExpanded: vi.fn(async (expanded: boolean) => ({
           expanded, horizontal: 'left', vertical: 'up',
@@ -2111,7 +2155,7 @@ it('applies a pushed custom avatar URL to the ball image', async () => {
         dragBegin: vi.fn(),
         dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
         dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
-          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined, strip: 0,
         })),
         setExpanded: vi.fn(async (expanded: boolean) => ({
           expanded, horizontal: 'left', vertical: 'up',
@@ -2197,7 +2241,7 @@ it('covers the overlay with the TCC gate on first expand and blocks send', async
         dragBegin: vi.fn(),
         dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
         dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
-          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined, strip: 0,
         })),
         setExpanded: vi.fn(async (expanded: boolean) => ({
           expanded, horizontal: 'left', vertical: 'up',
@@ -2303,7 +2347,7 @@ it('hides the TCC gate when both rights are already granted', async () => {
         dragBegin: vi.fn(),
         dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
         dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
-          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined, strip: 0,
         })),
         setExpanded: vi.fn(async (expanded: boolean) => ({
           expanded, horizontal: 'left', vertical: 'up',
@@ -2378,7 +2422,7 @@ function overlayBackendHarness(phase: 'ready' | 'starting') {
         dragBegin: vi.fn(),
         dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
         dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
-          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined, strip: 0,
         })),
         setExpanded: async (expanded: boolean) => ({ expanded, horizontal: 'left', vertical: 'up' }),
         orbWorkspacePath: async () => '/tmp/dsh_orb',

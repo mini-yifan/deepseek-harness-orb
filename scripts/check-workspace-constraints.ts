@@ -235,9 +235,11 @@ const packageFileExtras: Readonly<Record<string, readonly string[]>> = {
   // The headless entry and its startup row share the JSON projection code
   // through a hashed tsdown chunk; both import it by relative path.
   '@deepseek-ai/dsh-headless': ['lib/json-stream-*.js'],
-  // Computer Use GUI tools plus the overlay code_agent and the macOS capture helper.
+  // Computer Use GUI tools plus the overlay code_agent, the bookmark registry,
+  // and the macOS capture helper.
   '@deepseek-ai/dsh-experimental-tool-computer-use': [
     'lib/code-agent.js',
+    'lib/code-agent-registry.js',
     'lib/macos-sck-capture',
     'lib/libmacos-sck-capture.dylib',
   ],

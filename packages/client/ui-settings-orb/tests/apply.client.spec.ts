@@ -45,7 +45,7 @@ const CATALOG = {
   },
 }
 
-async function bench() {
+async function bench(options?: { openSession?: (target: unknown) => void }) {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry).await()
   const locale = new LocaleRuntime(ctx)
@@ -57,6 +57,7 @@ async function bench() {
   > => Promise.resolve(CATALOG))
   new TestRemote(ctx, { session: { modelCatalog: models } })
   await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
+  ctx.provide('uiWorkspace', { openSession: options?.openSession ?? vi.fn() } as never)
   return { ctx, slots: ctx.get('slots') as SlotRegistry, models }
 }
 
@@ -75,7 +76,7 @@ describe('ui-settings-orb apply', () => {
   })
 
   it('declares the services it uses', () => {
-    expect(inject).toEqual(['slots', 'locale', 'remote', 'remote.session'])
+    expect(inject).toEqual(['slots', 'locale', 'remote', 'remote.session', 'uiWorkspace'])
   })
 
   it('registers the floating-ball section after Agent presets', async () => {
@@ -86,6 +87,26 @@ describe('ui-settings-orb apply', () => {
     expect(section.component).toBe(OrbSettingsSection)
     expect(section.options).toMatchObject({ id: 'orb', order: 25 })
     expect(resolveSlotLabel(section.options.label)).toBe('悬浮球')
+  })
+
+  it('opens a background session when the ball asks through the Desktop bridge', async () => {
+    const openSession = vi.fn()
+    const listeners: ((sessionId: string) => void)[] = []
+    vi.stubGlobal('dshDesktop', {
+      protocolVersion: 1,
+      orb: {
+        onOpenSession: (listener: (sessionId: string) => void) => {
+          listeners.push(listener)
+          return () => undefined
+        },
+      },
+    })
+    const { ctx, slots } = await bench({ openSession })
+    declareRoot(slots)
+    await ctx.plugin({ inject: [...inject], apply }).await()
+    expect(listeners).toHaveLength(1)
+    listeners[0]?.('session-42')
+    expect(openSession).toHaveBeenCalledExactlyOnceWith('session-42')
   })
 
   it('registers into a declaration that arrives after apply', async () => {
@@ -122,6 +143,7 @@ describe('ui-settings-orb apply', () => {
         setSelectionEnabled: vi.fn(async () => undefined),
         setMillifractionEnabled: vi.fn(async (): Promise<OrbMillifractionWriteResult> => ({ cancelled: true })),
         openTcc: vi.fn(async () => snapshot),
+        onOpenSession: () => () => undefined,
       },
     }
     vi.stubGlobal('dshDesktop', api)
@@ -229,6 +251,7 @@ describe('ui-settings-orb apply', () => {
         setSelectionEnabled: vi.fn(async () => { throw new Error('selection failed') }),
         setMillifractionEnabled: vi.fn(async () => { throw new Error('millifraction failed') }),
         openTcc: vi.fn(async () => { throw new Error('tcc failed') }),
+        onOpenSession: () => () => undefined,
       },
     }
     vi.stubGlobal('dshDesktop', api)

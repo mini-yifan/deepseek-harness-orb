@@ -47,7 +47,24 @@ interface SckCaptureEvent {
   readonly output: string
 }
 
-type DesktopHostEvent = ReadyEvent | FatalEvent | PlatformSessionEvent | OverlayGuardEvent | ObservationFrameEvent | SckCaptureEvent | { readonly type: 'shutdown-complete' } | {
+/** One bookmark the floating ball's agent strip renders. */
+export interface OrbAgentItem {
+  readonly sessionId: string
+  readonly task: string
+  readonly cwd: string
+  readonly state: 'running' | 'completed' | 'stopped'
+  readonly startedAt: number
+  readonly endedAt?: number
+  readonly outcome?: string
+  readonly unread: boolean
+}
+
+interface OrbAgentsEvent {
+  readonly type: 'orb-agents'
+  readonly items: readonly OrbAgentItem[]
+}
+
+type DesktopHostEvent = ReadyEvent | FatalEvent | PlatformSessionEvent | OverlayGuardEvent | ObservationFrameEvent | SckCaptureEvent | OrbAgentsEvent | { readonly type: 'shutdown-complete' } | {
   readonly type: 'update-tasks'
   readonly requestId: number
   readonly active: boolean
@@ -81,12 +98,14 @@ export type DesktopHostOrbCommand =
     readonly model: string
     readonly reasoningEffort?: string
   }
+  | { readonly type: 'orb-agent-open'; readonly sessionId: string }
 
 /** Electron-side handlers for Computer Use overlay IPC. */
 export interface DesktopOrbHostHandlers {
   onOverlayGuard?(event: OverlayGuardEvent): readonly number[] | void | Promise<readonly number[] | void>
   onObservationFrame?(event: ObservationFrameEvent): void | Promise<void>
   onSckCapture?(event: SckCaptureEvent): void | Promise<void>
+  onOrbAgents?(event: OrbAgentsEvent): void | Promise<void>
 }
 
 const MAX_HOST_DIAGNOSTIC_CHARS = 64 * 1024
@@ -132,15 +151,30 @@ function isDesktopHostEvent(message: unknown): message is DesktopHostEvent {
         && (candidate.mode === 'capture' || candidate.mode === 'input')
     case 'observation-frame':
       return Number.isSafeInteger(candidate.requestId)
-        && (candidate.bounds === null || (typeof candidate.bounds === 'object' && candidate.bounds !== null))
+        && (candidate.bounds === null || typeof candidate.bounds === 'object')
     case 'sck-capture':
       return Number.isSafeInteger(candidate.requestId)
         && typeof candidate.region === 'string'
         && Array.isArray(candidate.excludeWindowIds)
         && typeof candidate.output === 'string'
+    case 'orb-agents':
+      return Array.isArray(candidate.items) && candidate.items.every(isOrbAgentItem)
     default:
       return false
   }
+}
+
+function isOrbAgentItem(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null) return false
+  const item = value as Record<string, unknown>
+  return typeof item.sessionId === 'string'
+    && typeof item.task === 'string'
+    && typeof item.cwd === 'string'
+    && (item.state === 'running' || item.state === 'completed' || item.state === 'stopped')
+    && typeof item.startedAt === 'number'
+    && typeof item.unread === 'boolean'
+    && (item.endedAt === undefined || typeof item.endedAt === 'number')
+    && (item.outcome === undefined || typeof item.outcome === 'string')
 }
 
 async function exitsWithin(exit: Promise<void>, milliseconds: number): Promise<boolean> {
@@ -287,6 +321,11 @@ export class DesktopHostProcess {
             requestId: message.requestId,
             error: error instanceof Error ? error.message : String(error),
           })
+        })
+      }
+      else if (message.type === 'orb-agents') {
+        void Promise.resolve(this.orb?.onOrbAgents?.(message)).catch((error: unknown) => {
+          console.error(`dsh desktop: orb agent push failed: ${error instanceof Error ? error.message : String(error)}`)
         })
       }
       else if (message.type === 'shutdown-complete') {

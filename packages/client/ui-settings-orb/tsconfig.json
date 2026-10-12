@@ -30,6 +30,9 @@
       "path": "../ui-slots"
     },
     {
+      "path": "../ui-workspace"
+    },
+    {
       "path": "../../api/remotes/tsconfig.client.json"
     }
   ]

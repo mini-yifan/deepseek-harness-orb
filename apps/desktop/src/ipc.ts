@@ -37,6 +37,7 @@ export const DESKTOP_IPC = {
   floatingDragBegin: 'dsh-desktop:floating-drag-begin',
   floatingDragMove: 'dsh-desktop:floating-drag-move',
   floatingDragEnd: 'dsh-desktop:floating-drag-end',
+  floatingSetStrip: 'dsh-desktop:floating-set-strip',
   floatingUnsnap: 'dsh-desktop:floating-unsnap',
   floatingSetExpanded: 'dsh-desktop:floating-set-expanded',
   floatingSessionGet: 'dsh-desktop:floating-session-get',
@@ -58,6 +59,9 @@ export const DESKTOP_IPC = {
   floatingTccRelaunch: 'dsh-desktop:floating-tcc-relaunch',
   floatingTcc: 'dsh-desktop:floating-tcc',
   floatingCreateSession: 'dsh-desktop:floating-create-session',
+  floatingAgents: 'dsh-desktop:floating-agents',
+  floatingAgentOpen: 'dsh-desktop:floating-agent-open',
+  openSession: 'dsh-desktop:open-session',
   floatingLocale: 'dsh-desktop:floating-locale',
   backendStatus: 'dsh-desktop:backend-status',
   backendState: 'dsh-desktop:backend-state',
@@ -96,6 +100,9 @@ export interface DshDesktopApi {
     dragBegin(): Promise<unknown>
     dragMove(canDock?: boolean): Promise<unknown>
     dragEnd(canDock?: boolean): Promise<unknown>
+    setStrip(width: number): Promise<unknown>
+    onAgents(listener: (items: unknown) => void): () => void
+    openAgent(sessionId: string): Promise<unknown>
     orbWorkspacePath(): Promise<unknown>
     setSessionRunning(running: boolean): Promise<unknown>
     setTextEditing(editing: boolean): Promise<unknown>
@@ -203,6 +210,12 @@ export interface DshDesktopProductApi {
     setSelectionEnabled(enabled: boolean): Promise<void>
     setMillifractionEnabled(enabled: boolean): Promise<OrbMillifractionWriteResult>
     openTcc(right: TccRight): Promise<OrbSettingsSnapshot>
+    /**
+     * Open one session in this window, as the floating ball's agent strip requests.
+     * @param listener - called with the background Code session id.
+     * @returns an unsubscribe function.
+     */
+    onOpenSession(listener: (sessionId: string) => void): () => void
   }
 }
 

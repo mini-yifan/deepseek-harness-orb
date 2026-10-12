@@ -13,8 +13,9 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { SessionCreateRequest, SessionRequestId } from '@deepseek-ai/dsh-api-session-controller/types'
-import { watchCodeAgentCompletion } from './code-agent-completion.ts'
+import { sharedCodeAgentRegistry } from './code-agent-registry.ts'
 import { attachUnattendedCodeAgent } from './code-agent-unattended.ts'
+import { watchCodeAgentCompletion } from './code-agent-completion.ts'
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-tools'
@@ -220,12 +221,14 @@ function rememberCaller(
     liveCaller.ctx.effect(() => {
       return () => {
         byCaller.delete(callerId)
+        sharedCodeAgentRegistry().dropCaller(callerId)
         remembered.delete(liveCaller)
       }
     })
   } catch {
     remembered.delete(liveCaller)
     byCaller.delete(callerId)
+    sharedCodeAgentRegistry().dropCaller(callerId)
   }
 }
 
@@ -400,6 +403,15 @@ export function apply(ctx: Context): void {
         })
       }
       recordDelegation(delegations, sessionId, task, cwd, watch)
+      sharedCodeAgentRegistry().record({
+        sessionId,
+        callerId: caller.id,
+        task,
+        cwd,
+        requestId,
+        ...(watch === undefined ? {} : { watch }),
+        ...(code === undefined ? {} : { agent: code }),
+      })
       return { accepted: true, created, session_id: sessionId }
     },
   }))
@@ -505,6 +517,7 @@ export function apply(ctx: Context): void {
       }
       for (const watch of known.watches.splice(0)) watch.abort()
       ctx.get('agents')?.get(sessionId)?.cancel({ kind: 'user' })
+      sharedCodeAgentRegistry().markStopped(sessionId)
       return { accepted: true, session_id: sessionId }
     },
   }))

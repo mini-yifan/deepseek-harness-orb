@@ -4,6 +4,8 @@ const COLLAPSE_MS = 180
 const ANIMATION_MS = 300
 const DOCK_HOVER_DELAY_MS = 800
 const DOCK_DRAG_OFF_PX = 24
+/** Mirrors `FLOATING_AGENT_STRIP_WIDTH` in the main process. */
+const AGENT_STRIP_WIDTH = 208
 const REMOTE_STREAM_URL = 'dsh-app://app/.dsh/remote-stream'
 const USER_QUESTION_CANCELLED = 'the user cancelled ask_user_question'
 const RECOMMENDED_SUFFIX = /\s*(?:\((?:recommended|推荐)\)|（(?:recommended|推荐)）)\s*$/i
@@ -208,6 +210,8 @@ async function main() {
   const questionContinue = document.querySelector('#question-continue')
   const questionCancel = document.querySelector('#question-cancel')
   const historyList = document.querySelector('#history-list')
+  const agentStrip = document.querySelector('#agent-strip')
+  agentStrip.setAttribute('aria-label', messages.floatingAgentsLabel)
   const status = document.querySelector('#status')
   const prompt = document.querySelector('#prompt')
   const composer = document.querySelector('#composer')
@@ -319,6 +323,7 @@ async function main() {
   let collapseTimer = undefined
   let collapseFrame = undefined
   let attachedSelection = ''
+  let agents = []
   const orbSessionIds = new Set()
   const pendingBySession = new Map()
   const settledEventIds = new Set()
@@ -364,6 +369,7 @@ async function main() {
 
   void api.floating.avatarUrl?.().then(applyAvatarUrl)
   api.floating.onAvatar?.(applyAvatarUrl)
+  api.floating.onAgents?.(applyAgents)
 
   function currentPending() {
     return sessionId === undefined ? undefined : pendingBySession.get(sessionId)
@@ -422,6 +428,78 @@ async function main() {
     document.body.classList.toggle('expand-right', state.horizontal === 'right')
     document.body.classList.toggle('expand-up', state.vertical === 'up')
     document.body.classList.toggle('expand-down', state.vertical === 'down')
+    applyStrip(state)
+  }
+
+  /** Apply the agent-strip reserve the main process confirmed. */
+  function applyStrip(state) {
+    const width = typeof state?.strip === 'number' && state.strip > 0 ? state.strip : 0
+    document.body.classList.toggle('has-strip', width > 0)
+    document.body.style.setProperty('--strip-w', `${width}px`)
+  }
+
+  function agentStateLabel(item) {
+    if (item.state === 'running') return messages.floatingAgentRunning
+    if (item.state === 'stopped') return messages.floatingAgentStopped
+    return messages.floatingAgentCompleted
+  }
+
+  function agentTooltip(item) {
+    const lines = [`${agentStateLabel(item)}: ${item.task}`, `${messages.floatingAgentCwd}: ${item.cwd}`]
+    if (typeof item.outcome === 'string' && item.outcome !== '') {
+      lines.push(`${messages.floatingAgentOutcome}: ${item.outcome}`)
+    }
+    return lines.join('\n')
+  }
+
+  function agentMark(item) {
+    const mark = document.createElement('span')
+    mark.className = 'agent-chip-mark'
+    mark.setAttribute('aria-hidden', 'true')
+    mark.textContent = item.state === 'running' ? '◌' : item.state === 'stopped' ? '⊘' : '✓'
+    return mark
+  }
+
+  function renderAgents() {
+    if (pageClosed()) return
+    agentStrip.replaceChildren()
+    for (const item of agents) {
+      const chip = document.createElement('button')
+      chip.type = 'button'
+      chip.className = 'agent-chip'
+      chip.dataset.state = item.state
+      chip.title = agentTooltip(item)
+      chip.setAttribute('aria-label', agentTooltip(item))
+      chip.append(agentMark(item))
+      const label = document.createElement('span')
+      label.className = 'agent-chip-label'
+      label.textContent = item.task
+      chip.append(label)
+      if (item.unread === true) {
+        const dot = document.createElement('span')
+        dot.className = 'agent-chip-unread'
+        dot.setAttribute('aria-hidden', 'true')
+        chip.append(dot)
+      }
+      chip.addEventListener('click', () => { void api.floating.openAgent?.(item.sessionId) })
+      agentStrip.append(chip)
+    }
+    const width = agents.length === 0 ? 0 : AGENT_STRIP_WIDTH
+    void api.floating.setStrip?.(width).then(result => {
+      if (result !== undefined && result !== null) applyStrip(result)
+    })
+  }
+
+  function applyAgents(items) {
+    if (!Array.isArray(items)) return
+    agents = items.filter(item => (
+      typeof item === 'object' && item !== null
+      && typeof item.sessionId === 'string'
+      && typeof item.task === 'string'
+      && typeof item.cwd === 'string'
+      && (item.state === 'running' || item.state === 'completed' || item.state === 'stopped')
+    ))
+    renderAgents()
   }
 
   function clearDockHoverTimer() {

@@ -171,6 +171,8 @@ export interface FloatingExpandState extends FloatingDockState {
   readonly expanded: boolean
   readonly horizontal: FloatingHorizontalExpand
   readonly vertical: FloatingVerticalExpand
+  /** Reserved agent-strip width on the far edge; 0 when there is nothing to show. */
+  readonly strip: number
 }
 
 /**
@@ -220,6 +222,13 @@ export const FLOATING_DOCK_SLIDE_IN_MS = 300
 export const FLOATING_DOCK_TAB_FILL = '#75757F'
 
 /**
+ * Reserve on the panel's far edge for the background-agent strip.
+ * Sized for the fully hover-expanded chip row; collapsed chips sit at the
+ * panel-side edge inside it.
+ */
+export const FLOATING_AGENT_STRIP_WIDTH = 208
+
+/**
  * Chromium turns a DIP window size into device pixels with an enclosing rect, then converts
  * it back the same way. Whenever `size * scaleFactor` is not an integer (120% is 115.2), a
  * 96px ball window can read back 97. The panel is hundreds of pixels larger, so a few DIP
@@ -253,6 +262,9 @@ const overlayDragging = new WeakMap<BrowserWindow, boolean>()
  * chrome leaves the ball a chrome-width short of the edge it was aimed at.
  */
 const overlayPlacedOrigin = new WeakMap<BrowserWindow, { readonly x: number; readonly y: number }>()
+
+/** Agent-strip width reserved on the panel's far edge; 0 when the strip is hidden. */
+const overlayStrip = new WeakMap<BrowserWindow, number>()
 
 interface OverlayAnim {
   cancelled: boolean
@@ -312,8 +324,9 @@ function expandState(
   expanded: boolean,
   direction: { readonly horizontal: FloatingHorizontalExpand; readonly vertical: FloatingVerticalExpand },
   docked: FloatingDockSide | undefined,
+  strip: number,
 ): FloatingExpandState {
-  return { expanded, horizontal: direction.horizontal, vertical: direction.vertical, docked }
+  return { expanded, horizontal: direction.horizontal, vertical: direction.vertical, docked, strip }
 }
 
 /**
@@ -627,9 +640,10 @@ export function defaultFloatingBallOrigin(workArea: OverlayRect): { x: number; y
 export function expandedOverlayBounds(
   ball: { readonly x: number; readonly y: number },
   workArea: OverlayRect,
+  stripWidth = 0,
 ): OverlayRect & { horizontal: FloatingHorizontalExpand; vertical: FloatingVerticalExpand } {
   const direction = expandDirection(ball, workArea)
-  const unclamped = overlayBoundsFromBall(ball, direction)
+  const unclamped = overlayBoundsFromBall(ball, direction, stripWidth)
   return {
     x: clampWindowOrigin(unclamped.x, workArea.x, workArea.width, unclamped.width),
     y: clampWindowOrigin(unclamped.y, workArea.y, workArea.height, unclamped.height),
@@ -642,12 +656,15 @@ export function expandedOverlayBounds(
 function overlayBoundsFromBall(
   ball: { readonly x: number; readonly y: number },
   direction: { readonly horizontal: FloatingHorizontalExpand; readonly vertical: FloatingVerticalExpand },
+  stripWidth = 0,
 ): OverlayRect {
-  const width = FLOATING_PANEL_WINDOW_SIZE.width
+  const width = FLOATING_PANEL_WINDOW_SIZE.width + stripWidth
   const height = FLOATING_PANEL_WINDOW_SIZE.height
   return {
+    // The strip widens the far edge only; the ball-anchored near edge is untouched,
+    // so `ballOriginFromWindow` needs no strip awareness.
     x: direction.horizontal === 'left'
-      ? ball.x - (FLOATING_PANEL_SIZE.width - FLOATING_BALL_SIZE) - FLOATING_CHROME_INSET
+      ? ball.x - (FLOATING_PANEL_SIZE.width - FLOATING_BALL_SIZE) - FLOATING_CHROME_INSET - stripWidth
       : ball.x - FLOATING_CHROME_INSET,
     y: direction.vertical === 'up'
       ? ball.y - (FLOATING_PANEL_SIZE.height - FLOATING_BALL_SIZE) - FLOATING_CHROME_INSET
@@ -691,7 +708,7 @@ function floatingExpandState(window: BrowserWindow): FloatingExpandState {
   const docked = overlayDock.get(window)?.side
   const direction = overlayDirection.get(window)
     ?? expandDirection({ x: bounds.x, y: bounds.y }, displayGeometry(windowCenter(bounds)).workArea)
-  return expandState(!isCollapsedOverlay(bounds) && docked === undefined, direction, docked)
+  return expandState(!isCollapsedOverlay(bounds) && docked === undefined, direction, docked, overlayStrip.get(window) ?? 0)
 }
 
 /**
@@ -821,23 +838,24 @@ export function setFloatingExpanded(window: BrowserWindow, expanded: boolean): F
   // Any explicit placement stops a slide still in flight, or its frames would overwrite
   // the window this call just set.
   cancelOverlayAnim(window)
+  const strip = overlayStrip.get(window) ?? 0
   if (expanded) {
     const origin = currentBallOrigin(window, workArea)
     clearDock(window)
-    const next = expandedOverlayBounds(origin, workArea)
+    const next = expandedOverlayBounds(origin, workArea, strip)
     overlayDirection.set(window, { horizontal: next.horizontal, vertical: next.vertical })
     window.setBounds({ x: next.x, y: next.y, width: next.width, height: next.height })
-    return expandState(true, next, undefined)
+    return expandState(true, next, undefined, strip)
   }
   const direction = overlayDirection.get(window) ?? expandDirection({ x: bounds.x, y: bounds.y }, workArea)
   const docked = overlayDock.get(window)
   if (docked !== undefined) {
     applyDockedTab(window, docked.side, docked.y, workArea)
-    return expandState(false, direction, docked.side)
+    return expandState(false, direction, docked.side, strip)
   }
   const origin = clampedBallOrigin(currentBallOrigin(window, workArea), workArea)
   window.setBounds(collapsedWindowBounds(origin))
-  return expandState(false, direction, undefined)
+  return expandState(false, direction, undefined, strip)
 }
 
 /**
@@ -863,7 +881,7 @@ export function moveFloatingBall(
   if (!isCollapsedOverlay(bounds) && overlayDock.get(window) === undefined) {
     const stored = overlayDirection.get(window)
     const direction = stored ?? expandDirection(origin, workAreaOf(origin))
-    window.setBounds(overlayBoundsFromBall(origin, direction))
+    window.setBounds(overlayBoundsFromBall(origin, direction, overlayStrip.get(window) ?? 0))
     return { docked: undefined }
   }
   if (!canDock) {
@@ -881,6 +899,30 @@ export function moveFloatingBall(
   cancelOverlayAnim(window)
   window.setBounds(collapsedWindowBounds(origin))
   return { docked: undefined }
+}
+
+/**
+ * Reserve (or free) agent-strip width on the panel's far edge. While expanded the
+ * window re-bounds immediately around the fixed ball origin; while collapsed the
+ * value is stored for the next expand.
+ * @param window - floating overlay.
+ * @param width - reserved width in CSS pixels; 0 frees the reserve.
+ * @returns overlay size, growth, dock side, and the stored strip width.
+ */
+export function setFloatingStrip(window: BrowserWindow, width: number): FloatingExpandState {
+  const next = Math.max(0, Math.round(width))
+  const stored = overlayStrip.get(window) ?? 0
+  if (next === stored) return floatingExpandState(window)
+  overlayStrip.set(window, next)
+  const bounds = window.getBounds()
+  if (!isCollapsedOverlay(bounds) && overlayDock.get(window) === undefined) {
+    const display = displayGeometry(windowCenter(bounds))
+    const origin = currentBallOrigin(window, display.workArea)
+    const nextBounds = expandedOverlayBounds(origin, display.workArea, next)
+    overlayDirection.set(window, { horizontal: nextBounds.horizontal, vertical: nextBounds.vertical })
+    window.setBounds({ x: nextBounds.x, y: nextBounds.y, width: nextBounds.width, height: nextBounds.height })
+  }
+  return floatingExpandState(window)
 }
 
 /**

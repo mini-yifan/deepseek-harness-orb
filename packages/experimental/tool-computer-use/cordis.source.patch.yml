@@ -1,7 +1,11 @@
 # Source overlay for experimental Computer Use. Tool rows load TypeScript
 # through the CLI tsx loader. Not part of dsh-base.
+# The registry row is top level on purpose: a provide from inside the preset
+# lands in the root realm and the preset-mount audit rejects it.
 
 - insert:
+    - id: computer-use-code-agent-registry
+      name: './src/code-agent-registry.ts'
     - id: preset-computer-use
       name: '@deepseek-ai/dsh-agent-preset'
       config:

@@ -30,6 +30,7 @@ import * as computerUseOrbCodeAgentModel from './computer-use-orb-code-agent-mod
 import { setOrbCodeAgentModelSelection } from './computer-use-orb-code-agent-model.ts'
 import { existsSync } from 'node:fs'
 import { registerDesktopRemoteStream } from './remote-stream-route.ts'
+import { installOrbAgentPublisher, markOrbAgentRead } from './orb-agents.ts'
 
 async function main(): Promise<void> {
   const runtimeDir = process.argv[2] as string
@@ -125,6 +126,10 @@ async function main(): Promise<void> {
       })
       return
     }
+    if (message.type === 'orb-agent-open' && 'sessionId' in message && typeof message.sessionId === 'string') {
+      markOrbAgentRead(message.sessionId)
+      return
+    }
     if (message.type !== 'update-tasks' || !('requestId' in message) || !Number.isSafeInteger(message.requestId)
       || !('action' in message) || !['inspect', 'lock', 'unlock'].includes(String(message.action))) return
     void (async () => {
@@ -145,6 +150,7 @@ async function main(): Promise<void> {
   await ctx.plugin(computerUseOrbPermission)
   await ctx.plugin(computerUseOrbCoordinateMode)
   await ctx.plugin(computerUseOrbCodeAgentModel)
+  installOrbAgentPublisher(ctx, send)
   control.updateTasks = installDesktopUpdateTaskControl(ctx)
   control.quitInspection = installDesktopQuitInspection(ctx)
   await ctx.plugin(desktopOffice, {

@@ -1,8 +1,12 @@
 # Desktop overlay for experimental Computer Use.
-# Inserts one agent preset. GUI tools stay on that preset and are not on the
-# default coding preset. Not part of dsh-base.
+# Inserts the bookmark registry and one agent preset. GUI tools stay on that
+# preset and are not on the default coding preset. The registry row is top
+# level on purpose: a provide from inside the preset lands in the root realm
+# and the preset-mount audit rejects it.
 
 - insert:
+    - id: computer-use-code-agent-registry
+      name: '@deepseek-ai/dsh-experimental-tool-computer-use/code-agent-registry'
     - id: preset-computer-use
       name: '@deepseek-ai/dsh-agent-preset'
       config:

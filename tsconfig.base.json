@@ -331,6 +331,7 @@
       "@deepseek-ai/dsh-experimental-tool-agent-team": ["./packages/experimental/tool-agent-team/src"],
       "@deepseek-ai/dsh-experimental-tool-computer-use": ["./packages/experimental/tool-computer-use/src"],
       "@deepseek-ai/dsh-experimental-tool-computer-use/code-agent": ["./packages/experimental/tool-computer-use/src/code-agent.ts"],
+      "@deepseek-ai/dsh-experimental-tool-computer-use/code-agent-registry": ["./packages/experimental/tool-computer-use/src/code-agent-registry.ts"],
       "@deepseek-ai/dsh-experimental-worktree": ["./packages/experimental/worktree/src"],
       "@deepseek-ai/dsh-experimental-tool-worktree": ["./packages/experimental/tool-worktree/src"],
       "@deepseek-ai/dsh-experimental-webworker-runtime": ["./packages/experimental/webworker-runtime/src"],

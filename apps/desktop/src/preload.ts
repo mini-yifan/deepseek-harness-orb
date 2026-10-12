@@ -8,7 +8,14 @@ const floating = {
   dragBegin: () => ipcRenderer.invoke(DESKTOP_IPC.floatingDragBegin),
   dragMove: (canDock?: boolean) => ipcRenderer.invoke(DESKTOP_IPC.floatingDragMove, canDock),
   dragEnd: (canDock?: boolean) => ipcRenderer.invoke(DESKTOP_IPC.floatingDragEnd, canDock),
+  setStrip: (width: number) => ipcRenderer.invoke(DESKTOP_IPC.floatingSetStrip, width),
   unsnap: () => ipcRenderer.invoke(DESKTOP_IPC.floatingUnsnap),
+  onAgents: (listener: (items: unknown) => void) => {
+    const handle = (_event: Electron.IpcRendererEvent, items: unknown): void => { listener(items) }
+    ipcRenderer.on(DESKTOP_IPC.floatingAgents, handle)
+    return () => { ipcRenderer.off(DESKTOP_IPC.floatingAgents, handle) }
+  },
+  openAgent: (sessionId: string) => ipcRenderer.invoke(DESKTOP_IPC.floatingAgentOpen, sessionId),
   setExpanded: (expanded: boolean) => ipcRenderer.invoke(DESKTOP_IPC.floatingSetExpanded, expanded),
   sessionId: () => ipcRenderer.invoke(DESKTOP_IPC.floatingSessionGet),
   setSessionId: (sessionId: string) => ipcRenderer.invoke(DESKTOP_IPC.floatingSessionSet, sessionId),

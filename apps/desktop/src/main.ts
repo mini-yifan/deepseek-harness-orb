@@ -48,6 +48,7 @@ import {
   pressFloatingBall,
   resetFloatingOverlayGuard,
   setFloatingExpanded,
+  setFloatingStrip,
   unsnapDockedBall,
 } from './floating-window.ts'
 import { ensureOrbWorkspaceDir, readFloatingSessionId, writeFloatingSessionId } from './floating-session.ts'
@@ -1005,6 +1006,11 @@ async function main(): Promise<void> {
     excludeWindowIds: event.excludeWindowIds,
     output: event.output,
   })
+  orbHostHandlers.onOrbAgents = (event) => {
+    const window = floatingShell
+    if (window === undefined || window.isDestroyed()) return
+    window.webContents.send(DESKTOP_IPC.floatingAgents, event.items)
+  }
   const shellSender = (event: IpcMainInvokeEvent): void => {
     if (event.sender !== floatingWindow.webContents) throw new Error('dsh desktop: rejected floating IPC')
   }
@@ -1037,6 +1043,26 @@ async function main(): Promise<void> {
   ipcMain.handle(DESKTOP_IPC.floatingSetExpanded, (event, expanded: unknown) => {
     shellSender(event)
     return setFloatingExpanded(floatingWindow, expanded === true)
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingSetStrip, (event, width: unknown) => {
+    shellSender(event)
+    if (typeof width !== 'number' || !Number.isFinite(width) || width < 0) {
+      throw new Error('dsh desktop: invalid floating strip width')
+    }
+    return setFloatingStrip(floatingWindow, width)
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingAgentOpen, (event, sessionId: unknown) => {
+    shellSender(event)
+    if (typeof sessionId !== 'string' || sessionId === '') throw new Error('dsh desktop: invalid agent session')
+    backend.host?.sendOrb({ type: 'orb-agent-open', sessionId })
+    // The strip opens the session in the main window: show it and hand the id to the
+    // renderer, which selects the session through its own workspace service.
+    const window = mainWindow
+    if (window !== undefined && !window.isDestroyed()) {
+      window.show()
+      window.focus()
+      window.webContents.send(DESKTOP_IPC.openSession, sessionId)
+    }
   })
   ipcMain.handle(DESKTOP_IPC.floatingSessionGet, (event) => {
     shellSender(event)

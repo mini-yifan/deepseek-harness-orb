@@ -27,6 +27,7 @@ import {
   expandDirection,
   expandedOverlayBounds,
   floatingContextMenuTemplate,
+  FLOATING_AGENT_STRIP_WIDTH,
   FLOATING_BALL_DEFAULT_BELOW_CENTER,
   FLOATING_BALL_SIZE,
   FLOATING_BALL_WINDOW_SIZE,
@@ -46,6 +47,7 @@ import {
   pressFloatingBall,
   resetFloatingOverlayGuard,
   setFloatingExpanded,
+  setFloatingStrip,
   unsnapDockedBall,
 } from '../src/floating-window.ts'
 
@@ -168,12 +170,30 @@ describe('floating window expand geometry', () => {
       horizontal: 'left',
       vertical: 'up',
       docked: undefined,
+      strip: 0,
     })
     expect(window.setBounds).toHaveBeenCalledWith(expandedAt(900, 400, 'left', 'up'))
     window.getBounds.mockReturnValue(collapsedAt(80, 40))
     await clampFloatingWindow(window as never)
     expect(window.setBounds).toHaveBeenCalledWith(collapsedAt(100, 50))
     expect(window.setPosition).not.toHaveBeenCalled()
+  })
+
+  it('reserves agent-strip width on the far edge and keeps the ball origin', async () => {
+    await mockScreen()
+    const window = overlayAt(900, 400)
+    const expanded = setFloatingExpanded(window as never, true)
+    const panelBounds = { ...window.bounds }
+    const state = setFloatingStrip(window as never, FLOATING_AGENT_STRIP_WIDTH)
+    expect(state.strip).toBe(FLOATING_AGENT_STRIP_WIDTH)
+    expect(state.expanded).toBe(true)
+    expect(window.bounds.width).toBe(panelBounds.width + FLOATING_AGENT_STRIP_WIDTH)
+    expect(window.bounds.x).toBe(panelBounds.x - FLOATING_AGENT_STRIP_WIDTH)
+    expect(ballOriginFromWindow(window.bounds, state)).toEqual({ x: 900, y: 400 })
+    const freed = setFloatingStrip(window as never, 0)
+    expect(freed.strip).toBe(0)
+    expect(window.bounds).toEqual(panelBounds)
+    expect(expanded.strip).toBe(0)
   })
 
   it('moves an expanded overlay by ball origin without clamping the panel', async () => {

@@ -9,6 +9,11 @@
   --chrome: 12px;
   --panel-radius: 36px;
   --selection-chip: 28px;
+  /* Agent-strip reserve on the panel's far edge; the main process widens the
+     window by the same amount, so the panel keeps its near edge on the ball. */
+  --strip-w: 0px;
+  --panel-left: var(--chrome);
+  --panel-right: var(--chrome);
   --black: #111111;
   --white: #ffffff;
   --input-bg: #eeeeee;
@@ -44,7 +49,10 @@ body {
 
 #panel {
   position: absolute;
-  inset: var(--chrome);
+  top: var(--chrome);
+  bottom: var(--chrome);
+  left: var(--panel-left);
+  right: var(--panel-right);
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -57,6 +65,100 @@ body {
   transform: scale(0.18);
   pointer-events: none;
   transition: opacity 300ms ease-in-out, transform 300ms ease-in-out;
+}
+
+/* The strip widens only the far edge; the panel across it keeps its near edge. */
+body.has-strip.expand-left {
+  --panel-left: calc(var(--chrome) + var(--strip-w));
+}
+
+body.has-strip.expand-right {
+  --panel-right: calc(var(--chrome) + var(--strip-w));
+}
+
+#agent-strip {
+  position: absolute;
+  top: calc(var(--chrome) + 10px);
+  bottom: calc(var(--chrome) + 10px);
+  width: var(--strip-w);
+  display: none;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 6px;
+  overflow: hidden;
+}
+
+body.expanded.has-strip #agent-strip {
+  display: flex;
+}
+
+body.expand-left #agent-strip {
+  left: var(--chrome);
+  align-items: flex-start;
+}
+
+body.expand-right #agent-strip {
+  right: var(--chrome);
+  align-items: flex-end;
+}
+
+.agent-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  max-width: 30px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--black);
+  background: var(--white);
+  box-shadow: var(--panel-shadow);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  transition: max-width 160ms ease-out;
+}
+
+.agent-chip:hover {
+  max-width: 100%;
+}
+
+.agent-chip[data-state="completed"] .agent-chip-mark {
+  color: rgb(24, 128, 56);
+}
+
+.agent-chip[data-state="stopped"] .agent-chip-mark {
+  color: var(--error);
+}
+
+.agent-chip[data-state="running"] .agent-chip-mark {
+  animation: agent-spin 1.4s linear infinite;
+}
+
+.agent-chip-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-chip-unread {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgb(222, 66, 48);
+}
+
+@keyframes agent-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 body.expand-left {
