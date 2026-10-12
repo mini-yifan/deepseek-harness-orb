@@ -8,7 +8,7 @@
   "main": "lib/main.js",
   "scripts": {
     "test:installer": "node scripts/test-windows-installer.mjs",
-    "build": "tsc -b && pnpm run bundle",
+    "build": "tsc -b && pnpm run bundle && node scripts/build-macos-selection.mjs && node scripts/build-macos-sck-napi.mjs",
     "bundle": "tsdown --config-loader native",
     "dev": "tsx scripts/dev.ts",
     "start": "tsx scripts/dev.ts --skip-build",
