@@ -29,16 +29,54 @@ const PATH_BLACKLIST = [
   '/sys',
 ] as const
 
+/** Separators unified, the extended-length prefix dropped, lowercased, so Windows paths compare in one form. */
+function normalizeWindowsPath(path: string): string {
+  return path
+    .replace(/\//gu, '\\')
+    .replace(/^\\\\\?\\/u, '')
+    .replace(/\\+$/u, '')
+    .toLowerCase()
+}
+
+/**
+ * Windows system prefixes that must never be opened, in the {@link normalizeWindowsPath} form.
+ * The environment answers for a Windows installed on another drive (`D:\Windows`), and the
+ * literal `C:` forms stand in when it does not.
+ */
+function windowsSystemPrefixes(): readonly string[] {
+  const root = process.env.SystemRoot ?? process.env.windir ?? 'C:\\Windows'
+  const programFiles = [
+    process.env.ProgramFiles,
+    process.env['ProgramFiles(x86)'],
+    process.env.ProgramW6432,
+    'C:\\Program Files',
+    'C:\\Program Files (x86)',
+  ].filter((entry): entry is string => typeof entry === 'string' && entry !== '')
+  return [
+    root,
+    `${root}\\System32`,
+    // The literal forms stay covered too: a machine with Windows on another drive can still
+    // hold these, and a system-looking path is never worth opening.
+    'C:\\Windows',
+    'C:\\Windows\\System32',
+    ...programFiles,
+  ].map(prefix => normalizeWindowsPath(prefix))
+}
+
 /** UTF-8 multi-byte percent-encoding such as `%E5%88%98`; sparse ASCII like `%20` is allowed. */
 const MULTIBYTE_UTF8_PERCENT = /%(?:[Cc][2-9A-Fa-f]|[Dd][0-9A-Fa-f]|[Ee][0-9A-Fa-f]|[Ff][0-7])(?:%[0-9A-Fa-f]{2})+/u
 
 /**
  * Whether `resolved` is a blocked system prefix.
- * @param resolved - absolute realpath.
+ * @param resolved - absolute path, realpath or not.
  * @returns true when Finder/open must refuse the path.
  */
 export function isForbiddenOpenPath(resolved: string): boolean {
-  return PATH_BLACKLIST.some(prefix => resolved === prefix || resolved.startsWith(`${prefix}/`))
+  if (PATH_BLACKLIST.some(prefix => resolved === prefix || resolved.startsWith(`${prefix}/`))) return true
+  // A Windows prefix only matches a whole path segment: `C:\Users\me\Windows` is the user's
+  // own folder, not the system directory.
+  const windows = normalizeWindowsPath(resolved)
+  return windowsSystemPrefixes().some(prefix => windows === prefix || windows.startsWith(`${prefix}\\`))
 }
 
 /**
@@ -134,6 +172,12 @@ export async function resolveFinderOpen(
     : trimmed.startsWith('~/')
       ? join(home, trimmed.slice(2))
       : trimmed
+  // Blacklist the input before existence: `/etc` never realpaths on Windows, and
+  // a system path must read as forbidden there too. The check below still runs on
+  // the resolved path so a symlink cannot sneak past the blacklist.
+  if (isForbiddenOpenPath(expanded)) {
+    throw new Error(`computer-use: opening a system path is forbidden: ${expanded}`)
+  }
   let resolved: string
   try {
     resolved = await realpath(expanded)

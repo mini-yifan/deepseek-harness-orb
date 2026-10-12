@@ -55,6 +55,12 @@ describe('finder paths', () => {
     expect(isForbiddenOpenPath('/private/etc')).toBe(true)
     expect(isForbiddenOpenPath('/usr/bin')).toBe(true)
     expect(isForbiddenOpenPath('/Users/test/Desktop')).toBe(false)
+    // Windows system prefixes match whole segments, whatever the separator or case.
+    expect(isForbiddenOpenPath('C:\\Windows')).toBe(true)
+    expect(isForbiddenOpenPath('c:/windows/system32')).toBe(true)
+    expect(isForbiddenOpenPath('C:\\Program Files\\app')).toBe(true)
+    expect(isForbiddenOpenPath('C:\\Users\\me\\Windows')).toBe(false)
+    expect(isForbiddenOpenPath('C:\\Users\\me\\Desktop')).toBe(false)
   })
 
   it('resolves omitted path to Desktop and expands ~', async () => {

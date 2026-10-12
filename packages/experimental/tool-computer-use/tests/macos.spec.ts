@@ -87,13 +87,11 @@ function runner(options: {
       }
       return { stdout: '', stderr: '' }
     }
-    if (file === '/usr/sbin/screencapture' || file === macosSckCaptureHelperPath() || file === '/usr/bin/sips') {
+    if (file === '/usr/sbin/screencapture' || file === macosSckCaptureHelperPath()) {
       if (options.capture instanceof Error) throw options.capture
       const output = file === macosSckCaptureHelperPath()
         ? args.find(arg => arg.startsWith('--out='))?.slice('--out='.length)
-        : file === '/usr/bin/sips'
-          ? args[args.indexOf('--out') + 1]
-          : args.at(-1)
+        : args.at(-1)
       if (typeof output !== 'string') throw new Error('missing capture path')
       await writeCaptureFile(output, options.capture ?? FAKE_DESKTOP_PNG)
       return { stdout: '', stderr: '' }
@@ -182,7 +180,7 @@ describe('macOS backend with an injected runner', () => {
     }])
   })
 
-  it('captures JPEG bytes written by screencapture plus sips crop', async () => {
+  it('captures the observed rectangle with one cursor-painted region capture', async () => {
     const files: string[] = []
     const args: string[][] = []
     const backend = createMacosDesktopBackend(runner({ files, args }))
@@ -192,9 +190,9 @@ describe('macOS backend with an injected runner', () => {
     const captured = await backend.capture(screen!)
     expect(captured.mediaType).toBe('image/png')
     expect(captured.data).toEqual(FAKE_DESKTOP_PNG)
-    expect(files).toEqual(['/usr/sbin/screencapture', '/usr/bin/sips'])
-    expect(args[0]?.slice(0, 3)).toEqual(['-x', '-t', 'jpg'])
-    expect(args[1]?.slice(0, 6)).toEqual(['--cropOffset', '0', '0', '-c', '100', '200'])
+    expect(files).toEqual(['/usr/sbin/screencapture'])
+    expect(args[0]?.slice(0, 5)).toEqual(['-x', '-C', '-R', '0,0,100,50', '-t'])
+    expect(args[0]?.at(-1)).toMatch(/screen\.jpg$/u)
   })
 
   it('captures a screen rectangle when inspect reports open menus', async () => {
@@ -215,9 +213,8 @@ describe('macOS backend with an injected runner', () => {
     files.length = 0
     args.length = 0
     await backend.capture(screen!)
-    expect(files).toEqual(['/usr/sbin/screencapture', '/usr/bin/sips'])
-    expect(args[0]?.slice(0, 3)).toEqual(['-x', '-t', 'jpg'])
-    expect(args[1]?.slice(0, 6)).toEqual(['--cropOffset', '40', '20', '-c', '600', '800'])
+    expect(files).toEqual(['/usr/sbin/screencapture'])
+    expect(args[0]?.slice(0, 5)).toEqual(['-x', '-C', '-R', '10,20,400,300', '-t'])
   })
 
   it('captures a screen rectangle when the surface has no window id', async () => {
@@ -227,8 +224,83 @@ describe('macOS backend with an injected runner', () => {
     await backend.capture({
       index: 0, bounds: { x: 0, y: 0, width: 100, height: 50 }, scale: 2,
     })
-    expect(files).toEqual(['/usr/sbin/screencapture', '/usr/bin/sips'])
-    expect(args[0]?.slice(0, 3)).toEqual(['-x', '-t', 'jpg'])
+    expect(files).toEqual(['/usr/sbin/screencapture'])
+    expect(args[0]?.slice(0, 5)).toEqual(['-x', '-C', '-R', '0,0,100,50', '-t'])
+  })
+
+  it('keeps negative secondary-display origins in the capture region', async () => {
+    const backend = createMacosDesktopBackend(runner({
+      inspect: inspectJson({
+        x: -218,
+        y: -1080,
+        width: 1920,
+        height: 1080,
+        scale: 1,
+        screen: { x: -218, y: -1080, width: 1920, height: 1080 },
+      }),
+    }))
+    await expect(backend.listScreens()).resolves.toEqual([{
+      index: 0,
+      bounds: { x: -218, y: -1080, width: 1920, height: 1080 },
+      scale: 1,
+      windowId: 42,
+    }])
+  })
+
+  it('clips the observed rectangle to its owning display', async () => {
+    const backend = createMacosDesktopBackend(runner({
+      inspect: inspectJson({
+        x: -218,
+        y: -1080,
+        width: 2400,
+        height: 1200,
+        scale: 1,
+        screen: { x: -218, y: -1080, width: 1920, height: 1080 },
+      }),
+    }))
+    await expect(backend.listScreens()).resolves.toEqual([{
+      index: 0,
+      bounds: { x: -218, y: -1080, width: 1920, height: 1080 },
+      scale: 1,
+      windowId: 42,
+    }])
+  })
+
+  it('returns no surface when the window is entirely off its display', async () => {
+    const backend = createMacosDesktopBackend(runner({
+      inspect: inspectJson({
+        x: 4000,
+        y: 0,
+        width: 200,
+        height: 100,
+        screen: { x: 0, y: 0, width: 1920, height: 1080 },
+      }),
+    }))
+    await expect(backend.listScreens()).resolves.toEqual([])
+  })
+
+  it('ignores a malformed display frame instead of dropping the surface', async () => {
+    const backend = createMacosDesktopBackend(runner({
+      inspect: inspectJson({ screen: { x: 'nope' } }),
+    }))
+    await expect(backend.listScreens()).resolves.toEqual([{
+      index: 0,
+      bounds: { x: 0, y: 0, width: 100, height: 50 },
+      scale: 2,
+      windowId: 42,
+    }])
+  })
+
+  it('rounds the observed rectangle once for capture and click mapping', async () => {
+    const backend = createMacosDesktopBackend(runner({
+      inspect: inspectJson({ x: 10.4, y: 20.6, width: 400.5, height: 300.5 }),
+    }))
+    await expect(backend.listScreens()).resolves.toEqual([{
+      index: 0,
+      bounds: { x: 10, y: 21, width: 401, height: 301 },
+      scale: 2,
+      windowId: 42,
+    }])
   })
 
   it('captures JPEG bytes as image/jpeg', async () => {
@@ -319,6 +391,11 @@ describe('macOS backend with an injected runner', () => {
     expect(source).toContain('--region=')
     expect(source).toContain('excludingWindows')
     expect(source).toContain('sourceRect')
+    expect(source).toContain('configuration.showsCursor = false')
+    expect(source).toContain('compositeCursor(image, bounds: window.frame)')
+    expect(source).toContain('compositeCursor(image, bounds: clipped)')
+    expect(source).toContain('private func compositeCursor')
+    expect(source).toContain('let ringCenterY = CGFloat(image.height) - point.y')
     expect(source).toContain('#if DSH_SCK_CLI')
     expect(source).toContain('startCliApplication: true')
     expect(source).toContain('@_cdecl("dsh_macos_sck_capture")')
@@ -394,6 +471,12 @@ describe('macOS backend with an injected runner', () => {
       'overlaps(found.x, found.y, found.width, found.height, tx, ty, tw, th, pad)',
     )
     expect(inspectForegroundScript([])).not.toContain('samePid || relatedOwner(found.appName, tOwner)')
+    expect(inspectForegroundScript([])).toContain('function screenAt(x, y, w, h)')
+    expect(inspectForegroundScript([])).toContain('var sy = primaryHeight - f.origin.y - f.size.height')
+    expect(inspectForegroundScript([])).toContain('var owner = screenAt(x, y, width, height)')
+    expect(inspectForegroundScript([])).toContain(
+      'found.screen = { x: owner.x, y: owner.y, width: owner.width, height: owner.height }',
+    )
     expect(inspectForegroundScript([4242, 7])).toContain('4242: true')
     expect(inspectForegroundScript([4242, 7])).toContain('7: true')
     expect(inspectForegroundScript([1.5, -1])).toBe(inspectForegroundScript([]))
@@ -637,6 +720,9 @@ describe('macOS backend with an injected runner', () => {
     expect(scripts[0]).toContain('pressEnter()')
     expect(scripts[0]).toContain('var discarded = pb.clearContents')
     expect(scripts[0]).not.toContain('pb.clearContents()')
+    expect(scripts[0]).toContain('function clipboardSnapshot(pb)')
+    expect(scripts[0]).toContain('restoreClipboard(pb, previous)')
+    expect(scripts[0]).not.toContain('clipboardString()')
     expect(scripts[0]).not.toContain('KeyboardSetUnicodeString')
     scripts.length = 0
     await backend.typeText({
@@ -655,6 +741,9 @@ describe('macOS backend with an injected runner', () => {
     await backend.hotkey({ keys: ['cmd', 'c'] })
     expect(scripts.join('\n')).toContain('chord([55,8])')
     expect(scripts.join('\n')).toContain('CGEventSetFlags')
+    scripts.length = 0
+    await backend.hotkey({ keys: ['f4', 'delete'] })
+    expect(scripts.join('\n')).toContain('chord([118,117])')
     scripts.length = 0
     await backend.longPress({ screen: screen!, position: [0, 0], durationSeconds: 3 })
     expect(scripts.join('\n')).toContain('longPressAt(0, 0, 3000)')
@@ -679,11 +768,52 @@ describe('macOS backend with an injected runner', () => {
     expect(scripts[0]).toContain('clickWithModifiers(0, 0, 0, 1, [55,56])')
     expect(scripts[0]).toContain('if (flags) $.CGEventSetFlags(event, flags)')
     expect(scripts[0]).toContain('postKey(mods[m], true, flags)')
-    expect(scripts[0]).toContain('postKey(mods[r], false, 0)')
+    expect(scripts[0]).toContain('postKey(mods[r], false, heldFlags(mods, r))')
+    expect(scripts[0]).toContain('function heldFlags(mods, upto)')
+    expect(scripts[0]).toContain('const FLAG_FN = 0x00800000')
     scripts.length = 0
     await backend.click({ screen: screen!, position: [0, 0], button: 'left', count: 1 })
     expect(scripts[0]).toContain('clickAt(0, 0, 0, 1)')
     expect(scripts[0]).not.toContain('clickWithModifiers(0, 0, 0, 1')
+  })
+
+  it('releases held keys and mouse buttons when a HID script dies on abort', async () => {
+    const scripts: string[] = []
+    const controller = new AbortController()
+    const run: CommandRunner = async (file, args) => {
+      if (file !== '/usr/bin/osascript') return { stdout: '', stderr: '' }
+      const flag = args.indexOf('-e')
+      const script = flag >= 0
+        ? String(args[flag + 1] ?? '')
+        : await readFile(String(args.at(-1)), 'utf8')
+      scripts.push(script)
+      if (script.includes('clickAt(')) {
+        controller.abort(new Error('stopped'))
+        const abort = new Error('stopped')
+        abort.name = 'AbortError'
+        throw abort
+      }
+      return { stdout: '', stderr: '' }
+    }
+    const backend = createMacosDesktopBackend(run)
+    scripts.length = 0
+    await expect(backend.click({
+      screen: { index: 0, bounds: { x: 0, y: 0, width: 100, height: 50 }, scale: 2 },
+      position: [0, 0],
+      button: 'left',
+      count: 1,
+    }, controller.signal)).rejects.toThrow()
+    const release = scripts.find(script => script.includes('postMouseUp(LEFT_UP'))
+    expect(release).toBeDefined()
+    expect(release).toContain('postMouseUp(RIGHT_UP, here, RIGHT)')
+    expect(release).toContain('postKeyUp(KEY_CMD)')
+  })
+
+  it('contains the JXA runtime used by click modifiers and abort release', async () => {
+    const source = await readFile(new URL('../src/macos.ts', import.meta.url), 'utf8')
+    expect(source).toContain('const FLAG_FN = 0x00800000')
+    expect(source).toContain('function heldFlags(mods, upto)')
+    expect(source).toContain('const HID_RELEASE_SCRIPT')
   })
 
   it('opens URLs, the default browser, Desktop files, and Finder reveals', async () => {

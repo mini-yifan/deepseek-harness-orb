@@ -120,8 +120,11 @@ Desktop 上新建 `code_agent` 会在 `session.create` 之后、`session.prompt`
 | [`src/code-agent.ts`](src/code-agent.ts) | 仅 Computer Use 的 `code_agent`、`code_agent_status` 与 `code_agent_stop`：调用方登记表、子目录 cwd、`session.create`、Desktop 新建时可选 `selectModel`、`session.prompt` |
 | [`src/code-agent-completion.ts`](src/code-agent-completion.ts) | Code 会话与 Computer Use 调用方都空闲后投递的插件通知；停止时可中止 |
 | [`src/code-agent-unattended.ts`](src/code-agent-unattended.ts) | 在活的 Code agent 上前置自动允许 `approval/request` 与自动应答 `user-questions/request` |
-| [`src/macos.ts`](src/macos.ts) | Darwin 通过整屏 `screencapture` 加 `sips` 裁切前台应用窗口并集，或在设置了 overlay 窗口 id 时走排除 overlay 的 ScreenCaptureKit `--region=`（Desktop IPC 进 Electron，CLI 派生 helper）；click、scroll、hotkey、长按与拖拽走 JXA `CGEvent`；`input_text` 通过 NSPasteboard 粘贴；`list_apps` / `open_app` 走 NSWorkspace；`open_in_browser` / `open_in_finder` 走 `/usr/bin/open`；`inspectForeground` 绑定 `CGWindowListCopyWindowInfo` 再 unwrap（跳过 overlay id）加 Finder AppleScript |
-| [`src/windows.ts`](src/windows.ts) | Win32 用 GDI 把选中窗口并集截成 PNG，坐标是每监视器物理像素；click、scroll、hotkey、长按与拖拽走 `SendInput`；`input_text` 用 Ctrl+V 粘贴，并在粘贴发出后再恢复字符串剪贴板；`open_in_finder` 打开资源管理器；提权的前台窗口拒绝输入 |
+| [`src/macos.ts`](src/macos.ts) | Darwin 用 `screencapture -x -C -R` 截前台应用窗口并集（`-R` 由拥有该矩形的显示器按其倍率出图，`-C` 把光标烤进图里），或在设置了 overlay 窗口 id 时走排除 overlay 的 ScreenCaptureKit `--region=`（Desktop IPC 进 Electron，CLI 派生 helper）；click、scroll、hotkey、长按与拖拽走 JXA `CGEvent`（脚本被取消时先抬起鼠标键与修饰键）；`input_text` 通过 NSPasteboard 粘贴，并把快照里的每一种剪贴板格式放回；`list_apps` / `open_app` 走 NSWorkspace；`open_in_browser` / `open_in_finder` 走 `/usr/bin/open`；`inspectForeground` 绑定 `CGWindowListCopyWindowInfo` 再 unwrap（跳过 overlay id，并按所属显示器裁切）加 Finder AppleScript |
+| [`src/windows.ts`](src/windows.ts) | Win32 用 GDI 把选中窗口并集截成 PNG，坐标是每监视器物理像素，并合成系统光标；click、scroll、hotkey、长按与拖拽走 `SendInput`（点击修饰键只在本次调用内按住，取消时抬起按键）；`input_text` 用 Ctrl+V 粘贴，并在粘贴发出后恢复快照里的全部剪贴板格式；`open_in_finder` 打开资源管理器；提权的目标窗口在发出任何输入前就被拒绝 |
+| [`src/windows-native.ts`](src/windows-native.ts) | Win32 绑定：GDI 截图加光标合成、`SendInput`、剪贴板格式快照、每监视器 DPI 上下文，以及失败即拦截的完整性级别检查 |
+| [`src/cursor.ts`](src/cursor.ts) | Windows 截图的光标叠加纯函数：热点定位、AND 掩码 alpha 回落、alpha 混合与行翻转 |
+| [`src/app-match.ts`](src/app-match.ts) | `open_app` 名称匹配：先精确匹配进程基名，再匹配完整标题、词边界前缀或按分隔符切出的标题段 |
 | [`src/windows-foreground.ts`](src/windows-foreground.ts) | 纯 z-order 选择：跳过 overlay HWND、任务栏和桌面；合并同一监视器上的菜单与有 owner 的弹出窗口 |
 | [`src/observation-limits.ts`](src/observation-limits.ts) | 共用的最小窗口边长和瞬时窗口外扩，macOS 上是 point，Windows 上是物理像素 |
 | [`src/macos-sck-capture.swift`](src/macos-sck-capture.swift) | Darwin helper 与进程内库：窗口捕获或排除 overlay 后的区域裁切，仍省略 overlay CGWindowID；CLI 先在主 actor 启动 `NSApplication`；库入口不改 activation policy |

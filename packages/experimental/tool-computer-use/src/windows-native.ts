@@ -10,6 +10,8 @@
 
 import { execFileSync } from 'node:child_process'
 import koffi from 'koffi'
+import { selectAppWindow } from './app-match.ts'
+import { compositeCursor, cursorDrawPlacement, flipRows, resolveCursorAlpha } from './cursor.ts'
 import type { WindowsDesktopSnapshot, WindowsWindowFact } from './windows-foreground.ts'
 import { encodeBgraPng, type WindowsDesktopOps, type WindowsRect } from './windows.ts'
 
@@ -28,6 +30,14 @@ const KEYEVENTF_EXTENDEDKEY = 0x0001
 const KEYEVENTF_KEYUP = 0x0002
 const CF_UNICODETEXT = 13
 const GMEM_MOVEABLE = 0x0002
+const MEDIUM_INTEGRITY_RID = 0x2000
+/** `GetAncestor` flag: the root (top-level) window of a child. */
+const GA_ROOT = 2
+/**
+ * Bytes a clipboard snapshot may copy across all its formats. A 4K screenshot's CF_DIB is
+ * tens of megabytes; past this the snapshot keeps what fits and drops the rest.
+ */
+const CLIPBOARD_SNAPSHOT_LIMIT_BYTES = 16 * 1024 * 1024
 const SM_XVIRTUALSCREEN = 76
 const SM_YVIRTUALSCREEN = 77
 const SM_CXVIRTUALSCREEN = 78
@@ -47,6 +57,8 @@ const DWMWA_CLOAKED = 14
 const MONITOR_DEFAULTTONEAREST = 2
 const MDT_EFFECTIVE_DPI = 0
 const VK_MENU = 0x12
+/** `CURSORINFO.flags` bit set while the pointer is drawn. */
+const CURSOR_SHOWING = 0x0001
 /** Per-monitor v2, then per-monitor. `SetThreadDpiAwarenessContext` returns NULL when the context is unsupported. */
 const DPI_PER_MONITOR_V2 = -4
 const DPI_PER_MONITOR = -3
@@ -103,6 +115,32 @@ const INPUT_UNION = koffi.union('DSH_CU_INPUT_UNION', {
 const INPUT = koffi.struct('DSH_CU_INPUT', {
   type: 'uint32',
   u: INPUT_UNION,
+})
+
+const CURSORINFO = koffi.struct('DSH_CU_CURSORINFO', {
+  cbSize: 'uint32',
+  flags: 'uint32',
+  hCursor: 'void *',
+  ptScreenPos: POINT,
+})
+
+const ICONINFO = koffi.struct('DSH_CU_ICONINFO', {
+  fIcon: 'int32',
+  xHotspot: 'uint32',
+  yHotspot: 'uint32',
+  hbmMask: 'void *',
+  hbmColor: 'void *',
+})
+
+/** `tagBITMAP`; only `bmWidth` and `bmHeight` are read. */
+const BITMAP = koffi.struct('DSH_CU_BITMAP', {
+  bmType: 'int32',
+  bmWidth: 'int32',
+  bmHeight: 'int32',
+  bmWidthBytes: 'int32',
+  bmPlanes: 'uint16',
+  bmBitsPixel: 'uint16',
+  bmBits: 'void *',
 })
 
 void RECT
@@ -177,6 +215,11 @@ function bind(libraries: NativeBindings): {
   GetMonitorInfoW: (monitor: unknown, info: Buffer) => number
   GetSystemMetrics: (index: number) => number
   GetCursorPos: (point: NativePoint) => number
+  GetCursorInfo: (info: Buffer) => number
+  GetIconInfo: (cursor: unknown, info: Buffer) => number
+  GetObjectW: (object: unknown, bytes: number, info: Buffer) => number
+  GetAncestor: (hwnd: unknown, flags: number) => unknown
+  WindowFromPoint: (point: NativePoint) => unknown
   SetCursorPos: (x: number, y: number) => number
   SetThreadDpiAwarenessContext: ((context: DpiContext) => unknown) | undefined
   GetDpiForMonitor: ((monitor: unknown, type: number, dpiX: number[], dpiY: number[]) => number) | undefined
@@ -203,9 +246,11 @@ function bind(libraries: NativeBindings): {
   SetClipboardData: (format: number, memory: unknown) => unknown
   CloseClipboard: () => number
   GetClipboardData: (format: number) => unknown
+  EnumClipboardFormats: (format: number) => number
   GlobalAlloc: (flags: number, bytes: number) => unknown
   GlobalLock: (memory: unknown) => unknown
   GlobalUnlock: (memory: unknown) => number
+  GlobalFree: (memory: unknown) => unknown
   GlobalSize: (memory: unknown) => unknown
   RtlMoveMemory: (dest: unknown, source: unknown, bytes: number) => void
   OpenProcess: (access: number, inherit: number, pid: number) => unknown
@@ -259,6 +304,11 @@ function bind(libraries: NativeBindings): {
     GetMonitorInfoW: user32.func('int __stdcall GetMonitorInfoW(void *hMonitor, _Inout_ uint8_t *lpmi)'),
     GetSystemMetrics: user32.func('int __stdcall GetSystemMetrics(int nIndex)'),
     GetCursorPos: user32.func('int __stdcall GetCursorPos(_Out_ DSH_CU_POINT *lpPoint)'),
+    GetCursorInfo: user32.func('int __stdcall GetCursorInfo(_Inout_ uint8_t *pci)'),
+    GetIconInfo: user32.func('int __stdcall GetIconInfo(void *hIcon, _Out_ uint8_t *piconinfo)'),
+    GetObjectW: gdi32.func('int __stdcall GetObjectW(void *h, int c, _Out_ uint8_t *pv)'),
+    GetAncestor: user32.func('void * __stdcall GetAncestor(void *hwnd, uint32 gaFlags)'),
+    WindowFromPoint: user32.func('void * __stdcall WindowFromPoint(DSH_CU_POINT point)'),
     SetCursorPos: user32.func('int __stdcall SetCursorPos(int X, int Y)'),
     SetThreadDpiAwarenessContext: setThreadDpi,
     GetDpiForMonitor: getDpiForMonitor,
@@ -282,9 +332,11 @@ function bind(libraries: NativeBindings): {
     SetClipboardData: user32.func('void * __stdcall SetClipboardData(uint32 uFormat, void *hMem)'),
     CloseClipboard: user32.func('int __stdcall CloseClipboard()'),
     GetClipboardData: user32.func('void * __stdcall GetClipboardData(uint32 uFormat)'),
+    EnumClipboardFormats: user32.func('uint32 __stdcall EnumClipboardFormats(uint32 format)'),
     GlobalAlloc: kernel32.func('void * __stdcall GlobalAlloc(uint32 uFlags, uintptr dwBytes)'),
     GlobalLock: kernel32.func('void * __stdcall GlobalLock(void *hMem)'),
     GlobalUnlock: kernel32.func('int __stdcall GlobalUnlock(void *hMem)'),
+    GlobalFree: kernel32.func('void * __stdcall GlobalFree(void *hMem)'),
     GlobalSize: kernel32.func('uintptr __stdcall GlobalSize(void *hMem)'),
     RtlMoveMemory: kernel32.func('void __stdcall RtlMoveMemory(void *Destination, void *Source, uintptr Length)'),
     OpenProcess: kernel32.func(
@@ -365,6 +417,14 @@ function integrityRid(api: Bindings, pid: number): number | undefined {
     // Token or SID queries can throw when koffi cannot decode an inaccessible process.
     return undefined
   }
+}
+
+/** One warning per process when our own integrity level is unreadable. */
+let warnedUnknownSelfIntegrity = false
+function warnUnknownSelfIntegrity(): void {
+  if (warnedUnknownSelfIntegrity) return
+  warnedUnknownSelfIntegrity = true
+  console.error('computer-use: own integrity level is unreadable; treating targets above medium as blocked')
 }
 
 function integrityRidUnchecked(api: Bindings, pid: number): number | undefined {
@@ -518,6 +578,118 @@ function cloaked(api: Bindings, hwnd: unknown): boolean {
   return flag.readUInt32LE(0) !== 0
 }
 
+function bitmapSize(api: Bindings, bitmap: unknown): { width: number; height: number } | undefined {
+  const info = Buffer.alloc(BITMAP.size)
+  if (api.GetObjectW(bitmap, BITMAP.size, info) === 0) return undefined
+  const decoded = koffi.decode(info, BITMAP) as { bmWidth: number; bmHeight: number }
+  if (decoded.bmWidth <= 0 || decoded.bmHeight <= 0) return undefined
+  return { width: decoded.bmWidth, height: decoded.bmHeight }
+}
+
+/** Read one bitmap as top-down 32-bit BGRA. `GetDIBits` converts depth and row order for us. */
+function bitmapPixels(
+  api: Bindings,
+  dc: unknown,
+  bitmap: unknown,
+  size: { width: number; height: number },
+): Buffer | undefined {
+  const rowBytes = size.width * 4
+  const pixels = Buffer.alloc(rowBytes * size.height)
+  const header = {
+    biSize: 40,
+    biWidth: size.width,
+    biHeight: size.height,
+    biPlanes: 1,
+    biBitCount: 32,
+    biCompression: 0,
+    biSizeImage: pixels.length,
+    biXPelsPerMeter: 0,
+    biYPelsPerMeter: 0,
+    biClrUsed: 0,
+    biClrImportant: 0,
+  }
+  if (api.GetDIBits(dc, bitmap, 0, size.height, pixels, header, 0) === 0) return undefined
+  flipRows(pixels, rowBytes, size.height)
+  return pixels
+}
+
+interface NativeCursor {
+  readonly pointer: NativePoint
+  readonly hotspot: NativePoint
+  readonly color: unknown
+  readonly mask: unknown
+}
+
+/**
+ * The system pointer as Win32 reports it.
+ * `GetIconInfo` hands over two bitmaps the caller owns; the shared cursor handle is not ours to free.
+ * @param api - bound Win32 entry points.
+ * @returns position, hotspot, and bitmaps, or undefined when no pointer is drawn.
+ */
+function readCursor(api: Bindings): NativeCursor | undefined {
+  const info = Buffer.alloc(CURSORINFO.size)
+  info.writeUInt32LE(CURSORINFO.size, 0)
+  if (api.GetCursorInfo(info) === 0) return undefined
+  const cursor = koffi.decode(info, CURSORINFO) as { flags: number; hCursor: unknown; ptScreenPos: NativePoint }
+  if ((cursor.flags & CURSOR_SHOWING) === 0 || isNull(cursor.hCursor)) return undefined
+  const icon = Buffer.alloc(ICONINFO.size)
+  if (api.GetIconInfo(cursor.hCursor, icon) === 0) return undefined
+  const decoded = koffi.decode(icon, ICONINFO) as {
+    xHotspot: number
+    yHotspot: number
+    hbmMask: unknown
+    hbmColor: unknown
+  }
+  return {
+    pointer: { x: cursor.ptScreenPos.x, y: cursor.ptScreenPos.y },
+    hotspot: { x: decoded.xHotspot, y: decoded.yHotspot },
+    color: decoded.hbmColor,
+    mask: decoded.hbmMask,
+  }
+}
+
+/**
+ * Draw the system pointer into one capture raster.
+ * `BitBlt` copies the desktop without the cursor layer, so the agent cannot see where its
+ * clicks land. macOS gets the same pointer baked in by `screencapture -x -C`.
+ * @param api - bound Win32 entry points.
+ * @param dc - device context used for the bitmap reads.
+ * @param pixels - top-down BGRA capture raster, mutated in place.
+ * @param width - raster width.
+ * @param height - raster height.
+ * @param bounds - capture region in physical pixels, matching the raster origin.
+ */
+function drawCursor(
+  api: Bindings,
+  dc: unknown,
+  pixels: Buffer,
+  width: number,
+  height: number,
+  bounds: WindowsRect,
+): void {
+  const cursor = readCursor(api)
+  if (cursor === undefined) return
+  try {
+    const size = bitmapSize(api, cursor.color)
+    if (size === undefined) return
+    const placement = cursorDrawPlacement(cursor.pointer, cursor.hotspot, size, bounds)
+    if (placement === undefined) return
+    const color = bitmapPixels(api, dc, cursor.color, size)
+    if (color === undefined) return
+    const mask = isNull(cursor.mask) ? undefined : bitmapPixels(api, dc, cursor.mask, size)
+    const resolved = resolveCursorAlpha({
+      width: size.width,
+      height: size.height,
+      color,
+      ...mask === undefined ? {} : { mask },
+    })
+    compositeCursor(pixels, width, height, resolved, size.width, size.height, placement)
+  } finally {
+    if (!isNull(cursor.color)) api.DeleteObject(cursor.color)
+    if (!isNull(cursor.mask)) api.DeleteObject(cursor.mask)
+  }
+}
+
 function monitorOf(api: Bindings, hwnd: unknown, fallback: WindowsRect): { monitor: WindowsRect; dpi: number } {
   const handle = api.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)
   if (isNull(handle)) return { monitor: fallback, dpi: 96 }
@@ -562,6 +734,9 @@ function cachedAppName(api: Bindings, cache: Map<number, string>, pid: number): 
 export function createProductionWindowsOps(): WindowsDesktopOps {
   if (process.arch === 'x64' && INPUT.size !== 40) {
     throw new Error(`computer-use: INPUT size ${String(INPUT.size)} is not 40`)
+  }
+  if (process.arch === 'x64' && (CURSORINFO.size !== 24 || ICONINFO.size !== 32 || BITMAP.size !== 32)) {
+    throw new Error('computer-use: cursor structs are not laid out for x64')
   }
   const libraries: NativeBindings = {
     user32: koffi.load('user32.dll'),
@@ -672,13 +847,16 @@ export function createProductionWindowsOps(): WindowsDesktopOps {
       return perMonitor(() => {
         const width = Math.max(1, Math.round(bounds.width))
         const height = Math.max(1, Math.round(bounds.height))
+        const originX = Math.round(bounds.x)
+        const originY = Math.round(bounds.y)
+        const region: WindowsRect = { x: originX, y: originY, width, height }
         const screenDc = api.GetDC(null)
         if (isNull(screenDc)) throw new Error('computer-use: screen capture failed')
         const memory = api.CreateCompatibleDC(screenDc)
         const bitmap = api.CreateCompatibleBitmap(screenDc, width, height)
         const previous = api.SelectObject(memory, bitmap)
         try {
-          if (api.BitBlt(memory, 0, 0, width, height, screenDc, Math.round(bounds.x), Math.round(bounds.y), SRCCOPY) === 0) {
+          if (api.BitBlt(memory, 0, 0, width, height, screenDc, originX, originY, SRCCOPY) === 0) {
             throw new Error('computer-use: screen capture failed')
           }
           const header = {
@@ -698,7 +876,9 @@ export function createProductionWindowsOps(): WindowsDesktopOps {
           if (api.GetDIBits(memory, bitmap, 0, height, pixels, header, 0) === 0) {
             throw new Error('computer-use: screen capture failed')
           }
-          return encodeBgraPng(width, height, pixels, true)
+          flipRows(pixels, width * 4, height)
+          drawCursor(api, memory, pixels, width, height, region)
+          return encodeBgraPng(width, height, pixels, false)
         } finally {
           api.SelectObject(memory, previous)
           api.DeleteObject(bitmap)
@@ -707,11 +887,37 @@ export function createProductionWindowsOps(): WindowsDesktopOps {
         }
       })
     },
-    targetBlocksInput() {
-      const hwnd = api.GetForegroundWindow()
-      if (isNull(hwnd) || selfRid === undefined) return false
-      const rid = integrityRid(api, pidOf(api, hwnd))
-      return rid !== undefined && rid > selfRid
+    targetBlocksInput(hwnd) {
+      const target = windowPointer(hwnd)
+      if (target === undefined) return false
+      const rid = integrityRid(api, pidOf(api, target))
+      // Fail closed: an elevated window commonly refuses the token read, and the caller
+      // must not post input that UIPI would only drop silently.
+      if (rid === undefined) return true
+      // Our own level is unreadable, which should not happen for our own token. Assume the
+      // unelevated default rather than allowing everything: a higher target stays blocked,
+      // while an elevated own process can still type into anything at or below medium.
+      if (selfRid === undefined) {
+        warnUnknownSelfIntegrity()
+        return rid > MEDIUM_INTEGRITY_RID
+      }
+      return rid > selfRid
+    },
+    windowFromPoint(x, y) {
+      return perMonitor(() => {
+        const hit = api.WindowFromPoint({ x, y })
+        if (isNull(hit)) return 0
+        // The hit is usually a child control; the check deals in top-level HWNDs, and a
+        // child window cannot be resolved back to one.
+        const root = api.GetAncestor(hit, GA_ROOT)
+        return hwndId(isNull(root) ? hit : root) ?? 0
+      })
+    },
+    windowAppName(hwnd) {
+      const target = windowPointer(hwnd)
+      if (target === undefined) return undefined
+      const name = processBaseName(api, pidOf(api, target))
+      return name === undefined || name === '' ? undefined : name
     },
     movePointer(x, y) {
       perMonitor(() => { placePointer(x, y) })
@@ -731,24 +937,77 @@ export function createProductionWindowsOps(): WindowsDesktopOps {
     key(virtualKey, down, extended = false) {
       postKey(api, virtualKey, down, extended)
     },
-    readClipboardText() {
-      let text = ''
+    saveClipboard() {
+      const seen: { format: number; size: number }[] = []
+      const bytes = new Map<number, Buffer>()
       withClipboard(api, () => {
-        const handle = api.GetClipboardData(CF_UNICODETEXT)
-        if (isNull(handle)) return
-        const locked = api.GlobalLock(handle)
-        if (isNull(locked)) return
-        try {
+        let format = 0
+        for (;;) {
+          format = api.EnumClipboardFormats(format)
+          if (format === 0) break
+          const handle = api.GetClipboardData(format)
+          if (isNull(handle)) continue
           const size = Number(api.GlobalSize(handle))
-          if (!Number.isFinite(size) || size < 2) return
-          const bytes = Buffer.alloc(size)
-          api.RtlMoveMemory(bytes, locked, size)
-          text = bytes.toString('utf16le').replace(/\0[\s\S]*$/u, '')
-        } finally {
-          api.GlobalUnlock(handle)
+          if (!Number.isFinite(size) || size <= 0) continue
+          seen.push({ format, size })
+        }
+        // Plain text first: it is the entry that matters when the budget cannot cover
+        // everything, and it is what the paste is about to overwrite.
+        seen.sort((left, right) => Number(right.format === CF_UNICODETEXT) - Number(left.format === CF_UNICODETEXT)
+          || left.size - right.size)
+        let used = 0
+        for (const entry of seen) {
+          if (used + entry.size > CLIPBOARD_SNAPSHOT_LIMIT_BYTES) continue
+          const handle = api.GetClipboardData(entry.format)
+          if (isNull(handle)) continue
+          // GDI and owner-display formats are handles, not global memory; GlobalLock fails
+          // on them and the format is skipped rather than copied as garbage.
+          const locked = api.GlobalLock(handle)
+          if (isNull(locked)) continue
+          try {
+            const copy = Buffer.alloc(entry.size)
+            api.RtlMoveMemory(copy, locked, entry.size)
+            bytes.set(entry.format, copy)
+            used += entry.size
+          } finally {
+            api.GlobalUnlock(handle)
+          }
         }
       })
-      return text
+      // A delayed-rendered format still costs one synchronous GetClipboardData above: the
+      // budget bounds the memory, not the owner's render time.
+      return { entries: seen.flatMap((entry) => {
+        const copy = bytes.get(entry.format)
+        return copy === undefined ? [] : [{ format: entry.format, bytes: copy }]
+      }) }
+    },
+    restoreClipboard(snapshot) {
+      let restored = 0
+      withClipboard(api, () => {
+        api.EmptyClipboard()
+        for (const entry of snapshot.entries) {
+          const memory = api.GlobalAlloc(GMEM_MOVEABLE, entry.bytes.length)
+          if (isNull(memory)) continue
+          const locked = api.GlobalLock(memory)
+          if (isNull(locked)) {
+            // The system was never handed this block, so it must be freed here.
+            api.GlobalFree(memory)
+            continue
+          }
+          api.RtlMoveMemory(locked, entry.bytes, entry.bytes.length)
+          api.GlobalUnlock(memory)
+          if (isNull(api.SetClipboardData(entry.format, memory))) {
+            // Refused, so ownership never moved: free it rather than leak the block.
+            api.GlobalFree(memory)
+            continue
+          }
+          restored += 1
+        }
+      })
+      if (restored === 0 && snapshot.entries.length > 0) {
+        // The clipboard was emptied and nothing went back; say so instead of losing it silently.
+        console.error('computer-use: the clipboard could not be restored after the paste')
+      }
     },
     setClipboardText(text) {
       const bytes = Buffer.from(`${text}\0`, 'utf16le')
@@ -787,19 +1046,20 @@ try { [System.Windows.Forms.Clipboard]::SetImage($image) } finally { $image.Disp
       return [...names]
     },
     activateApp(name) {
-      const wanted = name.trim().toLowerCase()
-      if (wanted === '') return false
+      if (name.trim() === '') return false
       return perMonitor(() => {
-        let target: unknown
+        const windows: { hwnd: unknown; appName: string; title: string }[] = []
         for (const hwnd of enumTopLevel(api)) {
           if (api.IsWindowVisible(hwnd) === 0) continue
-          const app = (processBaseName(api, pidOf(api, hwnd)) ?? '').toLowerCase()
-          const title = windowText(api, hwnd).toLowerCase()
-          if (app === wanted || title.includes(wanted)) {
-            target = hwnd
-            break
-          }
+          windows.push({
+            hwnd,
+            appName: processBaseName(api, pidOf(api, hwnd)) ?? '',
+            title: windowText(api, hwnd),
+          })
         }
+        const index = selectAppWindow(windows, name)
+        if (index === undefined) return false
+        const target = windows[index]?.hwnd
         if (target === undefined) return false
         if (!becomeForeground(target)) throw new Error(`computer-use: failed to activate ${name}`)
         return true

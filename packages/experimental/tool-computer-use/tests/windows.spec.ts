@@ -9,17 +9,20 @@ vi.mock('../src/windows-native.ts', () => ({
       listWindows: () => ({ foregroundHwnd: 0, windows: [] }),
       capturePng: () => Uint8Array.from([]),
       targetBlocksInput: () => false,
+      windowFromPoint: () => 0,
       movePointer: () => undefined,
       mouseButton: () => undefined,
       scrollWheel: () => undefined,
       key: () => undefined,
-      readClipboardText: () => '',
+      saveClipboard: () => ({ entries: [] }),
+      restoreClipboard: () => undefined,
       setClipboardText: () => undefined,
       copyImageFile: () => undefined,
       listWindowApps: () => [],
       activateApp: () => false,
       foregroundWindowId: () => 0,
       focusWindow: () => false,
+      windowAppName: () => undefined,
       launch: () => undefined,
       explorerFolder: () => undefined,
     }
@@ -71,19 +74,25 @@ function ops(overrides: Partial<WindowsDesktopOps> = {}): WindowsDesktopOps & {
     listWindows: () => shot([fact()]),
     capturePng: () => png,
     targetBlocksInput: () => false,
+    windowFromPoint: () => 5,
     movePointer: (x, y) => { calls.push(`move:${String(x)},${String(y)}`) },
     mouseButton: (_button, down) => { calls.push(down ? 'down' : 'up') },
     scrollWheel: (_x, _y, delta) => { calls.push(`wheel:${String(delta)}`) },
     key: (virtualKey, down, extended) => {
       calls.push(`key:${String(virtualKey)}:${down ? 'down' : 'up'}:${extended ? '1' : '0'}`)
     },
-    readClipboardText: () => 'previous',
+    saveClipboard: () => {
+      calls.push('clip-save')
+      return { entries: [{ format: 13, bytes: Buffer.from('previous\0', 'utf16le') }] }
+    },
+    restoreClipboard: (snapshot) => { calls.push(`clip-restore:${String(snapshot.entries.length)}`) },
     setClipboardText: (text) => { calls.push(`clip:${text}`) },
     copyImageFile: (path) => { calls.push(`image:${path}`) },
     listWindowApps: () => ['notepad', 'explorer'],
     activateApp: () => false,
     foregroundWindowId: () => 0,
     focusWindow: () => false,
+    windowAppName: () => 'notepad',
     launch: (target) => { calls.push(`launch:${target}`) },
     explorerFolder: () => undefined,
     ...overrides,
@@ -165,18 +174,19 @@ describe('windows desktop backend', () => {
     host.calls.length = 0
     await backend.typeText({ screen, position: [500, 1000], text: 'hi', replace: true, submit: true })
     const pasteUp = host.calls.indexOf('key:86:up:0')
-    const restore = host.calls.indexOf('clip:previous')
+    const restore = host.calls.indexOf('clip-restore:1')
+    expect(host.calls).toContain('clip-save')
     expect(host.calls).toContain('clip:hi')
     expect(host.calls.indexOf('clip:hi')).toBeLessThan(host.calls.indexOf('key:86:down:0'))
     expect(pasteUp).toBeGreaterThan(-1)
     expect(restore).toBeGreaterThan(pasteUp)
-    expect(host.calls.at(-1)).toBe('clip:previous')
+    expect(host.calls.at(-1)).toBe('clip-restore:1')
     expect(host.calls).toContain('key:13:down:0')
     host.calls.length = 0
     await backend.typeText({ screen, position: [0, 0], text: 'x', replace: false, submit: false })
     expect(host.calls).not.toContain('key:65:down:0')
     expect(host.calls).not.toContain('key:13:down:0')
-    expect(host.calls.at(-1)).toBe('clip:previous')
+    expect(host.calls.at(-1)).toBe('clip-restore:1')
   })
 
   it('posts extended navigation keys, modifier chords, and one wheel notch per level', async () => {
@@ -195,7 +205,7 @@ describe('windows desktop backend', () => {
     expect(host.calls).toEqual(['key:46:down:1', 'key:46:up:1'])
     host.calls.length = 0
     await backend.hotkey({ keys: ['win'] })
-    expect(host.calls).toEqual(['key:91:down:0', 'key:91:up:0'])
+    expect(host.calls).toEqual(['key:91:down:1', 'key:91:up:1'])
     host.calls.length = 0
     await backend.hotkey({ keys: [] })
     expect(host.calls).toEqual([])
@@ -204,6 +214,58 @@ describe('windows desktop backend', () => {
     host.calls.length = 0
     await backend.scroll({ screen, position: [0, 0], direction: 'up', scrollLevel: 1 })
     expect(host.calls).toEqual(['wheel:120'])
+  })
+
+  it('holds click modifiers for the click and releases them even when the point is refused', async () => {
+    let blocked = true
+    const host = ops({ targetBlocksInput: hwnd => blocked && hwnd === 5 })
+    const screen = { index: 0, bounds, scale: 1 }
+    const backend = createWindowsDesktopBackend(host)
+    await expect(backend.click({
+      screen, position: [0, 0], button: 'left', count: 1, modifiers: ['cmd', 'shift'],
+    })).rejects.toThrow(/elevated/u)
+    expect(host.calls).toEqual([
+      'key:91:down:1',
+      'key:16:down:0',
+      'move:10,20',
+      'key:16:up:0',
+      'key:91:up:1',
+    ])
+    host.calls.length = 0
+    blocked = false
+    await backend.click({ screen, position: [0, 0], button: 'left', count: 1, modifiers: ['cmd'] })
+    expect(host.calls).toEqual(['key:91:down:1', 'move:10,20', 'down', 'up', 'key:91:up:1'])
+  })
+
+  it('releases a held mouse button when a drag aborts mid-hold', async () => {
+    const host = ops()
+    const screen = { index: 0, bounds, scale: 1 }
+    const backend = createWindowsDesktopBackend(host)
+    const controller = new AbortController()
+    const abort = new Error('stopped')
+    abort.name = 'AbortError'
+    const pending = backend.drag({
+      startScreen: screen, startPosition: [0, 0],
+      endScreen: screen, endPosition: [1000, 1000],
+    }, controller.signal)
+    // Abort inside the post-press hold, after the pointer settle.
+    setTimeout(() => { controller.abort(abort) }, 100)
+    await expect(pending).rejects.toThrow()
+    expect(host.calls.filter(call => call === 'down')).toEqual(['down'])
+    expect(host.calls.at(-1)).toBe('up')
+  })
+
+  it('refuses to focus an observed HWND that now belongs to another app', async () => {
+    const host = ops({
+      listWindows: () => shot([fact()], 9),
+      foregroundWindowId: () => 9,
+      windowAppName: () => 'chrome',
+      focusWindow: () => true,
+    })
+    const backend = createWindowsDesktopBackend(host)
+    await backend.listScreens()
+    await expect(backend.hotkey({ keys: ['ctrl', 'w'] }))
+      .rejects.toThrow(/window this session observed is gone/u)
   })
 
   it('brings the observed window forward before a hotkey when focus is elsewhere', async () => {
@@ -330,13 +392,15 @@ describe('windows desktop backend', () => {
   it('refuses input into an elevated window and opens Explorer for reveal', async () => {
     let blocked = true
     const host = ops({
-      targetBlocksInput: () => blocked,
+      targetBlocksInput: hwnd => blocked && hwnd === 5,
       activateApp: (name) => {
         if (name === 'stuck') throw new Error('computer-use: failed to activate stuck')
         return name === 'notepad'
       },
     })
     const backend = createWindowsDesktopBackend(host)
+    // The hotkey target comes from this backend's last observation window.
+    await backend.listScreens()
     await expect(backend.hotkey({ keys: ['ctrl', 'c'] })).rejects.toThrow(/elevated/u)
     blocked = false
     await expect(backend.openApp({ name: 'notepad' })).resolves.toEqual({ kind: 'activated', name: 'notepad' })
