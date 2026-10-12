@@ -63,6 +63,7 @@ export function apply(ctx: ClientContext): void {
     load: () => controller.load(),
     pickAvatar: () => controller.pickAvatar(),
     restoreAvatar: () => controller.restoreAvatar(),
+    setAvatarPreset: preset => controller.setAvatarPreset(preset),
     setOverlayModel: selection => controller.setOverlayModel(selection),
     setBackgroundModel: selection => controller.setBackgroundModel(selection),
     setSelectionEnabled: enabled => controller.setSelectionEnabled(enabled),

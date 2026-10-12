@@ -120,6 +120,7 @@ describe('ui-settings-orb apply', () => {
     const snapshot: OrbSettingsSnapshot = {
       supported: true,
       avatarUrl: 'dsh-app://app/orb-avatar?v=1',
+      avatarPresets: [],
       overlay: { provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'max' },
       background: { provider: 'deepseek-official', model: 'deepseek-chat' },
       selectionEnabled: true,
@@ -228,6 +229,7 @@ describe('ui-settings-orb apply', () => {
     const snapshot: OrbSettingsSnapshot = {
       supported: true,
       avatarUrl: 'dsh-app://app/orb-avatar?v=1',
+      avatarPresets: [],
       overlay: { provider: 'deepseek-official', model: 'deepseek-flash' },
       background: { provider: 'deepseek-official', model: 'deepseek-chat' },
       selectionEnabled: true,

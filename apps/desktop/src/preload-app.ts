@@ -62,6 +62,9 @@ function createProductApi(): DshDesktopProductApi {
       snapshot: () => ipcRenderer.invoke(DESKTOP_IPC.orbSnapshot) as Promise<OrbSettingsSnapshot>,
       pickAvatar: () => ipcRenderer.invoke(DESKTOP_IPC.orbPickAvatar) as Promise<OrbAvatarWriteResult>,
       restoreAvatar: () => ipcRenderer.invoke(DESKTOP_IPC.orbRestoreAvatar) as Promise<OrbSettingsSnapshot>,
+      setAvatarPreset: (preset: string) => (
+        ipcRenderer.invoke(DESKTOP_IPC.orbSetAvatarPreset, preset) as Promise<OrbSettingsSnapshot>
+      ),
       setOverlayModel: (selection: OrbAgentModelSelection) => (
         ipcRenderer.invoke(DESKTOP_IPC.orbSetOverlayModel, selection) as Promise<void>
       ),

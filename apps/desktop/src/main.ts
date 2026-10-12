@@ -58,12 +58,21 @@ import {
   assertOrbSettingsWritable,
   DEFAULT_ORB_AVATAR_FILE,
   installOrbAvatarFromPath,
+  isOrbAvatarPreset,
   ORB_AVATAR_PATH,
+  ORB_AVATAR_PRESET_PATH,
+  ORB_AVATAR_PRESETS,
+  ORB_AVATAR_PRESETS_DIR,
   orbAvatarCacheToken,
+  orbAvatarPresetUrl,
   orbAvatarUrl,
   orbSettingsSupported,
+  readOrbAvatarSelection,
   restoreOrbAvatar,
   serveOrbAvatar,
+  serveOrbAvatarPreset,
+  writeOrbAvatarPreset,
+  type OrbAvatarFiles,
 } from './orb-avatar.ts'
 import { applyMillifractionCoordinates } from './millifraction-coordinates-apply.ts'
 import { orbCoordinateModeFor, readMillifractionCoordinates, writeMillifractionCoordinates } from './millifraction-coordinates.ts'
@@ -790,19 +799,33 @@ async function main(): Promise<void> {
     backend.host?.sendOrbCodeAgentModel(next)
   }
 
+  /** Packaged files the avatar routes serve. */
+  const avatarFiles = (): OrbAvatarFiles => ({
+    defaultFile: join(app.getAppPath(), 'renderer', DEFAULT_ORB_AVATAR_FILE),
+    presetFile: preset => join(app.getAppPath(), 'renderer', ORB_AVATAR_PRESETS_DIR, `${preset}.gif`),
+  })
+
   function publishAvatar(): void {
     if (floatingShell === undefined || floatingShell.isDestroyed()) return
+    // A built-in avatar travels as a renderer-relative path, so the shell reads the
+    // multi-megabyte GIF from disk instead of over IPC.
+    const selection = readOrbAvatarSelection(paths.profile)
     floatingShell.webContents.send(
       DESKTOP_IPC.floatingAvatar,
-      orbAvatarUrl('shell', orbAvatarCacheToken(paths.profile)),
+      selection.kind === 'preset'
+        ? `${ORB_AVATAR_PRESETS_DIR}/${selection.preset}.gif`
+        : orbAvatarUrl('shell', orbAvatarCacheToken(paths.profile)),
     )
   }
 
   function orbSnapshotFor(hostname: string): OrbSettingsSnapshot {
     const models = readOrbAgentModels(paths.profile)
+    const selection = readOrbAvatarSelection(paths.profile)
     return {
       supported: orbSettingsSupported(process.platform),
       avatarUrl: orbAvatarUrl(hostname, orbAvatarCacheToken(paths.profile)),
+      ...(selection.kind === 'preset' ? { avatarPreset: selection.preset } : {}),
+      avatarPresets: ORB_AVATAR_PRESETS.map(id => ({ id, url: orbAvatarPresetUrl(id) })),
       overlay: models.overlay,
       background: models.background,
       selectionEnabled: selectionController?.enabled() ?? true,
@@ -878,12 +901,16 @@ async function main(): Promise<void> {
 
   protocol.handle(SCHEME, (request) => {
     const url = new URL(request.url)
-    if (url.pathname === ORB_AVATAR_PATH && (url.hostname === 'shell' || url.hostname === 'app')) {
-      return serveOrbAvatar(
-        paths.profile,
-        join(app.getAppPath(), 'renderer', DEFAULT_ORB_AVATAR_FILE),
+    if ((url.hostname === 'shell' || url.hostname === 'app')
+      && url.pathname.startsWith(`${ORB_AVATAR_PRESET_PATH}/`)) {
+      return serveOrbAvatarPreset(
+        avatarFiles(),
+        url.pathname.slice(ORB_AVATAR_PRESET_PATH.length + 1),
         request.method,
       )
+    }
+    if (url.pathname === ORB_AVATAR_PATH && (url.hostname === 'shell' || url.hostname === 'app')) {
+      return serveOrbAvatar(paths.profile, avatarFiles(), request.method)
     }
     // Shell-owned documents live in the application bundle and never pass through the Host.
     if (url.hostname === 'shell') return serveWebDocument(request, join(app.getAppPath(), 'renderer'))
@@ -1180,6 +1207,14 @@ async function main(): Promise<void> {
     if (!installed.ok) return installed
     publishAvatar()
     return { ok: true as const, snapshot: orbSnapshotFor('app') }
+  })
+  ipcMain.handle(DESKTOP_IPC.orbSetAvatarPreset, (event, preset: unknown) => {
+    assertProductSender(event)
+    assertOrbSettingsWritable(process.platform)
+    if (!isOrbAvatarPreset(preset)) throw new Error('dsh desktop: invalid orb avatar preset')
+    writeOrbAvatarPreset(paths.profile, preset)
+    publishAvatar()
+    return orbSnapshotFor('app')
   })
   ipcMain.handle(DESKTOP_IPC.orbRestoreAvatar, (event) => {
     assertProductSender(event)

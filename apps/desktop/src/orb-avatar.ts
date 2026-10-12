@@ -1,4 +1,4 @@
-/** Persist and serve a user-chosen floating-ball image from the Desktop profile. */
+/** Persist and serve the floating-ball image (built-in preset or user upload) from the Desktop profile. */
 
 import { readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
@@ -7,14 +7,35 @@ import { extname, join } from 'node:path'
 /** Profile-relative file holding the custom avatar bytes. */
 export const ORB_AVATAR_BYTES_FILE = 'orb-avatar'
 
-/** Profile-relative JSON naming the custom avatar MIME type. */
+/** Profile-relative JSON file that is the single source of truth for the ball image. */
 export const ORB_AVATAR_META_FILE = 'orb-avatar.json'
 
-/** Packaged GIF used when no custom avatar is stored. */
+/** Packaged GIF used when no preset is selected and no custom image is stored. */
 export const DEFAULT_ORB_AVATAR_FILE = 'deepseek-avatar-square.gif'
+
+/** Renderer-relative directory holding the built-in animated avatars. */
+export const ORB_AVATAR_PRESETS_DIR = 'assets/avatars'
 
 /** Custom-protocol pathname that serves the live ball image. */
 export const ORB_AVATAR_PATH = '/orb-avatar'
+
+/** Custom-protocol pathname prefix that serves one built-in preset for the Settings gallery. */
+export const ORB_AVATAR_PRESET_PATH = '/orb-avatar/preset'
+
+/** Built-in animated ball avatars, in gallery order. */
+export const ORB_AVATAR_PRESETS = ['point', 'rice', 'heart', 'cheer', 'cheeks', 'smile'] as const
+
+/** One built-in animated ball avatar id. */
+export type OrbAvatarPreset = (typeof ORB_AVATAR_PRESETS)[number]
+
+/**
+ * Whether `value` names a built-in avatar.
+ * @param value - candidate id.
+ * @returns true for one of {@link ORB_AVATAR_PRESETS}.
+ */
+export function isOrbAvatarPreset(value: unknown): value is OrbAvatarPreset {
+  return typeof value === 'string' && (ORB_AVATAR_PRESETS as readonly string[]).includes(value)
+}
 
 /** Suggested maximum size for a custom ball image. */
 export const MAX_ORB_AVATAR_BYTES = 2 * 1024 * 1024
@@ -46,6 +67,23 @@ export type OrbAvatarMime = 'image/gif' | 'image/png' | 'image/webp'
 /** Why installing a custom avatar failed. */
 export type OrbAvatarInstallError = 'too-large' | 'invalid-type'
 
+/** Current ball-image selection: a built-in, the packaged default, or an uploaded image. */
+export type OrbAvatarSelection =
+  | { readonly kind: 'default' }
+  | { readonly kind: 'preset'; readonly preset: OrbAvatarPreset }
+  | { readonly kind: 'custom'; readonly mime: OrbAvatarMime; readonly bytes: Uint8Array }
+
+/** Absolute files the avatar routes serve from the application bundle. */
+export interface OrbAvatarFiles {
+  /** Packaged default GIF. */
+  readonly defaultFile: string
+  /**
+   * Absolute path of one built-in preset GIF.
+   * @param preset - built-in avatar id.
+   */
+  readonly presetFile: (preset: OrbAvatarPreset) => string
+}
+
 const MIME_BY_EXTENSION: Readonly<Record<string, OrbAvatarMime>> = {
   '.gif': 'image/gif',
   '.png': 'image/png',
@@ -55,7 +93,7 @@ const MIME_BY_EXTENSION: Readonly<Record<string, OrbAvatarMime>> = {
 /**
  * Build a cache-busted avatar URL for one custom-protocol hostname.
  * @param hostname - `app` for the main window or `shell` for the floating renderer.
- * @param version - mtime of the custom file, or 0 when the packaged GIF is in use.
+ * @param version - mtime of the stored selection, or 0 when nothing is stored.
  * @returns `dsh-app://<hostname>/orb-avatar?v=<version>`.
  */
 export function orbAvatarUrl(hostname: string, version: number): string {
@@ -63,17 +101,29 @@ export function orbAvatarUrl(hostname: string, version: number): string {
 }
 
 /**
- * Cache token for the live ball image.
+ * URL of one built-in avatar for the Settings gallery.
+ * @param preset - built-in avatar id.
+ * @returns `dsh-app://app/orb-avatar/preset/<id>`.
+ */
+export function orbAvatarPresetUrl(preset: OrbAvatarPreset): string {
+  return `dsh-app://app${ORB_AVATAR_PRESET_PATH}/${preset}`
+}
+
+/**
+ * Cache token for the live ball image. The meta file wins because a preset selection
+ * only writes metadata; an unchanged token would leave the ball on the old image.
  * @param profileDir - Desktop profile directory.
- * @returns custom-file mtime in milliseconds, or 0 for the packaged GIF.
+ * @returns newest stored mtime in milliseconds, or 0 when nothing is stored.
  */
 export function orbAvatarCacheToken(profileDir: string): number {
-  try {
-    return statSync(join(profileDir, ORB_AVATAR_BYTES_FILE)).mtimeMs
-  } catch {
-    // Missing custom bytes mean the packaged GIF is in use.
-    return 0
+  for (const name of [ORB_AVATAR_META_FILE, ORB_AVATAR_BYTES_FILE]) {
+    try {
+      return statSync(join(profileDir, name)).mtimeMs
+    } catch {
+      // Fall through to the next stored file.
+    }
   }
+  return 0
 }
 
 /**
@@ -91,7 +141,8 @@ export function interpretOrbAvatarBytes(bytes: Uint8Array, filePath: string): Or
 }
 
 /**
- * Copy a picked image into the profile after size and type checks.
+ * Copy a picked image into the profile after size and type checks. Uploads replace
+ * a preset selection: one profile has one ball image.
  * @param profileDir - Desktop profile directory.
  * @param filePath - absolute path chosen in the open dialog.
  * @returns success, or a reason the file was rejected.
@@ -116,7 +167,23 @@ export function installOrbAvatarFromPath(
 }
 
 /**
- * Delete a custom ball image so the packaged GIF is served again.
+ * Select one built-in avatar. Selecting a built-in removes uploaded bytes, because
+ * one profile has one ball image.
+ * @param profileDir - Desktop profile directory.
+ * @param preset - built-in avatar id.
+ * @throws when the id is not a known preset; nothing is written in that case.
+ */
+export function writeOrbAvatarPreset(profileDir: string, preset: OrbAvatarPreset): void {
+  if (!isOrbAvatarPreset(preset)) throw new Error(`dsh desktop: unknown orb avatar preset "${String(preset)}"`)
+  writeFileSync(
+    join(profileDir, ORB_AVATAR_META_FILE),
+    `${JSON.stringify({ kind: 'preset', preset }, undefined, 2)}\n`,
+  )
+  removeCustomOrbAvatarBytes(profileDir)
+}
+
+/**
+ * Delete the stored selection so the packaged GIF is served again.
  * @param profileDir - Desktop profile directory.
  */
 export function restoreOrbAvatar(profileDir: string): void {
@@ -124,36 +191,61 @@ export function restoreOrbAvatar(profileDir: string): void {
     try {
       unlinkSync(join(profileDir, name))
     } catch (error) {
-      // Already-restored profiles have no custom files to delete.
+      // Already-restored profiles have no stored files to delete.
       if (!isEnoent(error)) throw error
     }
   }
 }
 
 /**
+ * Read the current ball image, validating stored state every time. An unknown preset id
+ * (a downgraded plugin or a removed asset) reads as the packaged default, never as stale
+ * bytes the user replaced.
+ * @param profileDir - Desktop profile directory.
+ * @returns the selection with custom bytes when one is stored.
+ */
+export function readOrbAvatarSelection(profileDir: string): OrbAvatarSelection {
+  const meta = readOrbAvatarMeta(profileDir)
+  if (meta !== undefined && 'preset' in meta) {
+    return isOrbAvatarPreset(meta.preset) ? { kind: 'preset', preset: meta.preset } : { kind: 'default' }
+  }
+  const bytes = readOrbAvatarBytes(profileDir)
+  if (bytes === undefined) return { kind: 'default' }
+  const sniffed = sniffOrbAvatarMime(bytes)
+  if (sniffed === undefined) return { kind: 'default' }
+  const declared = meta?.mime
+  if (declared !== undefined && declared !== sniffed) return { kind: 'default' }
+  return { kind: 'custom', mime: declared ?? sniffed, bytes }
+}
+
+/**
  * Serve the live ball image for GET or HEAD.
  * @param profileDir - Desktop profile directory.
- * @param defaultFilePath - packaged GIF on disk.
+ * @param files - packaged default and preset file resolver.
  * @param method - HTTP method of the custom-protocol request.
- * @returns the custom image when present and valid, otherwise the packaged GIF.
+ * @returns the selected image, otherwise the packaged GIF.
  */
 export async function serveOrbAvatar(
   profileDir: string,
-  defaultFilePath: string,
+  files: OrbAvatarFiles,
   method: string,
 ): Promise<Response> {
   if (method !== 'GET' && method !== 'HEAD') return new Response(null, { status: 405 })
-  const custom = readCustomOrbAvatar(profileDir)
-  const mime = custom?.mime ?? 'image/gif'
+  const selection = readOrbAvatarSelection(profileDir)
+  const source = selection.kind === 'preset'
+    ? { mime: 'image/gif' as const, path: files.presetFile(selection.preset), bytes: undefined }
+    : selection.kind === 'custom'
+      ? { mime: selection.mime, path: undefined, bytes: selection.bytes }
+      : { mime: 'image/gif' as const, path: files.defaultFile, bytes: undefined }
   try {
     const body = method === 'HEAD'
       ? null
-      : custom !== undefined
-        ? Buffer.from(custom.bytes)
-        : await readFile(defaultFilePath)
+      : source.bytes !== undefined
+        ? Buffer.from(source.bytes)
+        : await readFile(source.path)
     return new Response(body, {
       headers: {
-        'content-type': mime,
+        'content-type': source.mime,
         'cache-control': 'no-store',
       },
     })
@@ -163,40 +255,79 @@ export async function serveOrbAvatar(
   }
 }
 
+/**
+ * Serve one built-in avatar for the Settings gallery.
+ * @param files - packaged preset file resolver.
+ * @param preset - requested preset id.
+ * @param method - HTTP method of the custom-protocol request.
+ * @returns the GIF, 404 for an unknown id, or 405 for other methods.
+ */
+export async function serveOrbAvatarPreset(
+  files: OrbAvatarFiles,
+  preset: string,
+  method: string,
+): Promise<Response> {
+  if (method !== 'GET' && method !== 'HEAD') return new Response(null, { status: 405 })
+  if (!isOrbAvatarPreset(preset)) return new Response(null, { status: 404 })
+  try {
+    const body = method === 'HEAD' ? null : await readFile(files.presetFile(preset))
+    return new Response(body, {
+      headers: {
+        'content-type': 'image/gif',
+        'cache-control': 'no-store',
+      },
+    })
+  } catch {
+    // A missing packaged preset is a 404 the protocol handler already maps.
+    return new Response(null, { status: 404 })
+  }
+}
+
+interface OrbAvatarMeta {
+  readonly mime?: OrbAvatarMime
+  readonly preset?: unknown
+}
+
+function readOrbAvatarMeta(profileDir: string): OrbAvatarMeta | undefined {
+  try {
+    const value: unknown = JSON.parse(readFileSync(join(profileDir, ORB_AVATAR_META_FILE), 'utf8'))
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+    const record = value as { kind?: unknown; mime?: unknown; preset?: unknown }
+    if (record.kind === 'preset') return { preset: record.preset }
+    if (record.mime === 'image/gif' || record.mime === 'image/png' || record.mime === 'image/webp') {
+      return { mime: record.mime }
+    }
+    return undefined
+  } catch {
+    // Missing or invalid metadata: fall back to stored bytes, then the packaged default.
+    return undefined
+  }
+}
+
+function readOrbAvatarBytes(profileDir: string): Uint8Array | undefined {
+  try {
+    return new Uint8Array(readFileSync(join(profileDir, ORB_AVATAR_BYTES_FILE)))
+  } catch {
+    // No custom bytes are stored.
+    return undefined
+  }
+}
+
 function writeCustomOrbAvatar(profileDir: string, bytes: Uint8Array, mime: OrbAvatarMime): void {
   writeFileSync(join(profileDir, ORB_AVATAR_BYTES_FILE), bytes)
   writeFileSync(
     join(profileDir, ORB_AVATAR_META_FILE),
-    `${JSON.stringify({ mime }, undefined, 2)}\n`,
+    `${JSON.stringify({ kind: 'custom', mime }, undefined, 2)}\n`,
   )
 }
 
-function readCustomOrbAvatar(
-  profileDir: string,
-): { bytes: Uint8Array; mime: OrbAvatarMime } | undefined {
-  let bytes: Uint8Array
+function removeCustomOrbAvatarBytes(profileDir: string): void {
   try {
-    bytes = new Uint8Array(readFileSync(join(profileDir, ORB_AVATAR_BYTES_FILE)))
-  } catch {
-    // No custom bytes: serve the packaged GIF.
-    return undefined
+    unlinkSync(join(profileDir, ORB_AVATAR_BYTES_FILE))
+  } catch (error) {
+    // A profile that never uploaded one has no bytes to delete.
+    if (!isEnoent(error)) throw error
   }
-  let mime: OrbAvatarMime | undefined
-  try {
-    const value: unknown = JSON.parse(readFileSync(join(profileDir, ORB_AVATAR_META_FILE), 'utf8'))
-    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-      const record = value as { mime?: unknown }
-      if (record.mime === 'image/gif' || record.mime === 'image/png' || record.mime === 'image/webp') {
-        mime = record.mime
-      }
-    }
-  } catch {
-    // Invalid metadata falls through to a sniff of the stored bytes.
-  }
-  const sniffed = sniffOrbAvatarMime(bytes)
-  if (sniffed === undefined) return undefined
-  if (mime !== undefined && mime !== sniffed) return undefined
-  return { bytes, mime: mime ?? sniffed }
 }
 
 function sniffOrbAvatarMime(bytes: Uint8Array): OrbAvatarMime | undefined {

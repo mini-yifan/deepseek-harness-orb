@@ -47,6 +47,10 @@ export interface OrbSettingsState {
   /** False until the host reports that this OS creates the ball. Linux stays false. */
   supported: boolean
   avatarUrl: string
+  /** Selected built-in avatar id, when the ball uses one. */
+  avatarPreset: string | undefined
+  /** Built-in avatars for the gallery, in gallery order. */
+  avatarPresets: readonly { readonly id: string; readonly url: string }[]
   avatarError: Exclude<OrbAvatarWriteError, 'cancelled'> | null
   overlay: OrbAgentModelSelection
   background: OrbAgentModelSelection
@@ -62,6 +66,8 @@ const IDLE: OrbSettingsState = {
   error: null,
   supported: false,
   avatarUrl: '',
+  avatarPreset: undefined,
+  avatarPresets: [],
   avatarError: null,
   overlay: { provider: '', model: '' },
   background: { provider: '', model: '' },
@@ -86,6 +92,8 @@ export interface OrbSettingsSectionInjected {
   pickAvatar: () => Promise<void>
   /** Delete the custom image so the packaged GIF is served again. */
   restoreAvatar: () => Promise<void>
+  /** Select one built-in animated avatar. */
+  setAvatarPreset: (preset: string) => Promise<void>
   /** Persist the overlay Computer Use model. */
   setOverlayModel: (selection: OrbAgentModelSelection) => Promise<void>
   /** Persist the background `code_agent` model. */
@@ -171,6 +179,27 @@ export class OrbSettingsController {
     this.store.set({ ...this.store.getSnapshot(), busy: true, avatarError: null })
     try {
       this.applySnapshot(await api.orb.restoreAvatar())
+    } catch (error) {
+      this.store.set({
+        ...this.store.getSnapshot(),
+        status: 'error',
+        error: errorMessage(error),
+        busy: false,
+      })
+    }
+  }
+
+  /**
+   * Select one built-in animated avatar.
+   * @param preset - built-in avatar id.
+   * @returns after the snapshot reflects the selection.
+   */
+  async setAvatarPreset(preset: string): Promise<void> {
+    const api = this.requireApi()
+    if (api === undefined) return
+    this.store.set({ ...this.store.getSnapshot(), busy: true, avatarError: null })
+    try {
+      this.applySnapshot(await api.orb.setAvatarPreset(preset))
     } catch (error) {
       this.store.set({
         ...this.store.getSnapshot(),
@@ -286,6 +315,8 @@ export class OrbSettingsController {
       avatarError: null,
       supported: snapshot.supported,
       avatarUrl: snapshot.avatarUrl,
+      avatarPreset: snapshot.avatarPreset,
+      avatarPresets: snapshot.avatarPresets,
       overlay: snapshot.overlay,
       background: snapshot.background,
       selectionEnabled: snapshot.selectionEnabled,
@@ -304,6 +335,8 @@ export class OrbSettingsController {
       error,
       supported: snapshot.supported,
       avatarUrl: snapshot.avatarUrl,
+      avatarPreset: snapshot.avatarPreset,
+      avatarPresets: snapshot.avatarPresets,
       avatarError: null,
       overlay: snapshot.overlay,
       background: snapshot.background,

@@ -10,8 +10,23 @@ import { Button, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { OrbModelPicker } from './OrbModelPicker.tsx'
 import type { OrbSettingsSectionInjected } from './section-store.ts'
+import type { OrbSettingsKey } from './locales.ts'
 import type { TccRightState } from './desktop-api.ts'
 import css from './OrbSettingsSection.module.css'
+
+/** Gallery label key per built-in avatar id; an unknown id falls back to the card title. */
+const PRESET_LABEL_KEYS: Readonly<Record<string, OrbSettingsKey>> = {
+  point: 'avatarPresetPoint',
+  rice: 'avatarPresetRice',
+  heart: 'avatarPresetHeart',
+  cheer: 'avatarPresetCheer',
+  cheeks: 'avatarPresetCheeks',
+  smile: 'avatarPresetSmile',
+}
+
+function presetLabelKey(id: string): OrbSettingsKey {
+  return PRESET_LABEL_KEYS[id] ?? 'avatarTitle'
+}
 
 /** Full component props. */
 export type OrbSettingsSectionProps =
@@ -91,6 +106,25 @@ export function OrbSettingsSection(props: OrbSettingsSectionProps): ReactNode {
             </div>
           </div>
           {avatarMessage === null ? null : <p className={css.error} role="alert">{avatarMessage}</p>}
+          {state.avatarPresets.length === 0 ? null : (
+            <div className={css.avatarGallery}>
+              <p className={css.cardDescription}>{t('avatarPresetsTitle')}</p>
+              {state.avatarPresets.map(preset => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={css.avatarPreset}
+                  aria-pressed={state.avatarPreset === preset.id}
+                  aria-label={t(presetLabelKey(preset.id))}
+                  title={t(presetLabelKey(preset.id))}
+                  disabled={disabled}
+                  onClick={() => { void props.setAvatarPreset(preset.id) }}
+                >
+                  <img src={preset.url} alt="" />
+                </button>
+              ))}
+            </div>
+          )}
         </section>
         <section className={css.card}>
           <div className={css.toggleRow}>

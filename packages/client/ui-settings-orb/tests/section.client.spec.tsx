@@ -17,6 +17,8 @@ const READY: OrbSettingsState = {
   error: null,
   supported: true,
   avatarUrl: 'dsh-app://app/orb-avatar?v=1',
+  avatarPreset: undefined,
+  avatarPresets: [],
   avatarError: null,
   overlay: { provider: 'deepseek-official', model: 'deepseek-flash' },
   background: { provider: 'deepseek-official', model: 'deepseek-chat' },

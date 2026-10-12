@@ -13,6 +13,13 @@ export type OrbSettingsKey =
   | 'avatarAlt'
   | 'chooseImage'
   | 'restoreDefault'
+  | 'avatarPresetsTitle'
+  | 'avatarPresetPoint'
+  | 'avatarPresetRice'
+  | 'avatarPresetHeart'
+  | 'avatarPresetCheer'
+  | 'avatarPresetCheeks'
+  | 'avatarPresetSmile'
   | 'tooLarge'
   | 'invalidType'
   | 'overlayTitle'
@@ -56,6 +63,13 @@ export const zh: Record<OrbSettingsKey, string> = {
   avatarAlt: '悬浮球头像预览',
   chooseImage: '选择图片',
   restoreDefault: '恢复默认',
+  avatarPresetsTitle: '内置动图',
+  avatarPresetPoint: '指点',
+  avatarPresetRice: '干饭',
+  avatarPresetHeart: '比心',
+  avatarPresetCheer: '欢呼',
+  avatarPresetCheeks: '托腮',
+  avatarPresetSmile: '微笑',
   tooLarge: '图片超过 2 MB。',
   invalidType: '请选择 GIF、PNG 或 WebP 图片。',
   overlayTitle: '悬浮球 Agent',
@@ -100,6 +114,13 @@ export const en: Record<OrbSettingsKey, string> = {
   avatarAlt: 'Floating-ball image preview',
   chooseImage: 'Choose image',
   restoreDefault: 'Restore default',
+  avatarPresetsTitle: 'Built-in animations',
+  avatarPresetPoint: 'Pointing',
+  avatarPresetRice: 'Eating',
+  avatarPresetHeart: 'Heart',
+  avatarPresetCheer: 'Cheering',
+  avatarPresetCheeks: 'Resting',
+  avatarPresetSmile: 'Smiling',
   tooLarge: 'The image is larger than 2 MB.',
   invalidType: 'Choose a GIF, PNG, or WebP image.',
   overlayTitle: 'Floating-ball Agent',

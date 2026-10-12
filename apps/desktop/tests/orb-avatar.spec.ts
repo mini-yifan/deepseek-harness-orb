@@ -7,15 +7,22 @@ import {
   DEFAULT_ORB_AVATAR_FILE,
   installOrbAvatarFromPath,
   interpretOrbAvatarBytes,
+  isOrbAvatarPreset,
   MAX_ORB_AVATAR_BYTES,
   ORB_AVATAR_BYTES_FILE,
   ORB_AVATAR_META_FILE,
+  ORB_AVATAR_PRESETS,
   ORB_SETTINGS_MACOS_ONLY,
   orbAvatarCacheToken,
+  orbAvatarPresetUrl,
   orbAvatarUrl,
   orbSettingsSupported,
+  readOrbAvatarSelection,
   restoreOrbAvatar,
   serveOrbAvatar,
+  serveOrbAvatarPreset,
+  writeOrbAvatarPreset,
+  type OrbAvatarFiles,
 } from '../src/orb-avatar.ts'
 
 const roots: string[] = []
@@ -48,6 +55,14 @@ function writeImage(root: string, name: string, bytes: Uint8Array): string {
   return path
 }
 
+/** Packaged files rooted in the temp profile: the default GIF plus one file per preset. */
+function files(root: string): OrbAvatarFiles {
+  return {
+    defaultFile: join(root, DEFAULT_ORB_AVATAR_FILE),
+    presetFile: preset => join(root, `${preset}.gif`),
+  }
+}
+
 describe('orb avatar persistence', () => {
   it('accepts GIF, PNG, and WebP magic that matches the extension', () => {
     expect(interpretOrbAvatarBytes(GIF89A, 'ball.gif')).toBe('image/gif')
@@ -61,17 +76,54 @@ describe('orb avatar persistence', () => {
     const root = profile()
     const gif = writeImage(root, 'picked.gif', GIF89A)
     expect(installOrbAvatarFromPath(root, gif)).toEqual({ ok: true })
-    expect(JSON.parse(readFileSync(join(root, ORB_AVATAR_META_FILE), 'utf8'))).toEqual({ mime: 'image/gif' })
-    expect(orbAvatarCacheToken(root)).toBe(statSync(join(root, ORB_AVATAR_BYTES_FILE)).mtimeMs)
-    const served = await serveOrbAvatar(root, gif, 'GET')
+    expect(JSON.parse(readFileSync(join(root, ORB_AVATAR_META_FILE), 'utf8'))).toEqual({ kind: 'custom', mime: 'image/gif' })
+    expect(orbAvatarCacheToken(root)).toBe(statSync(join(root, ORB_AVATAR_META_FILE)).mtimeMs)
+    const served = await serveOrbAvatar(root, files(root), 'GET')
     expect(served.headers.get('content-type')).toBe('image/gif')
     expect(new Uint8Array(await served.arrayBuffer())).toEqual(GIF89A)
     restoreOrbAvatar(root)
     expect(orbAvatarCacheToken(root)).toBe(0)
     const fallback = writeImage(root, DEFAULT_ORB_AVATAR_FILE, GIF89A)
-    const restored = await serveOrbAvatar(root, fallback, 'HEAD')
+    const restored = await serveOrbAvatar(root, files(root), 'HEAD')
     expect(restored.status).toBe(200)
     expect(await restored.arrayBuffer()).toEqual(new ArrayBuffer(0))
+    expect(fallback).toContain(DEFAULT_ORB_AVATAR_FILE)
+  })
+
+  it('selects a built-in avatar, drops uploaded bytes, and serves it', async () => {
+    const root = profile()
+    const gif = writeImage(root, 'picked.gif', GIF89A)
+    installOrbAvatarFromPath(root, gif)
+    writeOrbAvatarPreset(root, 'heart')
+    expect(JSON.parse(readFileSync(join(root, ORB_AVATAR_META_FILE), 'utf8'))).toEqual({ kind: 'preset', preset: 'heart' })
+    expect(readOrbAvatarSelection(root)).toEqual({ kind: 'preset', preset: 'heart' })
+    writeImage(root, 'heart.gif', GIF89A)
+    const served = await serveOrbAvatar(root, files(root), 'GET')
+    expect(new Uint8Array(await served.arrayBuffer())).toEqual(GIF89A)
+    // The uploaded bytes are gone: a later upload is the only way back to a custom image.
+    expect(() => { statSync(join(root, ORB_AVATAR_BYTES_FILE)) }).toThrow()
+    const gallery = await serveOrbAvatarPreset(files(root), 'heart', 'GET')
+    expect(gallery.status).toBe(200)
+    expect((await serveOrbAvatarPreset(files(root), 'nope', 'GET')).status).toBe(404)
+    expect((await serveOrbAvatarPreset(files(root), 'heart', 'POST')).status).toBe(405)
+    expect(() => { writeOrbAvatarPreset(root, 'nope' as never) }).toThrow(/unknown orb avatar preset/u)
+    expect(isOrbAvatarPreset('point')).toBe(true)
+    expect(ORB_AVATAR_PRESETS).toHaveLength(6)
+    expect(orbAvatarPresetUrl('point')).toBe('dsh-app://app/orb-avatar/preset/point')
+  })
+
+  it('falls back to the packaged default for an unknown stored preset', async () => {
+    const root = profile()
+    writeFileSync(
+      join(root, ORB_AVATAR_META_FILE),
+      `${JSON.stringify({ kind: 'preset', preset: 'retired' }, undefined, 2)}\n`,
+    )
+    writeFileSync(join(root, ORB_AVATAR_BYTES_FILE), GIF89A)
+    expect(readOrbAvatarSelection(root)).toEqual({ kind: 'default' })
+    const fallback = writeImage(root, DEFAULT_ORB_AVATAR_FILE, PNG)
+    const served = await serveOrbAvatar(root, files(root), 'GET')
+    expect(new Uint8Array(await served.arrayBuffer())).toEqual(PNG)
+    expect(fallback).toContain(DEFAULT_ORB_AVATAR_FILE)
   })
 
   it('rejects files over 2 MB and unknown types', () => {
@@ -98,11 +150,11 @@ describe('orb avatar persistence', () => {
 
   it('rejects non-GET methods and falls back when stored bytes are not an image', async () => {
     const root = profile()
-    const fallback = writeImage(root, DEFAULT_ORB_AVATAR_FILE, GIF89A)
-    expect((await serveOrbAvatar(root, fallback, 'POST')).status).toBe(405)
+    writeImage(root, DEFAULT_ORB_AVATAR_FILE, GIF89A)
+    expect((await serveOrbAvatar(root, files(root), 'POST')).status).toBe(405)
     writeFileSync(join(root, ORB_AVATAR_BYTES_FILE), new Uint8Array([0x6e, 0x6f]))
-    writeFileSync(join(root, ORB_AVATAR_META_FILE), `${JSON.stringify({ mime: 'image/gif' }, undefined, 2)}\n`)
-    const served = await serveOrbAvatar(root, fallback, 'GET')
+    writeFileSync(join(root, ORB_AVATAR_META_FILE), `${JSON.stringify({ kind: 'custom', mime: 'image/gif' }, undefined, 2)}\n`)
+    const served = await serveOrbAvatar(root, files(root), 'GET')
     expect(served.headers.get('content-type')).toBe('image/gif')
     expect(new Uint8Array(await served.arrayBuffer())).toEqual(GIF89A)
   })

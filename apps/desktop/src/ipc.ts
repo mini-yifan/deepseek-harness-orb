@@ -77,6 +77,7 @@ export const DESKTOP_IPC = {
   orbSnapshot: 'dsh-desktop:orb-snapshot',
   orbPickAvatar: 'dsh-desktop:orb-pick-avatar',
   orbRestoreAvatar: 'dsh-desktop:orb-restore-avatar',
+  orbSetAvatarPreset: 'dsh-desktop:orb-set-avatar-preset',
   orbSetOverlayModel: 'dsh-desktop:orb-set-overlay-model',
   orbSetBackgroundModel: 'dsh-desktop:orb-set-background-model',
   orbSetSelectionEnabled: 'dsh-desktop:orb-set-selection-enabled',
@@ -164,6 +165,10 @@ export interface DesktopUpdatePresentation {
 export interface OrbSettingsSnapshot {
   readonly supported: boolean
   readonly avatarUrl: string
+  /** Selected built-in avatar id, absent when the ball uses the default or an upload. */
+  readonly avatarPreset?: string
+  /** Built-in avatars for the Settings gallery, in gallery order. */
+  readonly avatarPresets: readonly { readonly id: string; readonly url: string }[]
   readonly overlay: OrbAgentModelSelection
   readonly background: OrbAgentModelSelection
   readonly selectionEnabled: boolean
@@ -205,6 +210,7 @@ export interface DshDesktopProductApi {
     snapshot(): Promise<OrbSettingsSnapshot>
     pickAvatar(): Promise<OrbAvatarWriteResult>
     restoreAvatar(): Promise<OrbSettingsSnapshot>
+    setAvatarPreset(preset: string): Promise<OrbSettingsSnapshot>
     setOverlayModel(selection: OrbAgentModelSelection): Promise<void>
     setBackgroundModel(selection: OrbAgentModelSelection): Promise<void>
     setSelectionEnabled(enabled: boolean): Promise<void>
