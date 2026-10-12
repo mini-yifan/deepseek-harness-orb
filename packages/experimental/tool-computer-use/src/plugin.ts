@@ -53,6 +53,7 @@ import {
 } from './observe.ts'
 import { isUsableObservationRaster } from './raster.ts'
 import { policyFor } from './policy.ts'
+import { withScreenLock } from './gui-lock.ts'
 import { assertImageCapableRoute, routeAcceptsImages } from './route.ts'
 import { isDesktopSelectionTurn } from './selection-turn.ts'
 import { pairScreenshotFiles, writeDesktopScreenshots } from './screenshot.ts'
@@ -211,18 +212,19 @@ async function recapture(
 }
 
 /**
- * Hold overlay click-through across one HID or activate call and its recapture.
+ * Hold the cross-session screen lock and overlay click-through across one HID or activate call and
+ * its recapture. Contention from another Computer Use session fails fast before any cloak IPC.
  * @param backend - desktop backend; Desktop wrap maps this to overlay-guard `withInput`.
- * @param signal - cooperative cancellation.
+ * @param exec - tool execution; its agent id owns the lock and its signal cancels the action.
  * @param run - HID plus recapture.
  * @returns the value `run` resolves to.
  */
 function guiTurn<T>(
   backend: DesktopBackend,
-  signal: AbortSignal,
+  exec: ToolExecution,
   run: () => Promise<T>,
 ): Promise<T> {
-  return backend.withGuiTurn(run, signal)
+  return withScreenLock(exec.agent?.id, () => backend.withGuiTurn(run, exec.signal))
 }
 
 function screenshotIntro(paths: readonly string[], outcome: CoordinateOutcome): string {
@@ -341,7 +343,7 @@ export function applyComputerUse(
       const button: ClickButton = args.button === 'right' ? 'right' : 'left'
       const count: 1 | 2 = args.count === 2 ? 2 : 1
       const modifiers = requireClickModifiers(args.modifiers)
-      return guiTurn(backend, exec.signal, async () => {
+      return guiTurn(backend, exec, async () => {
         const screens = await backend.listScreens(exec.signal)
         const screen = requireScreen(screens, args.screen_index)
         await backend.click({
@@ -417,7 +419,7 @@ export function applyComputerUse(
       const position = validatedPosition(exec, args.position)
       const replace = args.replace ?? false
       const submit = args.submit ?? false
-      return guiTurn(backend, exec.signal, async () => {
+      return guiTurn(backend, exec, async () => {
         const screens = await backend.listScreens(exec.signal)
         const screen = requireScreen(screens, args.screen_index)
         await backend.typeText({
@@ -497,7 +499,7 @@ export function applyComputerUse(
       if (!Number.isInteger(args.scroll_level) || args.scroll_level < 1 || args.scroll_level > 10) {
         throw new Error('scroll_level must be an integer from 1 to 10')
       }
-      return guiTurn(backend, exec.signal, async () => {
+      return guiTurn(backend, exec, async () => {
         const screens = await backend.listScreens(exec.signal)
         const screen = requireScreen(screens, args.screen_index)
         await backend.scroll({
@@ -555,7 +557,7 @@ export function applyComputerUse(
       await assertImageCapableRoute(ctx, exec)
       if (args.keys.length === 0) throw new Error('keys must contain at least one key')
       assertAllowedHotkey(args.keys)
-      return guiTurn(backend, exec.signal, async () => {
+      return guiTurn(backend, exec, async () => {
         await backend.hotkey({ keys: args.keys }, exec.signal)
         const observation = await recapture(ctx, backend, exec, config.postActionWaitMs)
         return {
@@ -704,10 +706,10 @@ export function applyComputerUse(
       if (first === undefined || firstPath === undefined) {
         throw new Error('computer-use: screenshot produced no files')
       }
-      await backend.copyImageToClipboard(
+      await withScreenLock(exec.agent?.id, () => backend.copyImageToClipboard(
         { path: firstPath, mediaType: first.mediaType },
         exec.signal,
-      )
+      ))
       return {
         paths: [...paths],
         clipboard: true,
@@ -765,7 +767,7 @@ export function applyComputerUse(
       await assertImageCapableRoute(ctx, exec)
       const position = validatedPosition(exec, args.position)
       const durationSeconds = requireLongPressDuration(args.duration_seconds)
-      return guiTurn(backend, exec.signal, async () => {
+      return guiTurn(backend, exec, async () => {
         const screens = await backend.listScreens(exec.signal)
         const screen = requireScreen(screens, args.screen_index)
         await backend.longPress({
@@ -843,7 +845,7 @@ export function applyComputerUse(
       await assertImageCapableRoute(ctx, exec)
       const startPosition = validatedPosition(exec, args.start_position)
       const endPosition = validatedPosition(exec, args.end_position)
-      return guiTurn(backend, exec.signal, async () => {
+      return guiTurn(backend, exec, async () => {
         const screens = await backend.listScreens(exec.signal)
         const startScreen = requireScreen(screens, args.start_screen_index)
         const endScreen = requireScreen(screens, args.end_screen_index)
@@ -902,12 +904,16 @@ export function applyComputerUse(
     async execute(args, exec) {
       await assertImageCapableRoute(ctx, exec)
       const url = args.url === undefined || args.url.trim() === '' ? undefined : requireBrowserUrl(args.url)
-      await backend.openInBrowser(url === undefined ? {} : { url }, exec.signal)
-      const observation = await recapture(ctx, backend, exec, config.postActionWaitMs)
-      return {
-        ...url === undefined ? {} : { url },
-        ...observedFields(sessionOf(exec), observation),
-      }
+      // The browser activation steals the foreground, so it holds the screen lock even though it
+      // posts no HID and stays outside the overlay cloak.
+      return withScreenLock(exec.agent?.id, async () => {
+        await backend.openInBrowser(url === undefined ? {} : { url }, exec.signal)
+        const observation = await recapture(ctx, backend, exec, config.postActionWaitMs)
+        return {
+          ...url === undefined ? {} : { url },
+          ...observedFields(sessionOf(exec), observation),
+        }
+      })
     },
   }))
 
@@ -960,13 +966,17 @@ export function applyComputerUse(
       const target = await resolveFinderOpen(args.path, requestedReveal)
       const info = await stat(target.path)
       const revealOnly = target.revealOnly && info.isFile()
-      await backend.openInFinder({ path: target.path, revealOnly }, exec.signal)
-      const observation = await recapture(ctx, backend, exec, config.postActionWaitMs)
-      return {
-        path: target.path,
-        revealOnly,
-        ...observedFields(sessionOf(exec), observation),
-      }
+      // Finder activation steals the foreground, so it holds the screen lock even though it posts
+      // no HID and stays outside the overlay cloak.
+      return withScreenLock(exec.agent?.id, async () => {
+        await backend.openInFinder({ path: target.path, revealOnly }, exec.signal)
+        const observation = await recapture(ctx, backend, exec, config.postActionWaitMs)
+        return {
+          path: target.path,
+          revealOnly,
+          ...observedFields(sessionOf(exec), observation),
+        }
+      })
     },
   }))
 
@@ -1050,7 +1060,7 @@ export function applyComputerUse(
       await assertImageCapableRoute(ctx, exec)
       const name = args.name.trim()
       if (name === '') throw new Error('name must be a non-empty application name or bundle id')
-      return guiTurn(backend, exec.signal, async () => {
+      return guiTurn(backend, exec, async () => {
         let action: 'activated' | 'launched' | undefined
         let error: string | undefined
         let settleMs = 0

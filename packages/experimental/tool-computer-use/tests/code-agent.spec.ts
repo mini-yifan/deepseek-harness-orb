@@ -62,11 +62,17 @@ interface FakeAgent {
   readonly whenIdleCalls: number
   readonly statusSubscriptions: number
   readonly cancelCalls: Array<{ cause: unknown; options?: { keepInbox?: boolean } }>
-  readonly session: { deriveMessages(): FakeMessage[] }
+  readonly session: {
+    readonly id: SessionId
+    readonly header?: { readonly agentPreset?: string }
+    deriveMessages(): FakeMessage[]
+  }
   whenIdle(): Promise<void>
   followup(message: UserMessage): void
   cancel(cause: unknown, options?: { keepInbox?: boolean }): void
   emitWaterfall(event: string, payload: unknown): Promise<unknown>
+  /** Deliver one durable session event to listeners registered for `session/event`. */
+  emitSessionEvent(event: { readonly type: string; readonly data: unknown }): void
   readonly ctx: {
     logger: { warn(message?: string): void }
     effect(callback: () => (() => undefined) | undefined): () => undefined
@@ -79,6 +85,8 @@ interface FakeAgent {
   setRunning(): void
   resolveIdle(): void
   emitStatus(): void
+  /** The driver picked every queued prompt up, as the real agent loop does when a stretch starts. */
+  claimPrompt(): void
   dispose(): void
 }
 
@@ -92,11 +100,13 @@ function createFakeAgent(id: SessionId, options: {
   readonly deriveError?: Error
   readonly onDerive?: () => void
   readonly syncClaimOnStatusSubscribe?: boolean
+  readonly preset?: string
 } = {}): FakeAgent {
   let status: 'idle' | 'running' = options.status ?? 'idle'
   let idle = Promise.withResolvers<undefined>()
   if (status === 'idle') idle.resolve(undefined)
   const statusListeners = new Set<(payload: { status: 'idle' | 'running' }) => void>()
+  const sessionEventListeners = new Set<(session: unknown, payload: unknown) => void>()
   const disposedListeners = new Set<() => void>()
   const effects: Array<() => void> = []
   const followups: UserMessage[] = []
@@ -125,6 +135,8 @@ function createFakeAgent(id: SessionId, options: {
     },
     cancelCalls,
     session: {
+      id,
+      ...options.preset === undefined ? {} : { header: { agentPreset: options.preset } },
       deriveMessages() {
         options.onDerive?.()
         if (options.deriveError !== undefined) throw options.deriveError
@@ -178,6 +190,13 @@ function createFakeAgent(id: SessionId, options: {
         }
       },
       on(event, handler, eventOptions) {
+        if (event === 'session/event') {
+          const wrapped = handler as (session: unknown, payload: unknown) => void
+          sessionEventListeners.add(wrapped)
+          return () => {
+            sessionEventListeners.delete(wrapped)
+          }
+        }
         if (event === 'agent/status') {
           const wrapped = (payload: { status: 'idle' | 'running' }): void => {
             handler(payload)
@@ -191,6 +210,7 @@ function createFakeAgent(id: SessionId, options: {
           }
           return () => {
             statusListeners.delete(wrapped)
+            statusSubscriptions -= 1
           }
         }
         if (event === 'agent/disposed') {
@@ -223,6 +243,14 @@ function createFakeAgent(id: SessionId, options: {
     },
     emitStatus() {
       for (const listener of statusListeners) listener({ status })
+    },
+    emitSessionEvent(event) {
+      const session = { id }
+      for (const listener of sessionEventListeners) listener(session, event)
+    },
+    claimPrompt() {
+      inbox.nextTurn.length = 0
+      inbox.nextStep.length = 0
     },
     dispose() {
       for (const dispose of effects.splice(0)) dispose()
@@ -329,6 +357,9 @@ async function setup(options: {
       get(id: SessionId) {
         agentsGetCalls += 1
         return live.get(id) as Agent | undefined
+      },
+      list() {
+        return [...live.values()].map(entry => entry as never)
       },
       withoutInitiator<T>(operation: () => T) {
         if (options.withoutInitiatorThrows === true) throw new Error('initiator scope closing')
@@ -654,6 +685,7 @@ describe('code_agent plugin', () => {
     const result = await execute(ctx, { task: 'Write a Word document' })
     expect(result.isError).toBe(false)
     expect(caller.followups).toEqual([])
+    code.claimPrompt()
     code.resolveIdle()
     await expect.poll(() => caller.followups.length).toBe(1)
     expect(caller.followups[0]?.source).toMatchObject({
@@ -670,12 +702,42 @@ describe('code_agent plugin', () => {
     const code = createFakeAgent(STANDARD, { status: 'running', assistant: 'Wrote the Word document.' })
     const { ctx } = await setup({ live: new Map([[CALLER, caller], [STANDARD, code]]) })
     await execute(ctx, { task: 'Write a Word document' })
+    code.claimPrompt()
     code.resolveIdle()
     await expect.poll(() => caller.whenIdleCalls).toBeGreaterThan(0)
     expect(caller.followups).toEqual([])
     caller.resolveIdle()
     await expect.poll(() => caller.followups.length).toBe(1)
     expect(text({ content: caller.followups[0]!.content })).toContain('Wrote the Word document.')
+  })
+
+  it('downgrades the notice while another Computer Use session is operating the screen', async () => {
+    const caller = createFakeAgent(CALLER, { status: 'idle' })
+    const code = createFakeAgent(STANDARD, { status: 'running', assistant: 'Wrote the Word document.' })
+    const other = createFakeAgent(CALLER_B, { status: 'running', preset: 'computer-use' })
+    const { ctx } = await setup({ live: new Map([[CALLER, caller], [STANDARD, code], [CALLER_B, other]]) })
+    await execute(ctx, { task: 'Write a Word document' })
+    code.claimPrompt()
+    code.resolveIdle()
+    await expect.poll(() => caller.followups.length).toBe(1)
+    const notice = text({ content: caller.followups[0]!.content })
+    expect(notice).toContain('Wrote the Word document.')
+    expect(notice).toContain('Another Computer Use chat is operating the screen right now.')
+    expect(notice).toContain('do not perform any GUI actions')
+  })
+
+  it('keeps the plain notice when only a standard-preset session is running', async () => {
+    const caller = createFakeAgent(CALLER, { status: 'idle' })
+    const code = createFakeAgent(STANDARD, { status: 'running', assistant: 'Wrote the Word document.' })
+    const other = createFakeAgent(SessionId('session-other'), { status: 'running', preset: 'standard' })
+    const { ctx } = await setup({ live: new Map([[CALLER, caller], [STANDARD, code], [SessionId('session-other'), other]]) })
+    await execute(ctx, { task: 'Write a Word document' })
+    code.claimPrompt()
+    code.resolveIdle()
+    await expect.poll(() => caller.followups.length).toBe(1)
+    const notice = text({ content: caller.followups[0]!.content })
+    expect(notice).toContain('Wrote the Word document.')
+    expect(notice).not.toContain('chat is operating the screen')
   })
 
   it('does not deliver while the Code session is still idle with the prompt unclaimed', async () => {
@@ -694,9 +756,47 @@ describe('code_agent plugin', () => {
     code.inbox.nextStep.push(...queued)
     code.emitStatus()
     expect(caller.followups).toEqual([])
+    code.claimPrompt()
     code.setRunning()
     code.resolveIdle()
     await expect.poll(() => caller.followups.length).toBe(1)
+  })
+
+  it('waits for a queued follow-up to be claimed before watching for idle', async () => {
+    const caller = createFakeAgent(CALLER, { status: 'idle' })
+    // The previous stretch is still running and this follow-up sits in the inbox.
+    const code = createFakeAgent(STANDARD, { status: 'running', assistant: 'First stretch done.' })
+    const { ctx } = await setup({ live: new Map([[CALLER, caller], [STANDARD, code]]) })
+    await execute(ctx, { task: 'Make the font green' })
+    await new Promise(resolve => setTimeout(resolve, 20))
+    // Running status is not the signal: this request's prompt has not been picked up yet.
+    expect(code.whenIdleCalls).toBe(0)
+    code.claimPrompt()
+    code.emitStatus()
+    await expect.poll(() => code.whenIdleCalls).toBeGreaterThan(0)
+    code.resolveIdle()
+    await expect.poll(() => caller.followups.length).toBe(1)
+    expect(text({ content: caller.followups[0]!.content })).toContain('First stretch done.')
+  })
+
+  it('aborts the previous watch when the same session is delegated again', async () => {
+    const caller = createFakeAgent(CALLER, { status: 'idle' })
+    const code = createFakeAgent(STANDARD, { status: 'running', assistant: 'Second stretch done.' })
+    const { ctx } = await setup({ live: new Map([[CALLER, caller], [STANDARD, code]]) })
+    await execute(ctx, { task: 'First task' })
+    code.claimPrompt()
+    code.emitStatus()
+    await expect.poll(() => code.whenIdleCalls).toBeGreaterThan(0)
+    // The user continues the same session while the first stretch still runs: the first
+    // watch must not fire its notice for the second stretch.
+    await execute(ctx, { task: 'Second task', session_id: STANDARD })
+    code.claimPrompt()
+    code.emitStatus()
+    code.resolveIdle()
+    await expect.poll(() => caller.followups.length).toBe(1)
+    const notice = text({ content: caller.followups[0]!.content })
+    expect(notice).toContain('Second task')
+    expect(notice).toContain('Second stretch done.')
   })
 
   it('drops the notice when the Computer Use caller is disposed', async () => {
@@ -705,6 +805,8 @@ describe('code_agent plugin', () => {
     const harness = await setup({ live: new Map([[CALLER, caller], [STANDARD, code]]) })
     const result = await execute(harness.ctx, { task: 'Write a Word document' })
     expect(result.isError).toBe(false)
+    code.claimPrompt()
+    code.emitStatus()
     await expect.poll(() => code.whenIdleCalls).toBeGreaterThan(0)
     const gets = harness.agentsGetCalls
     caller.dispose()
@@ -718,6 +820,7 @@ describe('code_agent plugin', () => {
     const running = createFakeAgent(STANDARD, { status: 'running', assistant: 'Wrote the Word document.' })
     const second = await setup({ live: new Map([[CALLER, parked], [STANDARD, running]]) })
     await execute(second.ctx, { task: 'Write a Word document' })
+    running.claimPrompt()
     running.resolveIdle()
     await expect.poll(() => parked.whenIdleCalls).toBeGreaterThan(0)
     parked.dispose()
@@ -740,6 +843,7 @@ describe('code_agent plugin', () => {
     const queued = await execute(second.ctx, { task: 'Write a Word document' })
     expect(queued.isError).toBe(false)
     live.set(CALLER, replacement)
+    code.claimPrompt()
     code.resolveIdle()
     await expect.poll(() => original.whenIdleCalls).toBeGreaterThan(0)
     const gets = second.agentsGetCalls
@@ -760,6 +864,7 @@ describe('code_agent plugin', () => {
     })
     const first = await setup({ live: new Map([[CALLER, caller], [STANDARD, silent]]) })
     await execute(first.ctx, { task: 'Write a Word document' })
+    silent.claimPrompt()
     silent.resolveIdle()
     await expect.poll(() => caller.followups.length).toBe(1)
     expect(text({ content: caller.followups[0]!.content })).toContain(
@@ -773,11 +878,43 @@ describe('code_agent plugin', () => {
     })
     const second = await setup({ live: new Map([[CALLER, longCaller], [STANDARD, longCode]]) })
     await execute(second.ctx, { task: 'Write a Word document' })
+    longCode.claimPrompt()
     longCode.resolveIdle()
     await expect.poll(() => longCaller.followups.length).toBe(1)
     const body = text({ content: longCaller.followups[0]!.content })
     expect(body).toHaveLength(COMPLETION_BODY_MAX_CHARS)
     expect(body.endsWith('…')).toBe(true)
+  })
+
+  it('tells the caller the user stopped the stretch and not to relaunch it', async () => {
+    const caller = createFakeAgent(CALLER, { status: 'idle' })
+    const code = createFakeAgent(STANDARD, { status: 'running', assistant: 'Wrote half of the document.' })
+    const first = await setup({ live: new Map([[CALLER, caller], [STANDARD, code]]) })
+    await execute(first.ctx, { task: 'Write a Word document' })
+    code.claimPrompt()
+    code.emitSessionEvent({
+      type: 'turn/end',
+      data: { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } },
+    })
+    code.resolveIdle()
+    await expect.poll(() => caller.followups.length).toBe(1)
+    const body = text({ content: caller.followups[0]!.content })
+    expect(body).toContain('The user stopped background Code agent session')
+    expect(body).toContain('Do not restart this task')
+    expect(body).toContain('Wrote half of the document.')
+
+    // A turn that ends normally keeps the ordinary finished notice.
+    const doneCaller = createFakeAgent(CALLER, { status: 'idle' })
+    const doneCode = createFakeAgent(STANDARD, { status: 'running', assistant: 'Wrote the whole document.' })
+    const second = await setup({ live: new Map([[CALLER, doneCaller], [STANDARD, doneCode]]) })
+    await execute(second.ctx, { task: 'Write a Word document' })
+    doneCode.claimPrompt()
+    doneCode.emitSessionEvent({ type: 'turn/end', data: { turn: 1, reason: { kind: 'completed' } } })
+    doneCode.resolveIdle()
+    await expect.poll(() => doneCaller.followups.length).toBe(1)
+    const done = text({ content: doneCaller.followups[0]!.content })
+    expect(done).toContain('finished this task')
+    expect(done).not.toContain('Do not restart this task')
   })
 
   it('delivers after Code dispose and after subscribe observes a claimed prompt', async () => {
@@ -812,6 +949,7 @@ describe('code_agent plugin', () => {
     const failing = await setup({ live: new Map([[CALLER, failingCaller], [STANDARD, failingCode]]) })
     const delivered = await execute(failing.ctx, { task: 'Write a Word document' })
     expect(delivered.isError).toBe(false)
+    failingCode.claimPrompt()
     failingCode.resolveIdle()
     await expect.poll(() => failingCaller.warnings.length).toBeGreaterThan(0)
     expect(failingCaller.followups).toEqual([])
@@ -823,6 +961,7 @@ describe('code_agent plugin', () => {
     })
     const snapshot = await setup({ live: new Map([[CALLER, snapshotCaller], [STANDARD, snapshotCode]]) })
     await execute(snapshot.ctx, { task: 'Write a Word document' })
+    snapshotCode.claimPrompt()
     snapshotCode.resolveIdle()
     await expect.poll(() => snapshotCaller.warnings.length).toBeGreaterThan(0)
 
@@ -838,6 +977,7 @@ describe('code_agent plugin', () => {
     })
     const aborting = await setup({ live: new Map([[CALLER, abortingCaller], [STANDARD, abortingCode]]) })
     await execute(aborting.ctx, { task: 'Write a Word document' })
+    abortingCode.claimPrompt()
     abortingCode.resolveIdle()
     await expect.poll(() => abortedDerive).toBe(true)
     expect(abortingCaller.warnings).toEqual([])
@@ -848,6 +988,7 @@ describe('code_agent plugin', () => {
     const disposed = await setup({ live: new Map([[CALLER, disposedCaller], [STANDARD, disposedCode]]) })
     const skipped = await execute(disposed.ctx, { task: 'Write a Word document' })
     expect(skipped.isError).toBe(false)
+    disposedCode.claimPrompt()
     disposedCode.resolveIdle()
     expect(disposedCaller.followups).toEqual([])
 
@@ -857,6 +998,9 @@ describe('code_agent plugin', () => {
     const cancelled = await execute(aborted.ctx, { task: 'Write a Word document' })
     expect(cancelled.isError).toBe(false)
     expect(abortedCode.statusSubscriptions).toBe(0)
+    // The aborted watch detached its status listener; claiming and running it posts a fresh
+    // status that no watch can observe.
+    abortedCode.claimPrompt()
     abortedCode.setRunning()
     abortedCode.resolveIdle()
     expect(abortedCaller.followups).toEqual([])
@@ -964,6 +1108,8 @@ describe('code_agent plugin', () => {
     const code = createFakeAgent(STANDARD, { status: 'running', assistant: 'Wrote the Word document.' })
     const { ctx } = await setup({ live: new Map([[CALLER, caller], [STANDARD, code]]) })
     await execute(ctx, { task: 'Write a Word document' })
+    code.claimPrompt()
+    code.emitStatus()
     await expect.poll(() => code.whenIdleCalls).toBeGreaterThan(0)
     await execute(ctx, { session_id: STANDARD }, callerAgent(), STOP_TOOL_NAME)
     expect(caller.followups).toEqual([])

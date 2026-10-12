@@ -11,6 +11,7 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
 import { FOCUS_FALLBACK_FOREGROUND, type DesktopForeground, type ScreenInfo } from '../src/backend.ts'
+import { SCREEN_BUSY_MESSAGE, withScreenLock } from '../src/gui-lock.ts'
 import { resolveComputerUseConfig } from '../src/config.ts'
 import { createFakeDesktopBackend, FAKE_WINDOW_PNG } from '../src/fake.ts'
 import { applyComputerUse } from '../src/plugin.ts'
@@ -141,6 +142,20 @@ describe('plugin metadata', () => {
 })
 
 describe('computer-use tools', () => {
+  it('refuses a GUI action while another Computer Use session holds the screen', async () => {
+    const { ctx, backend } = await setup()
+    const gate = Promise.withResolvers<undefined>()
+    const held = withScreenLock('other-session', async () => { await gate.promise })
+    const result = await execute(ctx, 'click', { screen_index: 0, position: [100, 200] })
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain(SCREEN_BUSY_MESSAGE)
+    expect(backend.actions).toHaveLength(0)
+    gate.resolve(undefined)
+    await held
+    const retry = await execute(ctx, 'click', { screen_index: 0, position: [100, 200] })
+    expect(retry.isError).toBe(false)
+  })
+
   it('records a click and returns image blocks without a filesystem path', async () => {
     const { ctx, backend } = await setup()
     const result = await execute(ctx, 'click', { screen_index: 0, position: [100, 200] })

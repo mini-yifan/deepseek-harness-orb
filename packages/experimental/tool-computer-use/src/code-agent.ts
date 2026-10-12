@@ -247,6 +247,9 @@ function recordDelegation(
   }
   existing.task = task
   existing.cwd = cwd
+  // Continuing a session ends the previous stretch's watch: its whenIdle() would otherwise
+  // resolve in the gap before this task starts and report the old stretch as this one.
+  for (const previous of existing.watches.splice(0)) previous.abort()
   if (watch !== undefined) existing.watches.push(watch)
 }
 
