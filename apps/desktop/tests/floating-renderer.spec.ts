@@ -3,7 +3,7 @@ import { runInContext } from 'node:vm'
 import { JSDOM } from 'jsdom'
 import { expect, it, vi } from 'vitest'
 import { resolveDesktopLocale } from '../src/locale.ts'
-import type { FloatingDockState } from '../src/floating-window.ts'
+import type { FloatingDockState, FloatingExpandState } from '../src/floating-window.ts'
 import { composeSelectionSendPrompt } from '../src/selection-prompt.ts'
 
 function isRemoteStream(input: string | URL): boolean {
@@ -195,8 +195,12 @@ it('creates a Computer Use session on dsh_orb and sends from the overlay', async
     floating: {
       sessionId: async () => undefined,
       setSessionId,
-      move: vi.fn(),
-      clamp: vi.fn(),
+      dragPress: vi.fn(),
+      dragBegin: vi.fn(),
+      dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
+      dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
+        expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+      })),
       setExpanded,
       orbWorkspacePath: async () => '/tmp/dsh_orb',
       setSessionRunning: vi.fn(),
@@ -310,7 +314,7 @@ it('creates a Computer Use session on dsh_orb and sends from the overlay', async
   } finally { dom.window.close() }
 })
 
-it('collapses then moves by the ball grab offset instead of the window origin', async () => {
+it('collapses on drag start and commits the gesture through main-process drag signals', async () => {
   const dom = new JSDOM(readFileSync(new URL('../renderer/floating.html', import.meta.url), 'utf8'), {
     runScripts: 'outside-only',
     url: 'dsh-app://shell/floating.html',
@@ -353,8 +357,12 @@ it('collapses then moves by the ball grab offset instead of the window origin', 
     floating: {
       sessionId: async () => undefined,
       setSessionId,
-      move: vi.fn(),
-      clamp: vi.fn(),
+      dragPress: vi.fn(),
+      dragBegin: vi.fn(),
+      dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
+      dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
+        expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+      })),
       setExpanded,
       orbWorkspacePath: async () => '/tmp/dsh_orb',
       setSessionRunning: vi.fn(),
@@ -397,14 +405,19 @@ it('collapses then moves by the ball grab offset instead of the window origin', 
         toJSON() {},
       }),
     })
-    dispatchPointer(ball, 'pointerdown', { pointerId: 1, button: 0, clientX: 268, clientY: 368, screenX: 1000, screenY: 800 })
-    dispatchPointer(ball, 'pointermove', { pointerId: 1, buttons: 1, clientX: 268, clientY: 348, screenX: 1000, screenY: 780 })
+    dispatchPointer(ball, 'pointerdown', { pointerId: 1, button: 0, clientX: 268, clientY: 368 })
+    expect(api.floating.dragPress).toHaveBeenCalledTimes(1)
+    dispatchPointer(ball, 'pointermove', { pointerId: 1, buttons: 1, clientX: 268, clientY: 348 })
+    await expect.poll(() => api.floating.dragBegin.mock.calls.length).toBe(1)
+    // The main process places the ball from the OS cursor, so the move signal does not wait
+    // for the renderer-side collapse to settle.
+    await expect.poll(() => api.floating.dragMove.mock.calls.length).toBeGreaterThan(0)
     await expect.poll(() => setExpanded.mock.calls.some(call => call[0] === false)).toBe(true)
-    expect(api.floating.move).not.toHaveBeenCalled()
+    expect(api.floating.dragMove.mock.calls[0]?.[0]).toBe(true)
     releaseCollapse?.()
-    await expect.poll(() => api.floating.move.mock.calls).toEqual([[980, 760, true]])
-    dispatchPointer(ball, 'pointerup', { pointerId: 1, button: 0, clientX: 268, clientY: 328, screenX: 1000, screenY: 760 })
-    await expect.poll(() => api.floating.clamp.mock.calls.length).toBe(1)
+    dispatchPointer(ball, 'pointerup', { pointerId: 1, button: 0, clientX: 268, clientY: 328 })
+    await expect.poll(() => api.floating.dragEnd.mock.calls.length).toBe(1)
+    expect(api.floating.dragEnd.mock.calls[0]?.[0]).toBe(true)
     expect(document.body.classList.contains('pinned')).toBe(false)
   } finally {
     releaseCollapse?.()
@@ -468,10 +481,14 @@ async function mountPointerOverlay(options?: { dark?: boolean; running?: boolean
     floating: {
       sessionId: async () => undefined,
       setSessionId: vi.fn(),
-      move: vi.fn(async (_x: number, _y: number, _canDock?: boolean): Promise<FloatingDockState> => (
+      dragPress: vi.fn(),
+      dragBegin: vi.fn(),
+      dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => (
         { docked: undefined }
       )),
-      clamp: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
+      dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
+        expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+      })),
       unsnap: vi.fn(async (): Promise<FloatingDockState> => ({ docked: undefined })),
       setExpanded,
       orbWorkspacePath: async () => '/tmp/dsh_orb',
@@ -544,11 +561,12 @@ it('restores the front app on a running overlay click outside a text field', asy
 it('ignores a secondary-button press so later hover cannot move the ball', async () => {
   const overlay = await mountPointerOverlay()
   try {
-    overlay.dispatchPointer('pointerdown', { pointerId: 1, button: 2, clientX: 268, clientY: 368, screenX: 1000, screenY: 800 })
-    overlay.dispatchPointer('pointermove', { pointerId: 1, buttons: 0, clientX: 268, clientY: 300, screenX: 1000, screenY: 700 })
-    overlay.dispatchPointer('pointerup', { pointerId: 1, button: 2, clientX: 268, clientY: 300, screenX: 1000, screenY: 700 })
-    expect(overlay.api.floating.move).not.toHaveBeenCalled()
-    expect(overlay.api.floating.clamp).not.toHaveBeenCalled()
+    overlay.dispatchPointer('pointerdown', { pointerId: 1, button: 2, clientX: 268, clientY: 368 })
+    overlay.dispatchPointer('pointermove', { pointerId: 1, buttons: 0, clientX: 268, clientY: 300 })
+    overlay.dispatchPointer('pointerup', { pointerId: 1, button: 2, clientX: 268, clientY: 300 })
+    expect(overlay.api.floating.dragPress).not.toHaveBeenCalled()
+    expect(overlay.api.floating.dragMove).not.toHaveBeenCalled()
+    expect(overlay.api.floating.dragEnd).not.toHaveBeenCalled()
     expect(overlay.document.body.classList.contains('pinned')).toBe(false)
   } finally {
     overlay.dom.window.close()
@@ -558,31 +576,45 @@ it('ignores a secondary-button press so later hover cannot move the ball', async
 it('ends a primary grab when the button is no longer down', async () => {
   const overlay = await mountPointerOverlay()
   try {
-    overlay.dispatchPointer('pointerdown', { pointerId: 1, button: 0, clientX: 268, clientY: 368, screenX: 1000, screenY: 800 })
-    overlay.dispatchPointer('pointermove', { pointerId: 1, buttons: 0, clientX: 268, clientY: 300, screenX: 1000, screenY: 700 })
-    expect(overlay.api.floating.move).not.toHaveBeenCalled()
-    overlay.dispatchPointer('pointerdown', { pointerId: 1, button: 0, clientX: 268, clientY: 368, screenX: 1000, screenY: 800 })
-    overlay.dispatchPointer('lostpointercapture', { pointerId: 1, button: 0, clientX: 268, clientY: 368, screenX: 1000, screenY: 800 })
-    overlay.dispatchPointer('pointermove', { pointerId: 1, buttons: 0, clientX: 268, clientY: 300, screenX: 1000, screenY: 700 })
-    expect(overlay.api.floating.move).not.toHaveBeenCalled()
+    overlay.dispatchPointer('pointerdown', { pointerId: 1, button: 0, clientX: 268, clientY: 368 })
+    overlay.dispatchPointer('pointermove', { pointerId: 1, buttons: 0, clientX: 268, clientY: 300 })
+    expect(overlay.api.floating.dragMove).not.toHaveBeenCalled()
+    overlay.dispatchPointer('pointerdown', { pointerId: 1, button: 0, clientX: 268, clientY: 368 })
+    overlay.dispatchPointer('lostpointercapture', { pointerId: 1, button: 0, clientX: 268, clientY: 368 })
+    overlay.dispatchPointer('pointermove', { pointerId: 1, buttons: 0, clientX: 268, clientY: 300 })
+    expect(overlay.api.floating.dragMove).not.toHaveBeenCalled()
   } finally {
     overlay.dom.window.close()
   }
 })
 
-async function dragUntilMove(overlay: Awaited<ReturnType<typeof mountPointerOverlay>>) {
+it('pins the panel when the input is clicked and stays pinned on later input clicks', async () => {
+  const overlay = await mountPointerOverlay()
+  try {
+    const prompt = overlay.document.querySelector('#prompt')
+    if (prompt === null) throw new Error('missing prompt')
+    prompt.dispatchEvent(new overlay.dom.window.Event('click', { bubbles: true }))
+    await expect.poll(() => overlay.document.body.classList.contains('pinned')).toBe(true)
+    prompt.dispatchEvent(new overlay.dom.window.Event('click', { bubbles: true }))
+    expect(overlay.document.body.classList.contains('pinned')).toBe(true)
+  } finally {
+    overlay.dom.window.close()
+  }
+})
+
+async function dragUntilRelease(overlay: Awaited<ReturnType<typeof mountPointerOverlay>>) {
   overlay.dispatchPointer('pointerdown', {
-    pointerId: 1, button: 0, clientX: 268, clientY: 368, screenX: 1000, screenY: 800,
+    pointerId: 1, button: 0, clientX: 268, clientY: 368,
   })
   overlay.dispatchPointer('pointermove', {
-    pointerId: 1, buttons: 1, clientX: 268, clientY: 300, screenX: 1400, screenY: 700,
+    pointerId: 1, buttons: 1, clientX: 268, clientY: 300,
   })
   overlay.dispatchPointer('pointerup', {
-    pointerId: 1, button: 0, clientX: 268, clientY: 300, screenX: 1400, screenY: 700,
+    pointerId: 1, button: 0, clientX: 268, clientY: 300,
   })
 }
 
-it('docks from clamp, ignores hover for 800ms, then unsnaps', async () => {
+it('docks from the release, ignores hover for 800ms, then unsnaps', async () => {
   const overlay = await mountPointerOverlay()
   const nativeSetTimeout = overlay.dom.window.setTimeout.bind(overlay.dom.window)
   let hoverDelay: (() => void) | undefined
@@ -594,10 +626,12 @@ it('docks from clamp, ignores hover for 800ms, then unsnaps', async () => {
     return nativeSetTimeout(fn, ms, ...args)
   }) as typeof overlay.dom.window.setTimeout
   try {
-    overlay.api.floating.move.mockResolvedValue({ docked: undefined })
-    overlay.api.floating.clamp.mockResolvedValue({ docked: 'right' })
+    overlay.api.floating.dragMove.mockResolvedValue({ docked: undefined })
+    overlay.api.floating.dragEnd.mockResolvedValue({
+      expanded: false, horizontal: 'left', vertical: 'up', docked: 'right',
+    })
     overlay.api.floating.unsnap.mockResolvedValue({ docked: undefined })
-    dragUntilMove(overlay)
+    dragUntilRelease(overlay)
     await expect.poll(() => overlay.document.body.classList.contains('docked')).toBe(true)
     expect(overlay.document.body.classList.contains('docked-right')).toBe(true)
     expect(overlay.document.querySelector<HTMLButtonElement>('#dock-tab')?.hidden).toBe(false)
@@ -617,14 +651,14 @@ it('does not force-collapse or allow dock while the Computer Use session is runn
     await expect.poll(() => overlay.document.body.classList.contains('running')).toBe(true)
     overlay.api.floating.setExpanded.mockClear()
     overlay.dispatchPointer('pointerdown', {
-      pointerId: 1, button: 0, clientX: 268, clientY: 368, screenX: 1000, screenY: 800,
+      pointerId: 1, button: 0, clientX: 268, clientY: 368,
     })
     overlay.dispatchPointer('pointermove', {
-      pointerId: 1, buttons: 1, clientX: 268, clientY: 300, screenX: 1400, screenY: 700,
+      pointerId: 1, buttons: 1, clientX: 268, clientY: 300,
     })
-    await expect.poll(() => overlay.api.floating.move.mock.calls.length).toBeGreaterThan(0)
+    await expect.poll(() => overlay.api.floating.dragMove.mock.calls.length).toBeGreaterThan(0)
     expect(overlay.api.floating.setExpanded.mock.calls.some(call => call[0] === false)).toBe(false)
-    expect(overlay.api.floating.move.mock.calls[0]?.[2]).toBe(false)
+    expect(overlay.api.floating.dragMove.mock.calls[0]?.[0]).toBe(false)
   } finally {
     overlay.dom.window.close()
   }
@@ -772,8 +806,12 @@ async function mountComposerOverlay() {
       floating: {
         sessionId: async () => undefined,
         setSessionId,
-        move: vi.fn(),
-        clamp: vi.fn(),
+        dragPress: vi.fn(),
+        dragBegin: vi.fn(),
+        dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
+        dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
+          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+        })),
         setExpanded: vi.fn(async (expanded: boolean) => ({
           expanded, horizontal: 'left', vertical: 'up',
         })),
@@ -1016,8 +1054,12 @@ it('lists orb Computer Use chats and reopens the selected session', async () => 
     floating: {
       sessionId: async () => undefined,
       setSessionId,
-      move: vi.fn(),
-      clamp: vi.fn(),
+      dragPress: vi.fn(),
+      dragBegin: vi.fn(),
+      dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
+      dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
+        expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+      })),
       setExpanded: async (expanded: boolean) => ({ expanded, horizontal: 'left', vertical: 'up' }),
       orbWorkspacePath: async () => '/tmp/dsh_orb',
       setSessionRunning: vi.fn(),
@@ -1195,8 +1237,12 @@ async function mountQuestionOverlay() {
       floating: {
         sessionId: async () => undefined,
         setSessionId,
-        move: vi.fn(),
-        clamp: vi.fn(),
+        dragPress: vi.fn(),
+        dragBegin: vi.fn(),
+        dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
+        dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
+          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+        })),
         setExpanded,
         orbWorkspacePath: async () => '/tmp/dsh_orb',
         setSessionRunning: vi.fn(),
@@ -1508,8 +1554,12 @@ it('expands and session/prompts a Desktop selection-toolbar translate message', 
     floating: {
       sessionId: async () => undefined,
       setSessionId,
-      move: vi.fn(),
-      clamp: vi.fn(),
+      dragPress: vi.fn(),
+      dragBegin: vi.fn(),
+      dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
+      dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
+        expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+      })),
       setExpanded,
       orbWorkspacePath: async () => '/tmp/dsh_orb',
       setSessionRunning,
@@ -1617,8 +1667,12 @@ it('attaches selected text to the composer until the first send or dismiss', asy
     floating: {
       sessionId: async () => undefined,
       setSessionId,
-      move: vi.fn(),
-      clamp: vi.fn(),
+      dragPress: vi.fn(),
+      dragBegin: vi.fn(),
+      dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
+      dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
+        expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+      })),
       setExpanded,
       orbWorkspacePath: async () => '/tmp/dsh_orb',
       setSessionRunning: vi.fn(),
@@ -1727,8 +1781,12 @@ it('places an attached selection chip below the input when the panel expands dow
       floating: {
         sessionId: async () => undefined,
         setSessionId: vi.fn(),
-        move: vi.fn(),
-        clamp: vi.fn(),
+        dragPress: vi.fn(),
+        dragBegin: vi.fn(),
+        dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
+        dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
+          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+        })),
         setExpanded: async (expanded: boolean) => ({ expanded, horizontal: 'left', vertical: 'down' }),
         orbWorkspacePath: async () => '/tmp/dsh_orb',
         setSessionRunning: vi.fn(),
@@ -1797,8 +1855,12 @@ it('applies a live overlay model change without writing the Agent default', asyn
       floating: {
         sessionId: async () => undefined,
         setSessionId,
-        move: vi.fn(),
-        clamp: vi.fn(),
+        dragPress: vi.fn(),
+        dragBegin: vi.fn(),
+        dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
+        dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
+          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+        })),
         setExpanded: vi.fn(async (expanded: boolean) => ({
           expanded, horizontal: 'left', vertical: 'up',
         })),
@@ -1899,8 +1961,12 @@ it('creates a blank overlay session from Host New IPC without selectModel-as-enc
       floating: {
         sessionId: async () => undefined,
         setSessionId,
-        move: vi.fn(),
-        clamp: vi.fn(),
+        dragPress: vi.fn(),
+        dragBegin: vi.fn(),
+        dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
+        dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
+          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+        })),
         setExpanded: vi.fn(async (expanded: boolean) => ({
           expanded, horizontal: 'left', vertical: 'up',
         })),
@@ -1970,8 +2036,12 @@ it('sends from the overlay when Access IPC is missing', async () => {
       floating: {
         sessionId: async () => undefined,
         setSessionId,
-        move: vi.fn(),
-        clamp: vi.fn(),
+        dragPress: vi.fn(),
+        dragBegin: vi.fn(),
+        dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
+        dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
+          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+        })),
         setExpanded: vi.fn(async (expanded: boolean) => ({
           expanded, horizontal: 'left', vertical: 'up',
         })),
@@ -2037,8 +2107,12 @@ it('applies a pushed custom avatar URL to the ball image', async () => {
       floating: {
         sessionId: async () => undefined,
         setSessionId,
-        move: vi.fn(),
-        clamp: vi.fn(),
+        dragPress: vi.fn(),
+        dragBegin: vi.fn(),
+        dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
+        dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
+          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+        })),
         setExpanded: vi.fn(async (expanded: boolean) => ({
           expanded, horizontal: 'left', vertical: 'up',
         })),
@@ -2119,8 +2193,12 @@ it('covers the overlay with the TCC gate on first expand and blocks send', async
       floating: {
         sessionId: async () => undefined,
         setSessionId,
-        move: vi.fn(),
-        clamp: vi.fn(),
+        dragPress: vi.fn(),
+        dragBegin: vi.fn(),
+        dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
+        dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
+          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+        })),
         setExpanded: vi.fn(async (expanded: boolean) => ({
           expanded, horizontal: 'left', vertical: 'up',
         })),
@@ -2221,8 +2299,12 @@ it('hides the TCC gate when both rights are already granted', async () => {
       floating: {
         sessionId: async () => undefined,
         setSessionId,
-        move: vi.fn(),
-        clamp: vi.fn(),
+        dragPress: vi.fn(),
+        dragBegin: vi.fn(),
+        dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
+        dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
+          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+        })),
         setExpanded: vi.fn(async (expanded: boolean) => ({
           expanded, horizontal: 'left', vertical: 'up',
         })),
@@ -2292,8 +2374,12 @@ function overlayBackendHarness(phase: 'ready' | 'starting') {
       floating: {
         sessionId: async () => undefined,
         setSessionId,
-        move: vi.fn(),
-        clamp: vi.fn(),
+        dragPress: vi.fn(),
+        dragBegin: vi.fn(),
+        dragMove: vi.fn(async (_canDock?: boolean): Promise<FloatingDockState> => ({ docked: undefined })),
+        dragEnd: vi.fn(async (_canDock?: boolean): Promise<FloatingExpandState> => ({
+          expanded: false, horizontal: 'left', vertical: 'up', docked: undefined,
+        })),
         setExpanded: async (expanded: boolean) => ({ expanded, horizontal: 'left', vertical: 'up' }),
         orbWorkspacePath: async () => '/tmp/dsh_orb',
         setSessionRunning: vi.fn(),

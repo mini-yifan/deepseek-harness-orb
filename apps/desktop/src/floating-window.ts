@@ -173,8 +173,14 @@ export interface FloatingExpandState extends FloatingDockState {
   readonly vertical: FloatingVerticalExpand
 }
 
-/** Ball width that must sit past a left or right display edge before pointer-up docks. */
-export const FLOATING_DOCK_OVERLAP = Math.round(FLOATING_BALL_SIZE / 5)
+/**
+ * Contact tolerance that still counts as reaching a left or right display edge on release.
+ * Any contact with the edge docks on release; this only absorbs the rounding of the final placement.
+ * Windows quantizes window bounds to whole device pixels, so a ball placed flush against the edge
+ * can read back a pixel or two short when `physicalWidth / scaleFactor` is not an integer
+ * (1920/1.5, 2560/1.25, 3840/1.75). The drag itself never depends on that read-back.
+ */
+export const FLOATING_DOCK_OVERLAP = 3
 
 /** Cursor distance from a docked edge that pulls the tab back into a 72px ball. */
 export const FLOATING_DOCK_DRAG_OFF = Math.round(FLOATING_BALL_SIZE / 3)
@@ -213,6 +219,14 @@ export const FLOATING_DOCK_SLIDE_IN_MS = 300
 /** Painted dock-tab fill; matches CoView `PALETTE["scrollbar"]`. */
 export const FLOATING_DOCK_TAB_FILL = '#75757F'
 
+/**
+ * Chromium turns a DIP window size into device pixels with an enclosing rect, then converts
+ * it back the same way. Whenever `size * scaleFactor` is not an integer (120% is 115.2), a
+ * 96px ball window can read back 97. The panel is hundreds of pixels larger, so a few DIP
+ * still cannot be the panel.
+ */
+const BALL_WINDOW_SLOP = 4
+
 interface OverlayRect {
   readonly x: number
   readonly y: number
@@ -227,6 +241,19 @@ const overlayDirection = new WeakMap<BrowserWindow, {
 
 const overlayDock = new WeakMap<BrowserWindow, { side: FloatingDockSide; y: number }>()
 
+/** Cursor offset inside the ball, recorded at press and kept for the whole gesture. */
+const overlayGrab = new WeakMap<BrowserWindow, { readonly x: number; readonly y: number }>()
+
+/** Set once the renderer reports that the gesture passed the drag threshold. */
+const overlayDragging = new WeakMap<BrowserWindow, boolean>()
+
+/**
+ * Ball origin last requested. The OS read-back is not a safe dock input on Windows once
+ * the scale is above 100%: the window is kept inside the monitor, so the 12px transparent
+ * chrome leaves the ball a chrome-width short of the edge it was aimed at.
+ */
+const overlayPlacedOrigin = new WeakMap<BrowserWindow, { readonly x: number; readonly y: number }>()
+
 interface OverlayAnim {
   cancelled: boolean
   resolve: () => void
@@ -239,7 +266,14 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function isCollapsedOverlay(bounds: OverlayRect): boolean {
-  return bounds.width <= FLOATING_BALL_WINDOW_SIZE && bounds.height <= FLOATING_BALL_WINDOW_SIZE
+  return bounds.width <= FLOATING_BALL_WINDOW_SIZE + BALL_WINDOW_SLOP
+    && bounds.height <= FLOATING_BALL_WINDOW_SIZE + BALL_WINDOW_SLOP
+}
+
+/** Whether the bounds still draw the full ball window, including a slide-off still in flight. */
+function drawsBall(bounds: OverlayRect): boolean {
+  return Math.abs(bounds.width - FLOATING_BALL_WINDOW_SIZE) <= BALL_WINDOW_SLOP
+    && Math.abs(bounds.height - FLOATING_BALL_WINDOW_SIZE) <= BALL_WINDOW_SLOP
 }
 
 function collapsedWindowBounds(ball: { readonly x: number; readonly y: number }): OverlayRect {
@@ -283,42 +317,77 @@ function expandState(
 }
 
 /**
- * Which left/right display edge the ball already overlaps by {@link FLOATING_DOCK_OVERLAP}.
- * Top and bottom never dock. Dock itself is committed on pointer-up, not during the drag.
+ * Which outer display edge the ball reaches on release; contact within
+ * {@link FLOATING_DOCK_OVERLAP} docks. Top and bottom never dock. Dock itself is
+ * committed on pointer-up, not during the drag. An edge that touches another display
+ * is a seam, not a place to dock.
  * @param ball - 72px ball top-left.
  * @param bounds - containing display `bounds` (screen edge, not work area).
- * @returns the dock side, or `undefined` when fewer than about one-fifth of the ball is past that edge.
+ * @param displays - every display bounds; an edge shared with another display is a seam.
+ * @returns the dock side, or `undefined` when the ball is clear of both side edges.
  */
 export function dockSideForBallOrigin(
   ball: { readonly x: number; readonly y: number },
   bounds: OverlayRect,
+  displays: readonly OverlayRect[] = [],
 ): FloatingDockSide | undefined {
-  const leftOverlap = bounds.x - ball.x
-  const rightOverlap = ball.x + FLOATING_BALL_SIZE - (bounds.x + bounds.width)
-  if (leftOverlap >= FLOATING_DOCK_OVERLAP && leftOverlap >= rightOverlap) return 'left'
-  if (rightOverlap >= FLOATING_DOCK_OVERLAP) return 'right'
-  return undefined
+  const leftGap = bounds.x - ball.x
+  const rightGap = ball.x + FLOATING_BALL_SIZE - (bounds.x + bounds.width)
+  // The nearer edge wins, so a display narrower than the ball cannot dock both ways.
+  let side: FloatingDockSide | undefined
+  if (leftGap >= rightGap && leftGap >= -FLOATING_DOCK_OVERLAP) side = 'left'
+  else if (rightGap > leftGap && rightGap >= -FLOATING_DOCK_OVERLAP) side = 'right'
+  if (side === undefined || edgeTouchesDisplay(side, bounds, displays)) return undefined
+  return side
+}
+
+/** Whether a left or right display edge sits within 8 DIP of another display, which makes it a seam. */
+function edgeTouchesDisplay(
+  side: FloatingDockSide,
+  bounds: OverlayRect,
+  displays: readonly OverlayRect[],
+): boolean {
+  const edge = side === 'left' ? bounds.x : bounds.x + bounds.width
+  for (const other of displays) {
+    if (sameRect(other, bounds)) continue
+    const otherEdge = side === 'left' ? other.x + other.width : other.x
+    if (Math.abs(otherEdge - edge) > 8) continue
+    const top = Math.max(bounds.y, other.y)
+    const bottom = Math.min(bounds.y + bounds.height, other.y + other.height)
+    if (bottom > top) return true
+  }
+  return false
+}
+
+function sameRect(left: OverlayRect, right: OverlayRect): boolean {
+  return left.x === right.x && left.y === right.y && left.width === right.width && left.height === right.height
+}
+
+/** Every display bounds; the seam check needs all of them, not only the nearest one. */
+function allDisplayBounds(): readonly OverlayRect[] {
+  return screen.getAllDisplays().map(display => display.bounds)
 }
 
 /**
- * Overlay rectangle for the docked tab flush with a display edge.
+ * Overlay rectangle for the docked tab flush with a work-area edge.
+ * A side taskbar lives outside the work area, so a tab on the display bounds would sit under it.
  * @param side - left or right display edge.
  * @param ballY - 72px ball top used to center the tab vertically.
- * @param bounds - containing display `bounds`.
+ * @param workArea - containing display work area.
  * @returns a hittable strip {@link FLOATING_DOCK_HIT_WIDTH} by {@link FLOATING_DOCK_HIT_HEIGHT}.
  */
 export function dockedTabBounds(
   side: FloatingDockSide,
   ballY: number,
-  bounds: OverlayRect,
+  workArea: OverlayRect,
 ): OverlayRect {
   const y = clamp(
     Math.round(ballY - FLOATING_DOCK_GLOW),
-    bounds.y,
-    bounds.y + bounds.height - FLOATING_DOCK_HIT_HEIGHT,
+    workArea.y,
+    workArea.y + workArea.height - FLOATING_DOCK_HIT_HEIGHT,
   )
   return {
-    x: side === 'left' ? bounds.x : bounds.x + bounds.width - FLOATING_DOCK_HIT_WIDTH,
+    x: side === 'left' ? workArea.x : workArea.x + workArea.width - FLOATING_DOCK_HIT_WIDTH,
     y,
     width: FLOATING_DOCK_HIT_WIDTH,
     height: FLOATING_DOCK_HIT_HEIGHT,
@@ -343,6 +412,7 @@ function offScreenBallOrigin(
   }
 }
 
+/** Ball origin of a slide-in. It lands inside the work area: side taskbars live outside it. */
 function insideBallOrigin(
   side: FloatingDockSide,
   ballY: number,
@@ -350,8 +420,8 @@ function insideBallOrigin(
 ): { x: number; y: number } {
   return {
     x: side === 'left'
-      ? display.bounds.x + FLOATING_DOCK_IN_PAD
-      : display.bounds.x + display.bounds.width - FLOATING_BALL_SIZE - FLOATING_DOCK_IN_PAD,
+      ? display.workArea.x + FLOATING_DOCK_IN_PAD
+      : display.workArea.x + display.workArea.width - FLOATING_BALL_SIZE - FLOATING_DOCK_IN_PAD,
     y: clamp(
       Math.round(ballY),
       display.workArea.y,
@@ -446,12 +516,12 @@ function applyDockedTab(
   window: BrowserWindow,
   side: FloatingDockSide,
   ballY: number,
-  bounds: OverlayRect,
+  workArea: OverlayRect,
 ): FloatingDockState {
-  const y = clampBallY(ballY, bounds)
+  const y = clampBallY(ballY, workArea)
   overlayDock.set(window, { side, y })
   cancelOverlayAnim(window)
-  window.setBounds(dockedTabBounds(side, y, bounds))
+  window.setBounds(dockedTabBounds(side, y, workArea))
   return { docked: side }
 }
 
@@ -459,20 +529,22 @@ async function snapToEdge(
   window: BrowserWindow,
   side: FloatingDockSide,
   ballY: number,
-  bounds: OverlayRect,
+  display: { readonly bounds: OverlayRect; readonly workArea: OverlayRect },
 ): Promise<FloatingDockState> {
-  const y = clampBallY(ballY, bounds)
+  const y = clampBallY(ballY, display.workArea)
   overlayDock.set(window, { side, y })
+  // The slide-off leaves the screen, so it uses the display bounds; the tab it lands on
+  // is flush with the work area, where a side taskbar is not in the way.
   await animateOverlayBounds(
     window,
-    collapsedWindowBounds(offScreenBallOrigin(side, y, bounds)),
+    collapsedWindowBounds(offScreenBallOrigin(side, y, display.bounds)),
     FLOATING_DOCK_SLIDE_OFF_MS,
     easeInOutCubic,
   )
   if (overlayDestroyed(window)) return { docked: undefined }
   const docked = overlayDock.get(window)
   if (docked === undefined || docked.side !== side) return { docked: docked?.side }
-  window.setBounds(dockedTabBounds(side, y, bounds))
+  window.setBounds(dockedTabBounds(side, y, display.workArea))
   return { docked: side }
 }
 
@@ -592,7 +664,9 @@ function windowCenter(bounds: OverlayRect): { x: number; y: number } {
 function currentBallOrigin(window: BrowserWindow, workArea: OverlayRect): { x: number; y: number } {
   const bounds = window.getBounds()
   const docked = overlayDock.get(window)
-  if (docked !== undefined) {
+  // A docked window at rest is the thin tab. While the slide-off still draws the full ball
+  // window, the ball is wherever that window is, not at its docked pose.
+  if (docked !== undefined && !drawsBall(bounds)) {
     return insideBallOrigin(docked.side, docked.y, displayGeometry(windowCenter(bounds)))
   }
   if (isCollapsedOverlay(bounds)) {
@@ -600,6 +674,24 @@ function currentBallOrigin(window: BrowserWindow, workArea: OverlayRect): { x: n
   }
   const stored = overlayDirection.get(window) ?? expandDirection({ x: bounds.x, y: bounds.y }, workArea)
   return ballOriginFromWindow(bounds, stored)
+}
+
+/** Stop a slide-off that still draws the ball window; the ball stays free where it is. */
+function stopSlideOff(window: BrowserWindow): void {
+  const docked = overlayDock.get(window)
+  if (docked !== undefined && drawsBall(window.getBounds())) {
+    clearDock(window)
+    cancelOverlayAnim(window)
+  }
+}
+
+/** The layout the page must apply, as the window stands now. */
+function floatingExpandState(window: BrowserWindow): FloatingExpandState {
+  const bounds = window.getBounds()
+  const docked = overlayDock.get(window)?.side
+  const direction = overlayDirection.get(window)
+    ?? expandDirection({ x: bounds.x, y: bounds.y }, displayGeometry(windowCenter(bounds)).workArea)
+  return expandState(!isCollapsedOverlay(bounds) && docked === undefined, direction, docked)
 }
 
 /**
@@ -726,6 +818,9 @@ export function setFloatingExpanded(window: BrowserWindow, expanded: boolean): F
   const bounds = window.getBounds()
   const display = displayGeometry(windowCenter(bounds))
   const workArea = display.workArea
+  // Any explicit placement stops a slide still in flight, or its frames would overwrite
+  // the window this call just set.
+  cancelOverlayAnim(window)
   if (expanded) {
     const origin = currentBallOrigin(window, workArea)
     clearDock(window)
@@ -737,7 +832,7 @@ export function setFloatingExpanded(window: BrowserWindow, expanded: boolean): F
   const direction = overlayDirection.get(window) ?? expandDirection({ x: bounds.x, y: bounds.y }, workArea)
   const docked = overlayDock.get(window)
   if (docked !== undefined) {
-    applyDockedTab(window, docked.side, docked.y, display.bounds)
+    applyDockedTab(window, docked.side, docked.y, workArea)
     return expandState(false, direction, docked.side)
   }
   const origin = clampedBallOrigin(currentBallOrigin(window, workArea), workArea)
@@ -763,6 +858,7 @@ export function moveFloatingBall(
   canDock = true,
 ): FloatingDockState {
   const origin = { x: Math.round(x), y: Math.round(y) }
+  overlayPlacedOrigin.set(window, origin)
   const bounds = window.getBounds()
   if (!isCollapsedOverlay(bounds) && overlayDock.get(window) === undefined) {
     const stored = overlayDirection.get(window)
@@ -779,7 +875,7 @@ export function moveFloatingBall(
   const display = displayGeometry(origin)
   const existing = overlayDock.get(window)
   if (existing !== undefined && staysDocked(existing.side, origin.x, display.bounds)) {
-    return applyDockedTab(window, existing.side, existing.y, display.bounds)
+    return applyDockedTab(window, existing.side, existing.y, display.workArea)
   }
   clearDock(window)
   cancelOverlayAnim(window)
@@ -789,8 +885,9 @@ export function moveFloatingBall(
 
 /**
  * Keep a free-floating overlay inside the nearest work area, or dock on pointer-up
- * when a collapsed ball already overlaps a left or right display edge by {@link FLOATING_DOCK_OVERLAP}.
- * A docked tab stays docked; this does not dock a ball that is only flush with an edge.
+ * when a collapsed ball reaches a left or right display edge within {@link FLOATING_DOCK_OVERLAP}.
+ * The decision uses the origin the drag requested: the window the OS actually applied can sit
+ * short of that on a scaled Windows display. A docked tab stays docked.
  * @param window - floating overlay.
  * @param canDock - when false, never enter a docked tab (running, asking, or TCC).
  * @returns the dock side after clamp, if any.
@@ -803,23 +900,112 @@ export async function clampFloatingWindow(
   const display = displayGeometry(windowCenter(bounds))
   const docked = overlayDock.get(window)
   if (docked !== undefined) {
-    applyDockedTab(window, docked.side, docked.y, display.bounds)
+    applyDockedTab(window, docked.side, docked.y, display.workArea)
     return { docked: docked.side }
   }
   if (isCollapsedOverlay(bounds)) {
-    const origin = {
+    const origin = overlayPlacedOrigin.get(window) ?? {
       x: bounds.x + FLOATING_CHROME_INSET,
       y: bounds.y + FLOATING_CHROME_INSET,
     }
     if (canDock) {
-      const side = dockSideForBallOrigin(origin, display.bounds)
-      if (side !== undefined) return snapToEdge(window, side, origin.y, display.bounds)
+      const side = dockSideForBallOrigin(origin, display.bounds, allDisplayBounds())
+      if (side !== undefined) return snapToEdge(window, side, origin.y, display)
     }
     window.setBounds(collapsedWindowBounds(clampedBallOrigin(origin, display.workArea)))
     return { docked: undefined }
   }
   setFloatingExpanded(window, true)
   return { docked: undefined }
+}
+
+/**
+ * Pointer pressed on the ball. The grab offset comes from the OS cursor and the ball origin
+ * the window really has, both in the DIP space `setBounds` uses, so the drag never reads a
+ * renderer-side window position.
+ * @param window - floating overlay.
+ * @param cursor - current OS cursor point.
+ */
+export function pressFloatingBall(window: BrowserWindow, cursor: { readonly x: number; readonly y: number }): void {
+  stopSlideOff(window)
+  const display = displayGeometry(windowCenter(window.getBounds()))
+  const origin = currentBallOrigin(window, display.workArea)
+  overlayGrab.set(window, { x: cursor.x - origin.x, y: cursor.y - origin.y })
+  overlayDragging.set(window, false)
+}
+
+/**
+ * The gesture passed the drag threshold; from here the ball follows the cursor.
+ * @param window - floating overlay.
+ */
+export function beginFloatingDrag(window: BrowserWindow): void {
+  overlayDragging.set(window, overlayGrab.has(window))
+}
+
+/**
+ * Follow the cursor. Stateless on purpose: the target is always cursor minus grab,
+ * so the window moving cannot feed back into the next target.
+ * @param window - floating overlay.
+ * @param cursor - current OS cursor point.
+ * @param canDock - when false, never keep a docked tab (running, asking, or TCC).
+ * @returns the dock side after this move, if any.
+ */
+export function dragFloatingBall(
+  window: BrowserWindow,
+  cursor: { readonly x: number; readonly y: number },
+  canDock = true,
+): FloatingDockState {
+  const docked = overlayDock.get(window)
+  if (overlayDragging.get(window) !== true) return { docked: docked?.side }
+  const grab = overlayGrab.get(window)
+  if (grab === undefined) return { docked: docked?.side }
+  return moveFloatingBall(window, cursor.x - grab.x, cursor.y - grab.y, canDock)
+}
+
+/**
+ * Release. The ball is placed under the cursor, then docked on a side edge or pulled back
+ * into the work area. The result is the full layout the page must show, including the panel
+ * direction when a running panel re-anchored.
+ * @param window - floating overlay.
+ * @param cursor - current OS cursor point.
+ * @param canDock - when false, never enter a docked tab (running, asking, or TCC).
+ * @returns overlay size, growth, and dock side after the release.
+ */
+export async function endFloatingDrag(
+  window: BrowserWindow,
+  cursor: { readonly x: number; readonly y: number },
+  canDock = true,
+): Promise<FloatingExpandState> {
+  const grab = overlayGrab.get(window)
+  const dragging = overlayDragging.get(window) === true
+  overlayGrab.delete(window)
+  overlayDragging.delete(window)
+  if (grab === undefined || !dragging) return floatingExpandState(window)
+  moveFloatingBall(window, cursor.x - grab.x, cursor.y - grab.y, canDock)
+  await clampFloatingWindow(window, canDock)
+  logDockRelease(window, cursor)
+  return floatingExpandState(window)
+}
+
+/**
+ * Print one release diagnosis line to stderr when `DSH_ORB_DOCK_DEBUG=1`, so a DPI or
+ * multi-display dock report can be diagnosed without reproducing it locally.
+ * @param window - floating overlay after the release.
+ * @param cursor - OS cursor point at the release.
+ */
+function logDockRelease(window: BrowserWindow, cursor: { readonly x: number; readonly y: number }): void {
+  if (process.env.DSH_ORB_DOCK_DEBUG !== '1') return
+  const displays = screen.getAllDisplays().map(display => ({
+    bounds: display.bounds,
+    workArea: display.workArea,
+    scaleFactor: display.scaleFactor,
+  }))
+  console.error(`[orb-dock] ${JSON.stringify({
+    cursor,
+    bounds: window.getBounds(),
+    displays,
+    docked: overlayDock.get(window)?.side ?? null,
+  })}`)
 }
 
 /**

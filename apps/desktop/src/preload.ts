@@ -4,8 +4,10 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { DESKTOP_IPC } from './ipc.ts'
 
 const floating = {
-  move: (x: number, y: number, canDock?: boolean) => ipcRenderer.invoke(DESKTOP_IPC.floatingMove, x, y, canDock),
-  clamp: (canDock?: boolean) => ipcRenderer.invoke(DESKTOP_IPC.floatingClamp, canDock),
+  dragPress: () => ipcRenderer.invoke(DESKTOP_IPC.floatingDragPress),
+  dragBegin: () => ipcRenderer.invoke(DESKTOP_IPC.floatingDragBegin),
+  dragMove: (canDock?: boolean) => ipcRenderer.invoke(DESKTOP_IPC.floatingDragMove, canDock),
+  dragEnd: (canDock?: boolean) => ipcRenderer.invoke(DESKTOP_IPC.floatingDragEnd, canDock),
   unsnap: () => ipcRenderer.invoke(DESKTOP_IPC.floatingUnsnap),
   setExpanded: (expanded: boolean) => ipcRenderer.invoke(DESKTOP_IPC.floatingSetExpanded, expanded),
   sessionId: () => ipcRenderer.invoke(DESKTOP_IPC.floatingSessionGet),

@@ -4,19 +4,26 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('electron', () => ({
   BrowserWindow: class FakeBrowserWindow { readonly kind = 'window' },
   Menu: { buildFromTemplate: vi.fn() },
-  screen: { getDisplayNearestPoint: vi.fn(), getPrimaryDisplay: vi.fn() },
+  screen: {
+    getDisplayNearestPoint: vi.fn(),
+    getPrimaryDisplay: vi.fn(),
+    getAllDisplays: vi.fn(() => []),
+  },
   systemPreferences: { getAnimationSettings: () => ({ prefersReducedMotion: false }) },
 }))
 
 import {
   applyFloatingOverlayGuard,
   ballOriginFromWindow,
+  beginFloatingDrag,
   cgWindowIdFromMediaSourceId,
   clampFloatingWindow,
   clampedBallOrigin,
   defaultFloatingBallOrigin,
   dockedTabBounds,
   dockSideForBallOrigin,
+  dragFloatingBall,
+  endFloatingDrag,
   expandDirection,
   expandedOverlayBounds,
   floatingContextMenuTemplate,
@@ -36,6 +43,7 @@ import {
   FLOATING_PANEL_WINDOW_SIZE,
   moveFloatingBall,
   overlayWindowExcludeIds,
+  pressFloatingBall,
   resetFloatingOverlayGuard,
   setFloatingExpanded,
   unsnapDockedBall,
@@ -62,6 +70,26 @@ function collapsedAt(x: number, y: number) {
     width: FLOATING_BALL_WINDOW_SIZE,
     height: FLOATING_BALL_WINDOW_SIZE,
   }
+}
+
+const screenBounds = { x: 0, y: 0, width: 1440, height: 900 }
+
+function overlayAt(x: number, y: number) {
+  return {
+    bounds: collapsedAt(x, y),
+    getBounds() { return this.bounds },
+    setBounds(next: { x: number; y: number; width: number; height: number }) {
+      this.bounds = { ...next }
+    },
+  }
+}
+
+async function mockScreen() {
+  const { screen } = await import('electron')
+  vi.mocked(screen.getDisplayNearestPoint).mockReturnValue({
+    bounds: screenBounds,
+    workArea,
+  } as never)
 }
 
 describe('floating window expand geometry', () => {
@@ -188,26 +216,6 @@ describe('floating window expand geometry', () => {
 })
 
 describe('floating window edge dock', () => {
-  const screenBounds = { x: 0, y: 0, width: 1440, height: 900 }
-
-  function overlayAt(x: number, y: number) {
-    return {
-      bounds: collapsedAt(x, y),
-      getBounds() { return this.bounds },
-      setBounds(next: { x: number; y: number; width: number; height: number }) {
-        this.bounds = { ...next }
-      },
-    }
-  }
-
-  async function mockScreen() {
-    const { screen } = await import('electron')
-    vi.mocked(screen.getDisplayNearestPoint).mockReturnValue({
-      bounds: screenBounds,
-      workArea,
-    } as never)
-  }
-
   it('paints a 6x72 gray dock tab and does not use body:not(.expanded) #ball', () => {
     const css = readFileSync(new URL('../renderer/floating.css', import.meta.url), 'utf8')
     expect(css).toContain('#dock-tab')
@@ -218,16 +226,35 @@ describe('floating window edge dock', () => {
     expect(css).not.toContain('body:not(.expanded) #ball')
   })
 
-  it('docks only after one-fifth of the ball sits past a left or right bounds edge', () => {
-    expect(dockSideForBallOrigin({ x: 0, y: 400 }, screenBounds)).toBeUndefined()
-    expect(dockSideForBallOrigin({ x: screenBounds.width - FLOATING_BALL_SIZE, y: 400 }, screenBounds)).toBeUndefined()
-    expect(dockSideForBallOrigin({ x: -FLOATING_DOCK_OVERLAP, y: 400 }, screenBounds)).toBe('left')
+  it('docks on contact with a left or right bounds edge within the release tolerance', () => {
+    expect(dockSideForBallOrigin({ x: 0, y: 400 }, screenBounds)).toBe('left')
+    expect(dockSideForBallOrigin({ x: screenBounds.width - FLOATING_BALL_SIZE, y: 400 }, screenBounds)).toBe('right')
+    // The tolerance absorbs a window read-back that lands a pixel or two short of the edge.
+    expect(dockSideForBallOrigin({ x: FLOATING_DOCK_OVERLAP, y: 400 }, screenBounds)).toBe('left')
+    expect(dockSideForBallOrigin({ x: FLOATING_DOCK_OVERLAP + 1, y: 400 }, screenBounds)).toBeUndefined()
     expect(dockSideForBallOrigin({
-      x: screenBounds.width - FLOATING_BALL_SIZE + FLOATING_DOCK_OVERLAP,
+      x: screenBounds.width - FLOATING_BALL_SIZE - FLOATING_DOCK_OVERLAP,
       y: 400,
     }, screenBounds)).toBe('right')
+    expect(dockSideForBallOrigin({
+      x: screenBounds.width - FLOATING_BALL_SIZE - FLOATING_DOCK_OVERLAP - 1,
+      y: 400,
+    }, screenBounds)).toBeUndefined()
+    // A ball dragged past the edge still docks.
+    expect(dockSideForBallOrigin({ x: -20, y: 400 }, screenBounds)).toBe('left')
     expect(dockSideForBallOrigin({ x: 400, y: -40 }, screenBounds)).toBeUndefined()
     expect(dockSideForBallOrigin({ x: 400, y: 880 }, screenBounds)).toBeUndefined()
+  })
+
+  it('never docks against an edge shared with another display', () => {
+    const left = { x: -1440, y: 0, width: 1440, height: 900 }
+    const right = { x: screenBounds.width, y: 0, width: 1440, height: 900 }
+    expect(dockSideForBallOrigin({ x: 0, y: 400 }, screenBounds, [screenBounds])).toBe('left')
+    expect(dockSideForBallOrigin({ x: 0, y: 400 }, screenBounds, [screenBounds, left])).toBeUndefined()
+    expect(dockSideForBallOrigin({
+      x: screenBounds.width - FLOATING_BALL_SIZE,
+      y: 400,
+    }, screenBounds, [screenBounds, right])).toBeUndefined()
   })
 
   it('does not dock the default right-edge origin or a work-area clamp', async () => {
@@ -246,14 +273,14 @@ describe('floating window edge dock', () => {
     expect(moveFloatingBall(window as never, dockX, 300)).toEqual({ docked: undefined })
     expect(window.bounds).toEqual(collapsedAt(dockX, 300))
     expect(await clampFloatingWindow(window as never)).toEqual({ docked: 'right' })
-    expect(window.bounds).toEqual(dockedTabBounds('right', 300, screenBounds))
+    expect(window.bounds).toEqual(dockedTabBounds('right', 300, workArea))
     expect(window.bounds.width).toBe(FLOATING_DOCK_HIT_WIDTH)
     expect(window.bounds.height).toBe(FLOATING_DOCK_HIT_HEIGHT)
     expect(await clampFloatingWindow(window as never)).toEqual({ docked: 'right' })
-    expect(window.bounds).toEqual(dockedTabBounds('right', 300, screenBounds))
+    expect(window.bounds).toEqual(dockedTabBounds('right', 300, workArea))
     expect(await unsnapDockedBall(window as never)).toEqual({ docked: undefined })
     expect(window.bounds).toEqual(collapsedAt(
-      screenBounds.width - FLOATING_BALL_SIZE - FLOATING_DOCK_IN_PAD,
+      workArea.x + workArea.width - FLOATING_BALL_SIZE - FLOATING_DOCK_IN_PAD,
       300,
     ))
     expect(moveFloatingBall(window as never, dockX, 300)).toEqual({ docked: undefined })
@@ -268,7 +295,7 @@ describe('floating window edge dock', () => {
     const window = overlayAt(400, 300)
     expect(moveFloatingBall(window as never, -FLOATING_DOCK_OVERLAP, 280)).toEqual({ docked: undefined })
     expect(await clampFloatingWindow(window as never)).toEqual({ docked: 'left' })
-    expect(window.bounds).toEqual(dockedTabBounds('left', 280, screenBounds))
+    expect(window.bounds).toEqual(dockedTabBounds('left', 280, workArea))
     expect(setFloatingExpanded(window as never, true)).toMatchObject({
       expanded: true,
       docked: undefined,
@@ -284,6 +311,76 @@ describe('floating window edge dock', () => {
     expect(window.bounds).toEqual(collapsedAt(dockX, 300))
     expect(await clampFloatingWindow(window as never, false)).toEqual({ docked: undefined })
     expect(window.bounds).toEqual(collapsedAt(workArea.x + workArea.width - FLOATING_BALL_SIZE, 300))
+  })
+})
+
+describe('floating ball drag placement', () => {
+  it('records the grab from the OS cursor and places the ball under it', async () => {
+    await mockScreen()
+    const window = overlayAt(400, 300)
+    pressFloatingBall(window as never, { x: 436, y: 336 })
+    beginFloatingDrag(window as never)
+    expect(dragFloatingBall(window as never, { x: 536, y: 436 })).toEqual({ docked: undefined })
+    expect(window.bounds).toEqual(collapsedAt(500, 400))
+    const state = await endFloatingDrag(window as never, { x: 536, y: 436 })
+    expect(state).toMatchObject({ expanded: false, docked: undefined })
+    expect(window.bounds).toEqual(collapsedAt(500, 400))
+  })
+
+  it('ignores a move that never passed the press threshold', async () => {
+    await mockScreen()
+    const window = overlayAt(400, 300)
+    pressFloatingBall(window as never, { x: 436, y: 336 })
+    expect(dragFloatingBall(window as never, { x: 700, y: 700 })).toEqual({ docked: undefined })
+    expect(window.bounds).toEqual(collapsedAt(400, 300))
+  })
+
+  it('docks from the requested origin even when the OS read-back falls short of the edge', async () => {
+    await mockScreen()
+    const window = {
+      bounds: collapsedAt(400, 300),
+      getBounds() { return this.bounds },
+      setBounds(next: { x: number; y: number; width: number; height: number }) {
+        // Windows keeps the frame inside the display, so a 5px overhang reads back short.
+        this.bounds = { ...next, x: Math.min(next.x, screenBounds.width - next.width) }
+      },
+    }
+    pressFloatingBall(window as never, { x: 436, y: 336 })
+    beginFloatingDrag(window as never)
+    const cursor = { x: screenBounds.width - FLOATING_BALL_SIZE + 5 + 36, y: 336 }
+    dragFloatingBall(window as never, cursor)
+    const state = await endFloatingDrag(window as never, cursor)
+    expect(state.docked).toBe('right')
+    expect(window.bounds).toEqual(dockedTabBounds('right', 300, workArea))
+  })
+
+  it('treats a 97px read-back as the collapsed ball instead of an expanded panel', async () => {
+    await mockScreen()
+    const window = {
+      bounds: {
+        ...collapsedAt(400, 300),
+        width: FLOATING_BALL_WINDOW_SIZE + 1,
+        height: FLOATING_BALL_WINDOW_SIZE + 1,
+      },
+      getBounds() { return this.bounds },
+      setBounds(next: { x: number; y: number; width: number; height: number }) {
+        this.bounds = { ...next }
+      },
+    }
+    pressFloatingBall(window as never, { x: 436, y: 336 })
+    beginFloatingDrag(window as never)
+    dragFloatingBall(window as never, { x: 500, y: 400 })
+    expect(window.bounds).toEqual(collapsedAt(464, 364))
+  })
+
+  it('does not dock a release that is clear of both side edges', async () => {
+    await mockScreen()
+    const window = overlayAt(400, 300)
+    pressFloatingBall(window as never, { x: 436, y: 336 })
+    beginFloatingDrag(window as never)
+    const state = await endFloatingDrag(window as never, { x: 636, y: 536 })
+    expect(state).toMatchObject({ expanded: false, docked: undefined })
+    expect(window.bounds).toEqual(collapsedAt(600, 500))
   })
 })
 

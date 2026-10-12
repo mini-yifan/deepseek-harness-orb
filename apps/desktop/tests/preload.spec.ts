@@ -9,13 +9,16 @@ vi.mock('electron', () => electron)
 
 afterEach(() => { vi.clearAllMocks(); vi.resetModules() })
 
-it('exposes overlay expand, clamp, dsh_orb workspace, and selection IPC', async () => {
+it('exposes overlay expand, drag signals, dsh_orb workspace, and selection IPC', async () => {
   await import('../src/preload.ts')
   const api = electron.contextBridge.exposeInMainWorld.mock.calls[0]?.[1] as DshDesktopApi
   expect(api.floating).toMatchObject({
     setExpanded: expect.any(Function),
-    clamp: expect.any(Function),
     unsnap: expect.any(Function),
+    dragPress: expect.any(Function),
+    dragBegin: expect.any(Function),
+    dragMove: expect.any(Function),
+    dragEnd: expect.any(Function),
     orbWorkspacePath: expect.any(Function),
     setSessionRunning: expect.any(Function),
     setTextEditing: expect.any(Function),
@@ -51,9 +54,11 @@ it('exposes overlay expand, clamp, dsh_orb workspace, and selection IPC', async 
   expect(api.floating).not.toHaveProperty('dock')
   await api.locale()
   await api.floating.setExpanded(true)
-  await api.floating.clamp()
   await api.floating.unsnap()
-  await api.floating.move(20, 30, false)
+  await api.floating.dragPress()
+  await api.floating.dragBegin()
+  await api.floating.dragMove(false)
+  await api.floating.dragEnd(false)
   await api.floating.orbWorkspacePath()
   await api.floating.setSessionRunning(true)
   await api.floating.setTextEditing(true)
@@ -72,9 +77,11 @@ it('exposes overlay expand, clamp, dsh_orb workspace, and selection IPC', async 
   expect(electron.ipcRenderer.invoke.mock.calls).toEqual([
     [DESKTOP_IPC.floatingLocale],
     [DESKTOP_IPC.floatingSetExpanded, true],
-    [DESKTOP_IPC.floatingClamp, undefined],
     [DESKTOP_IPC.floatingUnsnap],
-    [DESKTOP_IPC.floatingMove, 20, 30, false],
+    [DESKTOP_IPC.floatingDragPress],
+    [DESKTOP_IPC.floatingDragBegin],
+    [DESKTOP_IPC.floatingDragMove, false],
+    [DESKTOP_IPC.floatingDragEnd, false],
     [DESKTOP_IPC.floatingOrbWorkspace],
     [DESKTOP_IPC.floatingRunning, true],
     [DESKTOP_IPC.floatingEditing, true],

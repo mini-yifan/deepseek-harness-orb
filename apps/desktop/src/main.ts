@@ -39,11 +39,13 @@ import { readDeviceInfo } from './device-info.ts'
 import { desktopUpdateReadyConfirmation, formatDesktopMessage, resolveDesktopLocale, resolveDesktopStartupLocale } from './locale.ts'
 import {
   applyFloatingOverlayGuard,
-  clampFloatingWindow,
+  beginFloatingDrag,
   createFloatingWindow,
-  moveFloatingBall,
+  dragFloatingBall,
+  endFloatingDrag,
   OVERLAY_GUARD_INPUT_APPLY_MS,
   overlayWindowExcludeIds,
+  pressFloatingBall,
   resetFloatingOverlayGuard,
   setFloatingExpanded,
   unsnapDockedBall,
@@ -1012,14 +1014,21 @@ async function main(): Promise<void> {
     if (toolbar !== undefined && !toolbar.isDestroyed() && event.sender === toolbar.webContents) return
     throw new Error('dsh desktop: rejected shell IPC')
   }
-  ipcMain.handle(DESKTOP_IPC.floatingMove, (event, x: unknown, y: unknown, canDock: unknown) => {
+  ipcMain.handle(DESKTOP_IPC.floatingDragPress, (event) => {
     shellSender(event)
-    if (typeof x !== 'number' || typeof y !== 'number') throw new Error('dsh desktop: invalid floating move')
-    return moveFloatingBall(floatingWindow, x, y, canDock !== false)
+    pressFloatingBall(floatingWindow, screen.getCursorScreenPoint())
   })
-  ipcMain.handle(DESKTOP_IPC.floatingClamp, (event, canDock: unknown) => {
+  ipcMain.handle(DESKTOP_IPC.floatingDragBegin, (event) => {
     shellSender(event)
-    return clampFloatingWindow(floatingWindow, canDock !== false)
+    beginFloatingDrag(floatingWindow)
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingDragMove, (event, canDock: unknown) => {
+    shellSender(event)
+    return dragFloatingBall(floatingWindow, screen.getCursorScreenPoint(), canDock !== false)
+  })
+  ipcMain.handle(DESKTOP_IPC.floatingDragEnd, (event, canDock: unknown) => {
+    shellSender(event)
+    return endFloatingDrag(floatingWindow, screen.getCursorScreenPoint(), canDock !== false)
   })
   ipcMain.handle(DESKTOP_IPC.floatingUnsnap, (event) => {
     shellSender(event)

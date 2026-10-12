@@ -33,8 +33,10 @@ export const DESKTOP_IPC = {
   windowFullscreen: 'dsh-desktop:window-fullscreen',
   windowsAppearance: 'dsh-desktop:windows-appearance',
   windowsMenu: 'dsh-desktop:windows-menu',
-  floatingMove: 'dsh-desktop:floating-move',
-  floatingClamp: 'dsh-desktop:floating-clamp',
+  floatingDragPress: 'dsh-desktop:floating-drag-press',
+  floatingDragBegin: 'dsh-desktop:floating-drag-begin',
+  floatingDragMove: 'dsh-desktop:floating-drag-move',
+  floatingDragEnd: 'dsh-desktop:floating-drag-end',
   floatingUnsnap: 'dsh-desktop:floating-unsnap',
   floatingSetExpanded: 'dsh-desktop:floating-set-expanded',
   floatingSessionGet: 'dsh-desktop:floating-session-get',
@@ -89,9 +91,11 @@ export interface DshDesktopApi {
   }
   readonly floating: {
     setExpanded(expanded: boolean): Promise<unknown>
-    clamp(canDock?: boolean): Promise<unknown>
     unsnap(): Promise<unknown>
-    move(x: number, y: number, canDock?: boolean): Promise<unknown>
+    dragPress(): Promise<unknown>
+    dragBegin(): Promise<unknown>
+    dragMove(canDock?: boolean): Promise<unknown>
+    dragEnd(canDock?: boolean): Promise<unknown>
     orbWorkspacePath(): Promise<unknown>
     setSessionRunning(running: boolean): Promise<unknown>
     setTextEditing(editing: boolean): Promise<unknown>
