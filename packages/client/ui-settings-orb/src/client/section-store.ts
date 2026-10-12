@@ -56,6 +56,10 @@ export interface OrbSettingsState {
   background: OrbAgentModelSelection
   selectionEnabled: boolean
   millifractionEnabled: boolean
+  /** Whether the floating ball exists; disabling it keeps Computer Use in the main window. */
+  ballEnabled: boolean
+  /** Whether Computer Use draws the observation ribbon around the captured window. */
+  observationFrameEnabled: boolean
   tcc: TccStatus
   catalog: OrbModelCatalog | undefined
   busy: boolean
@@ -73,6 +77,8 @@ const IDLE: OrbSettingsState = {
   background: { provider: '', model: '' },
   selectionEnabled: true,
   millifractionEnabled: true,
+  ballEnabled: true,
+  observationFrameEnabled: true,
   tcc: { applicable: false, appName: '', screen: 'granted', accessibility: 'granted' },
   catalog: undefined,
   busy: false,
@@ -102,6 +108,10 @@ export interface OrbSettingsSectionInjected {
   setSelectionEnabled: (enabled: boolean) => Promise<void>
   /** Confirm, then persist millifraction-coordinates enablement and create a new overlay chat. */
   setMillifractionEnabled: (enabled: boolean) => Promise<void>
+  /** Enable or disable the floating ball. */
+  setBallEnabled: (enabled: boolean) => Promise<void>
+  /** Show or hide the Computer Use observation ribbon. */
+  setObservationFrameEnabled: (enabled: boolean) => Promise<void>
   /** Open the matching macOS System Settings pane for Screen Recording or Accessibility. */
   openTcc: (right: TccRight) => Promise<void>
 }
@@ -251,6 +261,48 @@ export class OrbSettingsController {
   }
 
   /**
+   * Enable or disable the floating ball.
+   * @param enabled - false destroys the ball and keeps Computer Use in the main window.
+   * @returns after the snapshot reflects the new state.
+   */
+  async setBallEnabled(enabled: boolean): Promise<void> {
+    const api = this.requireApi()
+    if (api === undefined) return
+    this.store.set({ ...this.store.getSnapshot(), ballEnabled: enabled, busy: true })
+    try {
+      this.applySnapshot(await api.orb.setBallEnabled(enabled))
+    } catch (error) {
+      this.store.set({
+        ...this.store.getSnapshot(),
+        status: 'error',
+        error: errorMessage(error),
+        busy: false,
+      })
+    }
+  }
+
+  /**
+   * Show or hide the Computer Use observation ribbon.
+   * @param enabled - false hides a live ribbon and later captures skip it.
+   * @returns after the snapshot reflects the new state.
+   */
+  async setObservationFrameEnabled(enabled: boolean): Promise<void> {
+    const api = this.requireApi()
+    if (api === undefined) return
+    this.store.set({ ...this.store.getSnapshot(), observationFrameEnabled: enabled, busy: true })
+    try {
+      this.applySnapshot(await api.orb.setObservationFrameEnabled(enabled))
+    } catch (error) {
+      this.store.set({
+        ...this.store.getSnapshot(),
+        status: 'error',
+        error: errorMessage(error),
+        busy: false,
+      })
+    }
+  }
+
+  /**
    * Persist millifraction-coordinates enablement only after native confirm.
    * Does not set busy or flip the switch until Electron returns a non-cancelled snapshot.
    * @param enabled - whether new overlay chats should use 0–1000 millifraction.
@@ -321,6 +373,8 @@ export class OrbSettingsController {
       background: snapshot.background,
       selectionEnabled: snapshot.selectionEnabled,
       millifractionEnabled: snapshot.millifractionEnabled,
+      ballEnabled: snapshot.ballEnabled,
+      observationFrameEnabled: snapshot.observationFrameEnabled,
       tcc: snapshot.tcc,
     })
   }
@@ -342,6 +396,8 @@ export class OrbSettingsController {
       background: snapshot.background,
       selectionEnabled: snapshot.selectionEnabled,
       millifractionEnabled: snapshot.millifractionEnabled,
+      ballEnabled: snapshot.ballEnabled,
+      observationFrameEnabled: snapshot.observationFrameEnabled,
       tcc: snapshot.tcc,
       catalog,
       busy: false,

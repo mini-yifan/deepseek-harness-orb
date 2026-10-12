@@ -19,6 +19,10 @@ export interface OrbSettingsSnapshot {
   readonly background: OrbAgentModelSelection
   readonly selectionEnabled: boolean
   readonly millifractionEnabled: boolean
+  /** Whether the floating ball exists; disabling it keeps Computer Use in the main window. */
+  readonly ballEnabled: boolean
+  /** Whether Computer Use draws the observation ribbon around the captured window. */
+  readonly observationFrameEnabled: boolean
   readonly tcc: TccStatus
 }
 
@@ -62,6 +66,8 @@ export interface DshDesktopAppApi {
     setBackgroundModel(selection: OrbAgentModelSelection): Promise<void>
     setSelectionEnabled(enabled: boolean): Promise<void>
     setMillifractionEnabled(enabled: boolean): Promise<OrbMillifractionWriteResult>
+    setBallEnabled(enabled: boolean): Promise<OrbSettingsSnapshot>
+    setObservationFrameEnabled(enabled: boolean): Promise<OrbSettingsSnapshot>
     openTcc(right: TccRight): Promise<OrbSettingsSnapshot>
     /**
      * Subscribe to the floating ball's agent-strip jump requests.

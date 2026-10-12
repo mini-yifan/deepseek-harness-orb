@@ -125,6 +125,8 @@ describe('ui-settings-orb apply', () => {
       background: { provider: 'deepseek-official', model: 'deepseek-chat' },
       selectionEnabled: true,
       millifractionEnabled: true,
+      ballEnabled: true,
+      observationFrameEnabled: true,
       tcc: {
         applicable: true,
         appName: 'DeepSeek Orb',
@@ -143,6 +145,8 @@ describe('ui-settings-orb apply', () => {
         setBackgroundModel: vi.fn(async () => undefined),
         setSelectionEnabled: vi.fn(async () => undefined),
         setMillifractionEnabled: vi.fn(async (): Promise<OrbMillifractionWriteResult> => ({ cancelled: true })),
+        setBallEnabled: vi.fn(async () => snapshot),
+        setObservationFrameEnabled: vi.fn(async () => snapshot),
         openTcc: vi.fn(async () => snapshot),
         onOpenSession: () => () => undefined,
       },
@@ -163,6 +167,8 @@ describe('ui-settings-orb apply', () => {
       background: snapshot.background,
       selectionEnabled: true,
       millifractionEnabled: true,
+      ballEnabled: true,
+      observationFrameEnabled: true,
       tcc: {
         applicable: true,
         appName: 'DeepSeek Orb',
@@ -205,6 +211,16 @@ describe('ui-settings-orb apply', () => {
     await section.setMillifractionEnabled(false)
     expect(section.hooks.orbSettings.getSnapshot().millifractionEnabled).toBe(false)
     expect(section.hooks.orbSettings.getSnapshot().busy).toBe(false)
+    await section.setBallEnabled(false)
+    expect(api.orb.setBallEnabled).toHaveBeenCalledWith(false)
+    api.orb.setBallEnabled.mockResolvedValueOnce({ ...snapshot, ballEnabled: false })
+    await section.setBallEnabled(false)
+    expect(section.hooks.orbSettings.getSnapshot().ballEnabled).toBe(false)
+    await section.setObservationFrameEnabled(false)
+    expect(api.orb.setObservationFrameEnabled).toHaveBeenCalledWith(false)
+    api.orb.setObservationFrameEnabled.mockResolvedValueOnce({ ...snapshot, observationFrameEnabled: false })
+    await section.setObservationFrameEnabled(false)
+    expect(section.hooks.orbSettings.getSnapshot().observationFrameEnabled).toBe(false)
     await section.openTcc('screen')
     expect(api.orb.openTcc).toHaveBeenCalledWith('screen')
   })
@@ -234,6 +250,8 @@ describe('ui-settings-orb apply', () => {
       background: { provider: 'deepseek-official', model: 'deepseek-chat' },
       selectionEnabled: true,
       millifractionEnabled: true,
+      ballEnabled: true,
+      observationFrameEnabled: true,
       tcc: {
         applicable: true,
         appName: 'DeepSeek Orb',

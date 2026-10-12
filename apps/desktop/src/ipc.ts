@@ -78,6 +78,8 @@ export const DESKTOP_IPC = {
   orbPickAvatar: 'dsh-desktop:orb-pick-avatar',
   orbRestoreAvatar: 'dsh-desktop:orb-restore-avatar',
   orbSetAvatarPreset: 'dsh-desktop:orb-set-avatar-preset',
+  orbSetBallEnabled: 'dsh-desktop:orb-set-ball-enabled',
+  orbSetObservationFrameEnabled: 'dsh-desktop:orb-set-observation-frame-enabled',
   orbSetOverlayModel: 'dsh-desktop:orb-set-overlay-model',
   orbSetBackgroundModel: 'dsh-desktop:orb-set-background-model',
   orbSetSelectionEnabled: 'dsh-desktop:orb-set-selection-enabled',
@@ -173,6 +175,10 @@ export interface OrbSettingsSnapshot {
   readonly background: OrbAgentModelSelection
   readonly selectionEnabled: boolean
   readonly millifractionEnabled: boolean
+  /** Whether the floating ball exists; disabling it keeps Computer Use in the main window. */
+  readonly ballEnabled: boolean
+  /** Whether Computer Use draws the observation ribbon around the captured window. */
+  readonly observationFrameEnabled: boolean
   readonly tcc: TccStatus
 }
 
@@ -215,6 +221,8 @@ export interface DshDesktopProductApi {
     setBackgroundModel(selection: OrbAgentModelSelection): Promise<void>
     setSelectionEnabled(enabled: boolean): Promise<void>
     setMillifractionEnabled(enabled: boolean): Promise<OrbMillifractionWriteResult>
+    setBallEnabled(enabled: boolean): Promise<OrbSettingsSnapshot>
+    setObservationFrameEnabled(enabled: boolean): Promise<OrbSettingsSnapshot>
     openTcc(right: TccRight): Promise<OrbSettingsSnapshot>
     /**
      * Open one session in this window, as the floating ball's agent strip requests.

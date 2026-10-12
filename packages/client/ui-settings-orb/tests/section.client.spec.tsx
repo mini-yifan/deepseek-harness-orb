@@ -24,6 +24,8 @@ const READY: OrbSettingsState = {
   background: { provider: 'deepseek-official', model: 'deepseek-chat' },
   selectionEnabled: true,
   millifractionEnabled: true,
+  ballEnabled: true,
+  observationFrameEnabled: true,
   tcc: {
     applicable: true,
     appName: 'DeepSeek Orb',

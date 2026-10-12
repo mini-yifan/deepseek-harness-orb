@@ -53,6 +53,8 @@ import {
 } from './floating-window.ts'
 import { ensureOrbWorkspaceDir, readFloatingSessionId, writeFloatingSessionId } from './floating-session.ts'
 import { isOrbAgentModelSelection, readOrbAgentModels, writeOrbAgentModels, type OrbAgentModelSelection } from './orb-agent-models.ts'
+import { readBallEnabled, writeBallEnabled } from './ball-enabled.ts'
+import { readObservationFrameEnabled, writeObservationFrameEnabled } from './observation-frame-preference.ts'
 import { isOrbPermissionPreset, readOrbPermission, writeOrbPermission } from './orb-permission.ts'
 import {
   assertOrbSettingsWritable,
@@ -410,6 +412,7 @@ async function main(): Promise<void> {
   // The backend listener is registered before this window exists and reads the binding later.
   // eslint-disable-next-line prefer-const -- assigned once when the floating window is created
   let floatingShell: BrowserWindow | undefined
+  let floatingWindow: BrowserWindow | undefined
   let observationFrameWindow: BrowserWindow | undefined
   let restoreOverlayGuard = (): void => {}
   const orbHostHandlers: DesktopOrbHostHandlers = {}
@@ -830,6 +833,8 @@ async function main(): Promise<void> {
       background: models.background,
       selectionEnabled: selectionController?.enabled() ?? true,
       millifractionEnabled: readMillifractionCoordinates(paths.profile).enabled,
+      ballEnabled: readBallEnabled(paths.profile),
+      observationFrameEnabled: readObservationFrameEnabled(paths.profile),
       tcc: tcc.status(),
     }
   }
@@ -953,27 +958,57 @@ async function main(): Promise<void> {
     requestAccessibility: () => systemPreferences.isTrustedAccessibilityClient(true),
     accessibilityTrusted: () => systemPreferences.isTrustedAccessibilityClient(false),
   })
-  const floatingWindow = floatingShell = createFloatingWindow(shellPreload, messages, () => {
-    if (mainWindow !== undefined && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus() }
-  }, () => { app.quit() }, {
-    enabled: () => selectionController?.enabled() === true,
-    toggle: () => { selectionController?.toggle() },
-  }, {
-    loadCatalog: loadFloatingModelCatalog,
-    overlay: () => readOrbAgentModels(paths.profile).overlay,
-    background: () => readOrbAgentModels(paths.profile).background,
-    onSelectOverlay: persistOverlayModel,
-    onSelectBackground: persistBackgroundModel,
-  }, {
-    enabled: () => readMillifractionCoordinates(paths.profile).enabled,
-    toggle: () => {
-      const current = readMillifractionCoordinates(paths.profile).enabled
-      void confirmMillifractionEnabled(!current, floatingShell)
-    },
-  })
-  floatingWindow.once('ready-to-show', () => { floatingWindow.showInactive() })
-  floatingWindow.on('focus', () => { publishTcc() })
-  void floatingWindow.loadURL(`${SCHEME}://shell/floating.html`)
+  /** Create the floating-ball window when it is enabled and not already alive. */
+  const createShellWindow = (): BrowserWindow => {
+    const window = createFloatingWindow(shellPreload, messages, () => {
+      if (mainWindow !== undefined && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus() }
+    }, () => { app.quit() }, {
+      enabled: () => selectionController?.enabled() === true,
+      toggle: () => { selectionController?.toggle() },
+    }, {
+      loadCatalog: loadFloatingModelCatalog,
+      overlay: () => readOrbAgentModels(paths.profile).overlay,
+      background: () => readOrbAgentModels(paths.profile).background,
+      onSelectOverlay: persistOverlayModel,
+      onSelectBackground: persistBackgroundModel,
+      onDisable: () => { disableFloatingBall() },
+    }, {
+      enabled: () => readMillifractionCoordinates(paths.profile).enabled,
+      toggle: () => {
+        const current = readMillifractionCoordinates(paths.profile).enabled
+        void confirmMillifractionEnabled(!current, window)
+      },
+    })
+    window.once('ready-to-show', () => { window.showInactive() })
+    window.on('focus', () => { publishTcc() })
+    void window.loadURL(`${SCHEME}://shell/floating.html`)
+    floatingWindow = floatingShell = window
+    return window
+  }
+
+  /** Destroy the floating-ball window; the app and Computer Use keep running. */
+  const destroyShellWindow = (): void => {
+    const window = floatingWindow
+    floatingWindow = undefined
+    floatingShell = undefined
+    if (window !== undefined && !window.isDestroyed()) window.destroy()
+  }
+
+  /** Persist the disabled preference and tear the ball down. */
+  const disableFloatingBall = (): void => {
+    writeBallEnabled(paths.profile, false)
+    destroyShellWindow()
+  }
+
+  const requireShellWindow = (): BrowserWindow => {
+    const window = floatingWindow
+    if (window === undefined || window.isDestroyed()) {
+      throw new Error('dsh desktop: the floating ball is disabled')
+    }
+    return window
+  }
+
+  if (readBallEnabled(paths.profile)) createShellWindow()
   const toolbar = createSelectionToolbarWindow(shellPreload)
   selectionController.setToolbarWindow(toolbar)
   toolbar.webContents.once('did-finish-load', () => { selectionController?.publishState() })
@@ -1019,6 +1054,10 @@ async function main(): Promise<void> {
     return ids
   }
   orbHostHandlers.onObservationFrame = (event) => {
+    if (!readObservationFrameEnabled(paths.profile)) {
+      hideObservationFrame(observationFrameWindow)
+      return
+    }
     if (event.bounds === null) {
       hideObservationFrame(observationFrameWindow)
       return
@@ -1039,44 +1078,48 @@ async function main(): Promise<void> {
     window.webContents.send(DESKTOP_IPC.floatingAgents, event.items)
   }
   const shellSender = (event: IpcMainInvokeEvent): void => {
-    if (event.sender !== floatingWindow.webContents) throw new Error('dsh desktop: rejected floating IPC')
+    const window = floatingWindow
+    if (window === undefined || window.isDestroyed() || event.sender !== window.webContents) {
+      throw new Error('dsh desktop: rejected floating IPC')
+    }
   }
   const shellDocumentSender = (event: IpcMainInvokeEvent): void => {
-    if (event.sender === floatingWindow.webContents) return
+    if (floatingWindow !== undefined && !floatingWindow.isDestroyed()
+      && event.sender === floatingWindow.webContents) return
     const toolbar = selectionController?.window()
     if (toolbar !== undefined && !toolbar.isDestroyed() && event.sender === toolbar.webContents) return
     throw new Error('dsh desktop: rejected shell IPC')
   }
   ipcMain.handle(DESKTOP_IPC.floatingDragPress, (event) => {
     shellSender(event)
-    pressFloatingBall(floatingWindow, screen.getCursorScreenPoint())
+    pressFloatingBall(requireShellWindow(), screen.getCursorScreenPoint())
   })
   ipcMain.handle(DESKTOP_IPC.floatingDragBegin, (event) => {
     shellSender(event)
-    beginFloatingDrag(floatingWindow)
+    beginFloatingDrag(requireShellWindow())
   })
   ipcMain.handle(DESKTOP_IPC.floatingDragMove, (event, canDock: unknown) => {
     shellSender(event)
-    return dragFloatingBall(floatingWindow, screen.getCursorScreenPoint(), canDock !== false)
+    return dragFloatingBall(requireShellWindow(), screen.getCursorScreenPoint(), canDock !== false)
   })
   ipcMain.handle(DESKTOP_IPC.floatingDragEnd, (event, canDock: unknown) => {
     shellSender(event)
-    return endFloatingDrag(floatingWindow, screen.getCursorScreenPoint(), canDock !== false)
+    return endFloatingDrag(requireShellWindow(), screen.getCursorScreenPoint(), canDock !== false)
   })
   ipcMain.handle(DESKTOP_IPC.floatingUnsnap, (event) => {
     shellSender(event)
-    return unsnapDockedBall(floatingWindow)
+    return unsnapDockedBall(requireShellWindow())
   })
   ipcMain.handle(DESKTOP_IPC.floatingSetExpanded, (event, expanded: unknown) => {
     shellSender(event)
-    return setFloatingExpanded(floatingWindow, expanded === true)
+    return setFloatingExpanded(requireShellWindow(), expanded === true)
   })
   ipcMain.handle(DESKTOP_IPC.floatingSetStrip, (event, width: unknown) => {
     shellSender(event)
     if (typeof width !== 'number' || !Number.isFinite(width) || width < 0) {
       throw new Error('dsh desktop: invalid floating strip width')
     }
-    return setFloatingStrip(floatingWindow, width)
+    return setFloatingStrip(requireShellWindow(), width)
   })
   ipcMain.handle(DESKTOP_IPC.floatingAgentOpen, (event, sessionId: unknown) => {
     shellSender(event)
@@ -1214,6 +1257,24 @@ async function main(): Promise<void> {
     if (!isOrbAvatarPreset(preset)) throw new Error('dsh desktop: invalid orb avatar preset')
     writeOrbAvatarPreset(paths.profile, preset)
     publishAvatar()
+    return orbSnapshotFor('app')
+  })
+  ipcMain.handle(DESKTOP_IPC.orbSetBallEnabled, (event, enabled: unknown) => {
+    assertProductSender(event)
+    assertOrbSettingsWritable(process.platform)
+    const next = enabled === true
+    writeBallEnabled(paths.profile, next)
+    if (next) {
+      if (floatingWindow === undefined || floatingWindow.isDestroyed()) createShellWindow()
+    } else {
+      destroyShellWindow()
+    }
+    return orbSnapshotFor('app')
+  })
+  ipcMain.handle(DESKTOP_IPC.orbSetObservationFrameEnabled, (event, enabled: unknown) => {
+    assertProductSender(event)
+    writeObservationFrameEnabled(paths.profile, enabled === true)
+    if (enabled !== true) hideObservationFrame(observationFrameWindow)
     return orbSnapshotFor('app')
   })
   ipcMain.handle(DESKTOP_IPC.orbRestoreAvatar, (event) => {

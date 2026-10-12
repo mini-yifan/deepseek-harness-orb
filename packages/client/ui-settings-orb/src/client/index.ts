@@ -68,6 +68,8 @@ export function apply(ctx: ClientContext): void {
     setBackgroundModel: selection => controller.setBackgroundModel(selection),
     setSelectionEnabled: enabled => controller.setSelectionEnabled(enabled),
     setMillifractionEnabled: enabled => controller.setMillifractionEnabled(enabled),
+    setBallEnabled: enabled => controller.setBallEnabled(enabled),
+    setObservationFrameEnabled: enabled => controller.setObservationFrameEnabled(enabled),
     openTcc: right => controller.openTcc(right),
   })
 

@@ -1,5 +1,5 @@
 ---
-description: "Desktop Settings page for the macOS and Windows floating ball: custom avatar, Floating-ball Agent and background Agent models, the selection toolbar, millifraction coordinates, and macOS Screen Recording / Accessibility status."
+description: "Desktop Settings page for the macOS and Windows floating ball: ball enablement, built-in or custom avatar, the observation ribbon, Floating-ball Agent and background Agent models, the selection toolbar, millifraction coordinates, and macOS Screen Recording / Accessibility status."
 kind: "package-reference"
 ---
 

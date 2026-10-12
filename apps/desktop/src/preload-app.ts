@@ -77,6 +77,12 @@ function createProductApi(): DshDesktopProductApi {
       setMillifractionEnabled: (enabled: boolean) => (
         ipcRenderer.invoke(DESKTOP_IPC.orbSetMillifractionEnabled, enabled) as Promise<OrbMillifractionWriteResult>
       ),
+      setBallEnabled: (enabled: boolean) => (
+        ipcRenderer.invoke(DESKTOP_IPC.orbSetBallEnabled, enabled) as Promise<OrbSettingsSnapshot>
+      ),
+      setObservationFrameEnabled: (enabled: boolean) => (
+        ipcRenderer.invoke(DESKTOP_IPC.orbSetObservationFrameEnabled, enabled) as Promise<OrbSettingsSnapshot>
+      ),
       openTcc: (right: TccRight) => ipcRenderer.invoke(DESKTOP_IPC.orbOpenTcc, right) as Promise<OrbSettingsSnapshot>,
       onOpenSession(listener) {
         const handle = (_event: Electron.IpcRendererEvent, sessionId: string): void => { listener(sessionId) }

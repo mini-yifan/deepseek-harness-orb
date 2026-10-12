@@ -8,6 +8,12 @@ export type OrbSettingsKey =
   | 'unavailable'
   | 'error'
   | 'retry'
+  | 'ballTitle'
+  | 'ballDescription'
+  | 'ballToggle'
+  | 'ribbonTitle'
+  | 'ribbonDescription'
+  | 'ribbonToggle'
   | 'avatarTitle'
   | 'avatarDescription'
   | 'avatarAlt'
@@ -58,6 +64,12 @@ export const zh: Record<OrbSettingsKey, string> = {
   unavailable: '当前窗口无法读取桌面悬浮球设置。',
   error: '无法加载悬浮球设置。',
   retry: '重试',
+  ballTitle: '悬浮球',
+  ballDescription: '关闭后球消失；主窗口里的 Computer Use 仍然可用。',
+  ballToggle: '启用悬浮球',
+  ribbonTitle: '观察框彩带',
+  ribbonDescription: 'Computer Use 操作窗口时，在观察区域外画一圈彩带。',
+  ribbonToggle: '显示观察框彩带',
   avatarTitle: '悬浮球头像',
   avatarDescription: '选择一张 GIF、PNG 或 WebP 图片。恢复默认会重新使用自带头像。',
   avatarAlt: '悬浮球头像预览',
@@ -109,6 +121,12 @@ export const en: Record<OrbSettingsKey, string> = {
   unavailable: 'This window cannot read Desktop floating-ball settings.',
   error: 'Could not load floating-ball settings.',
   retry: 'Retry',
+  ballTitle: 'Floating ball',
+  ballDescription: 'Turning it off removes the ball; Computer Use stays available in the main window.',
+  ballToggle: 'Enable the floating ball',
+  ribbonTitle: 'Observation ribbon',
+  ribbonDescription: 'Draws a ring around the captured window while Computer Use operates the screen.',
+  ribbonToggle: 'Show the observation ribbon',
   avatarTitle: 'Ball image',
   avatarDescription: 'Choose a GIF, PNG, or WebP image. Restore default reuses the shipped avatar.',
   avatarAlt: 'Floating-ball image preview',

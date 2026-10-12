@@ -29,6 +29,7 @@ export interface FloatingAgentMenuState {
   readonly background: OrbAgentModelSelection
   readonly onSelectOverlay: (selection: OrbAgentModelSelection) => void
   readonly onSelectBackground: (selection: OrbAgentModelSelection) => void
+  readonly onDisable: () => void
 }
 
 /** Catalog load and stored selections for the overlay context menu. */
@@ -38,6 +39,8 @@ export interface FloatingAgentMenuSource {
   readonly background: () => OrbAgentModelSelection
   readonly onSelectOverlay: (selection: OrbAgentModelSelection) => void
   readonly onSelectBackground: (selection: OrbAgentModelSelection) => void
+  /** Persist the disabled preference and tear the ball down; the app keeps running. */
+  readonly onDisable: () => void
 }
 
 /**
@@ -62,6 +65,7 @@ export function floatingContextMenuTemplate(
     | 'floatingNoModels'
     | 'floatingEffortDefault'
     | 'floatingQuit'
+    | 'floatingDisableBall'
     | 'selectionToolbarEnable'
     | 'selectionToolbarDisable'
     | 'millifractionEnable'
@@ -100,7 +104,7 @@ export function floatingContextMenuTemplate(
     ]),
     { label: messages.floatingQuit, click: onQuit },
   ]
-  if (selection !== undefined || millifraction !== undefined) {
+  if (selection !== undefined || millifraction !== undefined || agents !== undefined) {
     const extras: MenuItemConstructorOptions[] = []
     if (selection !== undefined) {
       extras.push({
@@ -115,6 +119,7 @@ export function floatingContextMenuTemplate(
       })
     }
     extras.push({ type: 'separator' })
+    if (agents !== undefined) extras.push({ label: messages.floatingDisableBall, click: agents.onDisable })
     const quitIndex = actions.findIndex(item => item.label === messages.floatingQuit)
     actions.splice(quitIndex, 0, ...extras)
   }
@@ -817,6 +822,7 @@ async function popupFloatingContextMenu(
       background: agents.background(),
       onSelectOverlay: agents.onSelectOverlay,
       onSelectBackground: agents.onSelectBackground,
+      onDisable: agents.onDisable,
     },
     millifraction === undefined
       ? undefined

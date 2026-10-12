@@ -80,6 +80,20 @@ export function OrbSettingsSection(props: OrbSettingsSectionProps): ReactNode {
         : null}
       <fieldset className={css.fields} disabled={disabled}>
         <section className={css.card}>
+          <div className={css.toggleRow}>
+            <div className={css.toggleCopy}>
+              <h3 className={css.cardTitle}>{t('ballTitle')}</h3>
+              <p className={css.cardDescription}>{t('ballDescription')}</p>
+            </div>
+            <Switch
+              checked={state.ballEnabled}
+              label={t('ballToggle')}
+              disabled={disabled}
+              onChange={(enabled) => { void props.setBallEnabled(enabled) }}
+            />
+          </div>
+        </section>
+        <section className={css.card}>
           <h3 className={css.cardTitle}>{t('avatarTitle')}</h3>
           <p className={css.cardDescription}>{t('avatarDescription')}</p>
           <div className={css.avatarRow}>
@@ -185,6 +199,20 @@ export function OrbSettingsSection(props: OrbSettingsSectionProps): ReactNode {
               label={t('millifractionToggle')}
               disabled={disabled}
               onChange={(enabled) => { void props.setMillifractionEnabled(enabled) }}
+            />
+          </div>
+        </section>
+        <section className={css.card}>
+          <div className={css.toggleRow}>
+            <div className={css.toggleCopy}>
+              <h3 className={css.cardTitle}>{t('ribbonTitle')}</h3>
+              <p className={css.cardDescription}>{t('ribbonDescription')}</p>
+            </div>
+            <Switch
+              checked={state.observationFrameEnabled}
+              label={t('ribbonToggle')}
+              disabled={disabled}
+              onChange={(enabled) => { void props.setObservationFrameEnabled(enabled) }}
             />
           </div>
         </section>

@@ -54,6 +54,7 @@ import {
 const workArea = { x: 100, y: 50, width: 1000, height: 800 }
 const messages = {
   floatingOpenMain: 'Open Main Window',
+  floatingDisableBall: 'Disable floating ball',
   floatingAgentSettings: 'Floating Agent Settings',
   floatingBackgroundAgentSettings: 'Background Agent Settings',
   floatingNoModels: 'No models available.',
@@ -485,6 +486,7 @@ describe('floating window context menu', () => {
   it('inserts overlay and background model submenus before the selection toolbar', () => {
     const onSelectOverlay = vi.fn()
     const onSelectBackground = vi.fn()
+    const onDisableBall = vi.fn()
     const onToggle = vi.fn()
     const onMillifraction = vi.fn()
     const template = floatingContextMenuTemplate(
@@ -519,6 +521,7 @@ describe('floating window context menu', () => {
         background: { provider: 'deepseek-official', model: 'deepseek-chat', reasoningEffort: 'high' },
         onSelectOverlay,
         onSelectBackground,
+        onDisable: onDisableBall,
       },
       { enabled: true, onToggle: onMillifraction },
     )
@@ -531,8 +534,10 @@ describe('floating window context menu', () => {
       'Enable Selection Toolbar',
       'Disable millifraction coordinates',
       'separator',
+      'Disable floating ball',
       'Quit DeepSeek Orb',
     ])
+    expect(template[8]).toMatchObject({ label: 'Disable floating ball' })
     const overlay = template[2]
     expect(overlay?.submenu).toEqual([
       { label: 'DeepSeek', enabled: false },

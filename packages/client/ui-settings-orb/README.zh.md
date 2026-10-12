@@ -1,5 +1,5 @@
 ---
-description: "桌面端设置里的 macOS 与 Windows 悬浮球分页：自定义头像、悬浮球与后台 Agent 模型、划词工具栏、千分比坐标，以及 macOS 屏幕录制与辅助功能状态。"
+description: "桌面端设置里的 macOS 与 Windows 悬浮球分页：悬浮球开关、内置或自定义头像、观察框彩带、悬浮球与后台 Agent 模型、划词工具栏、千分比坐标，以及 macOS 屏幕录制与辅助功能状态。"
 kind: "package-reference"
 ---
 
